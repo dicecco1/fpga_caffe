@@ -4,6 +4,7 @@
 #include <boost/shared_ptr.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+#include <CL/cl.hpp>
 
 #include <climits>
 #include <cmath>
@@ -89,9 +90,22 @@ using std::string;
 using std::stringstream;
 using std::vector;
 
+#ifdef USE_OCL
+  extern cl_uint oclNumPlatforms;
+  extern std::vector<cl_platform_id> oclPlatform;
+  extern cl_device_id oclDevices;
+  extern cl_context oclContext;
+  extern cl_command_queue oclCommandQueue;
+  extern std::vector<cl_program> oclProgram;
+  extern std::vector<cl_kernel> oclKernel;
+#endif
+
 // A global initialization function that you should call in your main function.
 // Currently it initializes google flags and google logging.
 void GlobalInit(int* pargc, char*** pargv);
+
+// A function for converting ocl kernels into strings
+int convertToString(const char *filename, std::string &s);
 
 // A singleton class to hold common caffe stuff, such as the handler that
 // caffe is going to use for cublas, curand, etc.
@@ -104,7 +118,7 @@ class Caffe {
     }
     return *singleton_;
   }
-  enum Brew { CPU, GPU };
+  enum Brew { CPU, GPU, OCL };
 
   // This random number generator facade hides boost and CUDA rng
   // implementation from one another (for cross-platform compatibility).
@@ -149,6 +163,9 @@ class Caffe {
   static void SetDevice(const int device_id);
   // Prints the current GPU status.
   static void DeviceQuery();
+  // Sets up an OpenCL device
+  static void SetOCLDevice();
+
 
  protected:
 #ifndef CPU_ONLY

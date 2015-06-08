@@ -785,6 +785,7 @@ void Net<Dtype>::Update() {
     const Dtype* this_diff;
     Dtype* owner_diff;
     switch (Caffe::mode()) {
+    case Caffe::OCL:
     case Caffe::CPU:
       this_diff = params_[i]->cpu_diff();
       owner_diff = params_[param_owners_[i]]->mutable_cpu_diff();

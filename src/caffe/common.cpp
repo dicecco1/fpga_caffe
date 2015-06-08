@@ -7,6 +7,17 @@
 
 namespace caffe {
 
+#ifdef USE_OCL
+  cl_uint oclNumPlatforms;
+  std::vector<cl_platform_id> oclPlatform;
+  cl_device_id oclDevices;
+  cl_context oclContext;
+  cl_command_queue oclCommandQueue;
+  std::vector<cl_program> oclProgram;
+  std::vector<cl_kernel> oclKernel;
+#endif
+
+
 shared_ptr<Caffe> Caffe::singleton_;
 
 // random seeding
@@ -38,6 +49,69 @@ void GlobalInit(int* pargc, char*** pargv) {
   // Provide a backtrace on segfault.
   ::google::InstallFailureSignalHandler();
 }
+
+int convertToString(const char *filename, std::string& s)
+{
+	size_t size;
+	char*  str;
+	std::fstream f(filename, (std::fstream::in | std::fstream::binary));
+
+	if(f.is_open())
+	{
+		size_t fileSize;
+		f.seekg(0, std::fstream::end);
+		size = fileSize = (size_t)f.tellg();
+		f.seekg(0, std::fstream::beg);
+		str = new char[size+1];
+		if(!str)
+		{
+			f.close();
+			return 0;
+		}
+
+		f.read(str, fileSize);
+		f.close();
+		str[size] = '\0';
+		s = str;
+		delete[] str;
+		return 0;
+	}
+  std::cout<<"Error: failed to open file\n:"<<filename<<std::endl;
+	return -1;
+}
+
+#ifdef USE_OCL
+
+void Caffe::SetOCLDevice() {
+  oclPlatform.resize(1);
+  clGetPlatformIDs(0, NULL, &oclNumPlatforms);
+  clGetPlatformIDs(1, &(oclPlatform[0]), NULL);
+  clGetDeviceIDs(oclPlatform[0], CL_DEVICE_TYPE_CPU, 1, &oclDevices, NULL);
+  oclContext = clCreateContext(NULL, 1, &oclDevices, NULL, NULL, NULL);
+  oclCommandQueue = clCreateCommandQueue(oclContext, oclDevices, 0, NULL);
+  
+  const char *filename = "src/caffe/layers/conv_layer.cl";
+  std::string sourceStr;
+  caffe::convertToString(filename, sourceStr);
+	const char *source = sourceStr.c_str();
+	size_t sourceSize[] = {strlen(source)};
+
+  oclProgram.push_back(clCreateProgramWithSource(oclContext, 1, &source, 
+        sourceSize, NULL));
+  clBuildProgram(oclProgram[0], 1, &oclDevices, NULL, NULL, NULL);
+  
+  oclKernel.push_back(clCreateKernel(oclProgram[0], "conv_forward_float", NULL));
+  oclKernel.push_back(clCreateKernel(oclProgram[0], "conv_forward_double", NULL));
+}
+
+#else
+
+void Caffe::SetOCLDevice(void) {
+  NO_OCL;
+}
+
+#endif
+
 
 #ifdef CPU_ONLY  // CPU-only Caffe.
 

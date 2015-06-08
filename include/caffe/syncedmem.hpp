@@ -41,26 +41,30 @@ inline void CaffeFreeHost(void* ptr) {
 class SyncedMemory {
  public:
   SyncedMemory()
-      : cpu_ptr_(NULL), gpu_ptr_(NULL), size_(0), head_(UNINITIALIZED),
-        own_cpu_data_(false) {}
+      : cpu_ptr_(NULL), gpu_ptr_(NULL), ocl_ptr_(NULL), size_(0), 
+        head_(UNINITIALIZED), own_cpu_data_(false) {}
   explicit SyncedMemory(size_t size)
-      : cpu_ptr_(NULL), gpu_ptr_(NULL), size_(size), head_(UNINITIALIZED),
-        own_cpu_data_(false) {}
+      : cpu_ptr_(NULL), gpu_ptr_(NULL), ocl_ptr_(NULL), size_(size), 
+        head_(UNINITIALIZED), own_cpu_data_(false) {}
   ~SyncedMemory();
   const void* cpu_data();
   void set_cpu_data(void* data);
   const void* gpu_data();
+  const void* ocl_data();
   void* mutable_cpu_data();
   void* mutable_gpu_data();
-  enum SyncedHead { UNINITIALIZED, HEAD_AT_CPU, HEAD_AT_GPU, SYNCED };
+  void* mutable_ocl_data();
+  enum SyncedHead { UNINITIALIZED, HEAD_AT_CPU, HEAD_AT_GPU, HEAD_AT_OCL, SYNCED };
   SyncedHead head() { return head_; }
   size_t size() { return size_; }
 
  private:
   void to_cpu();
   void to_gpu();
+  void to_ocl();
   void* cpu_ptr_;
   void* gpu_ptr_;
+  void* ocl_ptr_;
   size_t size_;
   SyncedHead head_;
   bool own_cpu_data_;

@@ -47,12 +47,12 @@ if $WITH_CUDA; then
 fi
 
 # Install LMDB
-LMDB_URL=https://github.com/LMDB/lmdb/archive/LMDB_0.9.14.tar.gz
-LMDB_FILE=/tmp/lmdb.tar.gz
+LMDB_URL=ftp://ftp.openldap.org/pub/OpenLDAP/openldap-release/openldap-2.4.39.tgz
+LMDB_FILE=/tmp/openldap.tgz
 pushd .
-wget $LMDB_URL -O $LMDB_FILE
+curl $LMDB_URL -o $LMDB_FILE
 tar -C /tmp -xzvf $LMDB_FILE
-cd /tmp/lmdb*/libraries/liblmdb/
+cd /tmp/openldap*/libraries/liblmdb/
 $MAKE
 $MAKE install
 popd

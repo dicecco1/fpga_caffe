@@ -1,5 +1,3 @@
-#ifndef CPU_ONLY
-
 #include <cstdio>
 #include <cstdlib>
 
@@ -10,11 +8,11 @@
 
 namespace caffe {
 
-extern cudaDeviceProp CAFFE_TEST_CUDA_PROP;
-
 class PlatformTest : public ::testing::Test {};
 
 TEST_F(PlatformTest, TestInitialization) {
+#ifndef CPU_ONLY
+  extern cudaDeviceProp CAFFE_TEST_CUDA_PROP;
   printf("Major revision number:         %d\n",  CAFFE_TEST_CUDA_PROP.major);
   printf("Minor revision number:         %d\n",  CAFFE_TEST_CUDA_PROP.minor);
   printf("Name:                          %s\n",  CAFFE_TEST_CUDA_PROP.name);
@@ -50,8 +48,28 @@ TEST_F(PlatformTest, TestInitialization) {
   printf("Unified virtual addressing:    %s\n",
          (CAFFE_TEST_CUDA_PROP.unifiedAddressing ? "Yes" : "No"));
   EXPECT_TRUE(true);
+#endif // CPU_ONLY
+
+#ifdef USE_OCL
+  std::vector<cl::Platform> all_platforms;
+  cl::Platform::get(&all_platforms);
+  std::cout<<"Number of platforms is: "<<all_platforms.size()<<std::endl;
+  EXPECT_TRUE(all_platforms.size() != 0);
+  
+  cl::Platform default_platform = all_platforms[0];
+  std::cout<<"Using platform: "
+    <<default_platform.getInfo<CL_PLATFORM_NAME>()<<std::endl;
+  
+  std::vector<cl::Device> all_devices;
+  default_platform.getDevices(CL_DEVICE_TYPE_ALL, &all_devices);
+  std::cout<<"Number of devices is: "<<all_devices.size()<<std::endl;
+  EXPECT_TRUE(all_devices.size() != 0);
+  
+  cl::Device default_device = all_devices[0];
+  std::cout<<"Using device: "
+    <<default_device.getInfo<CL_DEVICE_NAME>()<<std::endl;
+#endif // USE_OCL
+
 }
 
-}  // namespace caffe
-
-#endif  // CPU_ONLY
+} // namespace caffe

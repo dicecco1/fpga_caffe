@@ -314,6 +314,15 @@ class Layer {
   }
 
   /**
+   * @brief Using the OCL device, compute the layer output.
+   *        Fall back to Forward_cpu() if unavailable.
+   */
+  virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top) {
+    return Forward_cpu(bottom, top);
+  }
+
+  /**
    * @brief Using the CPU device, compute the gradients for any parameters and
    *        for the bottom blobs if propagate_down is true.
    */
@@ -330,6 +339,28 @@ class Layer {
       const vector<Blob<Dtype>*>& bottom) {
     // LOG(WARNING) << "Using CPU code as backup.";
     Backward_cpu(top, propagate_down, bottom);
+  }
+
+  /**
+   * @brief Using the OCL device, compute the gradients for any parameters and
+   *        for the bottom blobs if propagate_down is true.
+   *        Fall back to Backward_cpu() if unavailable.
+   */
+  virtual void Backward_ocl(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, 
+      const vector<Blob<Dtype>*>& bottom) {
+    Backward_cpu(top, propagate_down, bottom);
+  }
+
+  /**
+   * @brief Default behavior of Call_ocl() is to specify NO_OCL as it is an
+   *        error to use this function without ocl defined in the sub layer.
+   *        With no template support in OpenCL this needs to be overloaded to
+   *        handle both floats and doubles.
+   */
+  virtual void Call_ocl(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top) {
+    NO_OCL;
   }
 
   /**
@@ -408,6 +439,16 @@ inline Dtype Layer<Dtype>::Forward(const vector<Blob<Dtype>*>& bottom,
   Dtype loss = 0;
   Reshape(bottom, top);
   switch (Caffe::mode()) {
+  case Caffe::OCL:
+    Forward_ocl(bottom, top);
+    for (int top_id = 0; top_id < top.size(); ++top_id) {
+      if (!this->loss(top_id)) { continue; }
+      const int count = top[top_id]->count();
+      const Dtype* data = top[top_id]->cpu_data();
+      const Dtype* loss_weights = top[top_id]->cpu_diff();
+      loss += caffe_cpu_dot(count, data, loss_weights);
+    }
+    break;
   case Caffe::CPU:
     Forward_cpu(bottom, top);
     for (int top_id = 0; top_id < top.size(); ++top_id) {
@@ -443,6 +484,9 @@ inline void Layer<Dtype>::Backward(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down,
     const vector<Blob<Dtype>*>& bottom) {
   switch (Caffe::mode()) {
+  case Caffe::OCL:
+    Backward_ocl(top, propagate_down, bottom);
+    break;
   case Caffe::CPU:
     Backward_cpu(top, propagate_down, bottom);
     break;

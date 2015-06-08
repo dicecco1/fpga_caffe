@@ -16,6 +16,12 @@ SyncedMemory::~SyncedMemory() {
     CUDA_CHECK(cudaFree(gpu_ptr_));
   }
 #endif  // CPU_ONLY
+
+#ifdef USE_OCL
+  if(ocl_ptr_) {
+    clReleaseMemObject((cl_mem)ocl_ptr_);
+  }
+#endif
 }
 
 inline void SyncedMemory::to_cpu() {
@@ -36,6 +42,19 @@ inline void SyncedMemory::to_cpu() {
     head_ = SYNCED;
 #else
     NO_GPU;
+#endif
+    break;
+  case HEAD_AT_OCL:
+#ifdef USE_OCL
+    if(cpu_ptr_ == NULL) {
+      CaffeMallocHost(&cpu_ptr_, size_);
+      own_cpu_data_ = true;
+    }
+    clEnqueueReadBuffer(oclCommandQueue, (cl_mem)ocl_ptr_, CL_TRUE, 0, 
+        size_, cpu_ptr_, 0, NULL, NULL);
+    head_ = SYNCED;
+#else
+    NO_OCL;
 #endif
     break;
   case HEAD_AT_CPU:
@@ -60,11 +79,42 @@ inline void SyncedMemory::to_gpu() {
     head_ = SYNCED;
     break;
   case HEAD_AT_GPU:
+  case HEAD_AT_OCL:
   case SYNCED:
     break;
   }
 #else
   NO_GPU;
+#endif
+}
+
+inline void SyncedMemory::to_ocl() {
+#ifdef USE_OCL
+  int pattern = 0;
+  switch(head_) {
+  case UNINITIALIZED:
+    ocl_ptr_ = (void *)clCreateBuffer(oclContext, CL_MEM_READ_WRITE, 
+        size_, cpu_ptr_, NULL);  
+    clEnqueueFillBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, &pattern, sizeof(int),
+        0, size_, 0, NULL, NULL);
+    head_ = HEAD_AT_OCL;
+    break;
+  case HEAD_AT_CPU:
+    if(ocl_ptr_ == NULL)
+      ocl_ptr_ = (void *)clCreateBuffer(oclContext, 
+      CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, size_, cpu_ptr_, NULL);
+    else
+      clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0, size_, 
+                           cpu_ptr_, 0, NULL, NULL);
+    head_ = SYNCED;
+    break;
+  case HEAD_AT_GPU:
+  case HEAD_AT_OCL:
+  case SYNCED:
+    break;
+  }
+#else
+  NO_OCL;
 #endif
 }
 
@@ -92,6 +142,15 @@ const void* SyncedMemory::gpu_data() {
 #endif
 }
 
+const void* SyncedMemory::ocl_data() {
+#ifdef USE_OCL
+  to_ocl();
+  return (const void*)ocl_ptr_;
+#else
+  NO_OCL;
+#endif
+}
+
 void* SyncedMemory::mutable_cpu_data() {
   to_cpu();
   head_ = HEAD_AT_CPU;
@@ -108,6 +167,15 @@ void* SyncedMemory::mutable_gpu_data() {
 #endif
 }
 
+void* SyncedMemory::mutable_ocl_data() {
+#ifdef USE_OCL
+  to_ocl();
+  head_ = HEAD_AT_OCL;
+  return ocl_ptr_;
+#else
+  NO_OCL;
+#endif
+}
 
 }  // namespace caffe
 

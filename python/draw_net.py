@@ -2,7 +2,7 @@
 """
 Draw a graph of the net architecture.
 """
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+import argparse
 from google.protobuf import text_format
 
 import caffe
@@ -14,8 +14,7 @@ def parse_args():
     """Parse input arguments
     """
 
-    parser = ArgumentParser(description=__doc__,
-                            formatter_class=ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(description='Draw a network graph')
 
     parser.add_argument('input_net_proto_file',
                         help='Input network prototxt file')
@@ -23,10 +22,10 @@ def parse_args():
                         help='Output image file')
     parser.add_argument('--rankdir',
                         help=('One of TB (top-bottom, i.e., vertical), '
-                              'RL (right-left, i.e., horizontal), or another '
-                              'valid dot option; see '
-                              'http://www.graphviz.org/doc/info/'
-                              'attrs.html#k:rankdir'),
+                              'RL (right-left, i.e., horizontal), or another'
+                              'valid dot option; see'
+                              'http://www.graphviz.org/doc/info/attrs.html#k:rankdir'
+                              '(default: LR)'),
                         default='LR')
 
     args = parser.parse_args()

@@ -9,6 +9,8 @@
 
 #define NO_GPU LOG(FATAL) << "Cannot use GPU in CPU-only Caffe: check mode."
 
+#define NO_OCL LOG(FATAL) << "Cannot use OCL in non-OCL Caffe: check mode."
+
 #define STUB_GPU(classname) \
 template <typename Dtype> \
 void classname<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom, \

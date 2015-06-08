@@ -23,6 +23,82 @@ TEST_F(SyncedMemoryTest, TestInitialization) {
   delete p_mem;
 }
 
+#ifdef USE_OCL
+
+TEST_F(SyncedMemoryTest, TestAllocationCPUOCL) {
+  SyncedMemory mem(10);
+  EXPECT_TRUE(mem.cpu_data());
+  EXPECT_TRUE(mem.ocl_data());
+  EXPECT_TRUE(mem.mutable_cpu_data());
+  EXPECT_TRUE(mem.mutable_ocl_data());
+}
+
+TEST_F(SyncedMemoryTest, TestAllocationOCL) {
+  SyncedMemory mem(10);
+  EXPECT_TRUE(mem.ocl_data());
+  EXPECT_TRUE(mem.mutable_ocl_data());
+}
+
+TEST_F(SyncedMemoryTest, TestOCLRead) {
+  SyncedMemory mem(10);
+  void* cpu_data = mem.mutable_cpu_data();
+  EXPECT_EQ(mem.head(), SyncedMemory::HEAD_AT_CPU);
+  caffe_memset(mem.size(), 1, cpu_data);
+  const void* ocl_data = mem.ocl_data();
+  EXPECT_EQ(mem.head(), SyncedMemory::SYNCED);
+  // check if values are the same
+  char* recovered_value = new char[10];
+  clEnqueueReadBuffer(oclCommandQueue, (cl_mem)ocl_data, CL_TRUE, 0, 10,
+      recovered_value, 0, NULL, NULL);
+  for (int i = 0; i < mem.size(); ++i) {
+    EXPECT_EQ((static_cast<char*>(recovered_value))[i], 1);
+  }
+  // do another round
+  cpu_data = mem.mutable_cpu_data();
+  EXPECT_EQ(mem.head(), SyncedMemory::HEAD_AT_CPU);
+  caffe_memset(mem.size(), 2, cpu_data);
+  for (int i = 0; i < mem.size(); ++i) {
+    EXPECT_EQ((static_cast<char*>(cpu_data))[i], 2);
+  }
+  ocl_data = mem.ocl_data();
+  EXPECT_EQ(mem.head(), SyncedMemory::SYNCED);
+  // check if values are the same
+  clEnqueueReadBuffer(oclCommandQueue, (cl_mem)ocl_data, CL_TRUE, 0, 10,
+      recovered_value, 0, NULL, NULL);
+  for (int i = 0; i < mem.size(); ++i) {
+    EXPECT_EQ((static_cast<char*>(recovered_value))[i], 2);
+  }
+  delete[] recovered_value;
+}
+
+TEST_F(SyncedMemoryTest, TestOCLWrite) {
+  SyncedMemory mem(10);
+  void* ocl_data = mem.mutable_ocl_data();
+  EXPECT_EQ(mem.head(), SyncedMemory::HEAD_AT_OCL);
+  //caffe_gpu_memset(mem.size(), 1, gpu_data);
+  char pattern = 1;
+  clEnqueueFillBuffer(oclCommandQueue, (cl_mem)ocl_data, (void *)&pattern, 1, 0,
+      mem.size(), 0, NULL, NULL); 
+  const void* cpu_data = mem.cpu_data();
+  for (int i = 0; i < mem.size(); ++i) {
+    EXPECT_EQ((static_cast<const char*>(cpu_data))[i], 1);
+  }
+  EXPECT_EQ(mem.head(), SyncedMemory::SYNCED);
+
+  ocl_data = mem.mutable_ocl_data();
+  EXPECT_EQ(mem.head(), SyncedMemory::HEAD_AT_OCL);
+  pattern = 2;
+  clEnqueueFillBuffer(oclCommandQueue, (cl_mem)ocl_data, (void *)&pattern, 1, 0,
+      mem.size(), 0, NULL, NULL); 
+  cpu_data = mem.cpu_data();
+  for (int i = 0; i < mem.size(); ++i) {
+    EXPECT_EQ((static_cast<const char*>(cpu_data))[i], 2);
+  }
+  EXPECT_EQ(mem.head(), SyncedMemory::SYNCED);
+}
+
+#endif
+
 #ifndef CPU_ONLY  // GPU test
 
 TEST_F(SyncedMemoryTest, TestAllocationCPUGPU) {

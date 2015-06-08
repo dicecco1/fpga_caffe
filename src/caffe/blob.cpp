@@ -86,6 +86,12 @@ const Dtype* Blob<Dtype>::gpu_data() const {
 }
 
 template <typename Dtype>
+const Dtype* Blob<Dtype>::ocl_data() const {
+  CHECK(data_);
+  return (const Dtype*)data_->ocl_data();
+}
+
+template <typename Dtype>
 const Dtype* Blob<Dtype>::cpu_diff() const {
   CHECK(diff_);
   return (const Dtype*)diff_->cpu_data();
@@ -95,6 +101,12 @@ template <typename Dtype>
 const Dtype* Blob<Dtype>::gpu_diff() const {
   CHECK(diff_);
   return (const Dtype*)diff_->gpu_data();
+}
+
+template <typename Dtype>
+const Dtype* Blob<Dtype>::ocl_diff() const {
+  CHECK(diff_);
+  return (const Dtype*)diff_->ocl_data();
 }
 
 template <typename Dtype>
@@ -110,6 +122,12 @@ Dtype* Blob<Dtype>::mutable_gpu_data() {
 }
 
 template <typename Dtype>
+Dtype* Blob<Dtype>::mutable_ocl_data() {
+  CHECK(data_);
+  return static_cast<Dtype*>(data_->mutable_ocl_data());
+}
+
+template <typename Dtype>
 Dtype* Blob<Dtype>::mutable_cpu_diff() {
   CHECK(diff_);
   return static_cast<Dtype*>(diff_->mutable_cpu_data());
@@ -119,6 +137,12 @@ template <typename Dtype>
 Dtype* Blob<Dtype>::mutable_gpu_diff() {
   CHECK(diff_);
   return static_cast<Dtype*>(diff_->mutable_gpu_data());
+}
+
+template <typename Dtype>
+Dtype* Blob<Dtype>::mutable_ocl_diff() {
+  CHECK(diff_);
+  return static_cast<Dtype*>(diff_->mutable_ocl_data());
 }
 
 template <typename Dtype>
@@ -417,6 +441,7 @@ void Blob<Dtype>::CopyFrom(const Blob& source, bool copy_diff, bool reshape) {
           static_cast<Dtype*>(data_->mutable_gpu_data()));
     }
     break;
+  case Caffe::OCL:
   case Caffe::CPU:
     if (copy_diff) {
       caffe_copy(count_, source.cpu_diff(),
