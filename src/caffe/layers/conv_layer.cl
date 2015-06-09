@@ -1,3 +1,5 @@
+#pragma OPENCL EXTENSION cl_khr_fp64 : enable
+
 __kernel void conv_forward_float(__global float *bottom, __global float *top,
                                __global float *weight_data)
 {
