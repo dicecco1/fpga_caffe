@@ -90,14 +90,15 @@ inline void SyncedMemory::to_gpu() {
 
 inline void SyncedMemory::to_ocl() {
 #ifdef USE_OCL
-  int pattern = 0;
+  char *pattern; 
   switch(head_) {
   case UNINITIALIZED:
-    ocl_ptr_ = (void *)clCreateBuffer(oclContext, CL_MEM_READ_WRITE, 
-        size_, cpu_ptr_, NULL);  
-    clEnqueueFillBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, &pattern, sizeof(int),
-        0, size_, 0, NULL, NULL);
+    pattern = new char[size_];
+    memset(pattern, 0, size_);
+    ocl_ptr_ = (void *)clCreateBuffer(oclContext, 
+      CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, size_, pattern, NULL); 
     head_ = HEAD_AT_OCL;
+    delete pattern;
     break;
   case HEAD_AT_CPU:
     if(ocl_ptr_ == NULL)

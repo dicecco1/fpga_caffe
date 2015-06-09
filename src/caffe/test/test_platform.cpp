@@ -51,23 +51,21 @@ TEST_F(PlatformTest, TestInitialization) {
 #endif // CPU_ONLY
 
 #ifdef USE_OCL
-  std::vector<cl::Platform> all_platforms;
-  cl::Platform::get(&all_platforms);
-  std::cout<<"Number of platforms is: "<<all_platforms.size()<<std::endl;
-  EXPECT_TRUE(all_platforms.size() != 0);
+  cl_uint numPlatforms;
+  std::vector<cl_platform_id> all_platforms;
+  clGetPlatformIDs(0, NULL, &numPlatforms);
+  all_platforms.resize(1);
+  clGetPlatformIDs(1, &(all_platforms[0]), NULL);
+  std::cout<<"Number of platforms is: "<<numPlatforms<<std::endl;
+  EXPECT_TRUE(numPlatforms != 0);
   
-  cl::Platform default_platform = all_platforms[0];
-  std::cout<<"Using platform: "
-    <<default_platform.getInfo<CL_PLATFORM_NAME>()<<std::endl;
+  cl_device_id all_devices;
+  cl_uint numDevices;
+  clGetDeviceIDs(all_platforms[0], CL_DEVICE_TYPE_ALL, 0, NULL, &numDevices);
+  clGetDeviceIDs(all_platforms[0], CL_DEVICE_TYPE_ALL, 1, &all_devices, NULL);
+  std::cout<<"Number of devices is: "<<numDevices<<std::endl;
+  EXPECT_TRUE(numDevices != 0);
   
-  std::vector<cl::Device> all_devices;
-  default_platform.getDevices(CL_DEVICE_TYPE_ALL, &all_devices);
-  std::cout<<"Number of devices is: "<<all_devices.size()<<std::endl;
-  EXPECT_TRUE(all_devices.size() != 0);
-  
-  cl::Device default_device = all_devices[0];
-  std::cout<<"Using device: "
-    <<default_device.getInfo<CL_DEVICE_NAME>()<<std::endl;
 #endif // USE_OCL
 
 }

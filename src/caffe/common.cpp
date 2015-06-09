@@ -82,14 +82,13 @@ int convertToString(const char *filename, std::string& s)
 
 #ifdef USE_OCL
 
-void Caffe::SetOCLDevice() {
+void Caffe::SetOCLDevice() { 
   oclPlatform.resize(1);
-  clGetPlatformIDs(0, NULL, &oclNumPlatforms);
+  clGetPlatformIDs(0, NULL, &oclNumPlatforms); 
   clGetPlatformIDs(1, &(oclPlatform[0]), NULL);
-  clGetDeviceIDs(oclPlatform[0], CL_DEVICE_TYPE_CPU, 1, &oclDevices, NULL);
+  clGetDeviceIDs(oclPlatform[0], CL_DEVICE_TYPE_ALL, 1, &oclDevices, NULL);
   oclContext = clCreateContext(NULL, 1, &oclDevices, NULL, NULL, NULL);
   oclCommandQueue = clCreateCommandQueue(oclContext, oclDevices, 0, NULL);
-  
   const char *filename = "src/caffe/layers/conv_layer.cl";
   std::string sourceStr;
   caffe::convertToString(filename, sourceStr);

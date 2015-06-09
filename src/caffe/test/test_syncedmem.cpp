@@ -75,10 +75,13 @@ TEST_F(SyncedMemoryTest, TestOCLWrite) {
   SyncedMemory mem(10);
   void* ocl_data = mem.mutable_ocl_data();
   EXPECT_EQ(mem.head(), SyncedMemory::HEAD_AT_OCL);
-  //caffe_gpu_memset(mem.size(), 1, gpu_data);
-  char pattern = 1;
-  clEnqueueFillBuffer(oclCommandQueue, (cl_mem)ocl_data, (void *)&pattern, 1, 0,
-      mem.size(), 0, NULL, NULL); 
+
+  char *pattern = new char[10];
+  memset(pattern, 1, 10);
+
+  clEnqueueWriteBuffer(oclCommandQueue, (cl_mem)ocl_data, CL_TRUE, 0, 10, 
+    (void *)pattern, 0, NULL, NULL);
+ 
   const void* cpu_data = mem.cpu_data();
   for (int i = 0; i < mem.size(); ++i) {
     EXPECT_EQ((static_cast<const char*>(cpu_data))[i], 1);
@@ -87,14 +90,17 @@ TEST_F(SyncedMemoryTest, TestOCLWrite) {
 
   ocl_data = mem.mutable_ocl_data();
   EXPECT_EQ(mem.head(), SyncedMemory::HEAD_AT_OCL);
-  pattern = 2;
-  clEnqueueFillBuffer(oclCommandQueue, (cl_mem)ocl_data, (void *)&pattern, 1, 0,
-      mem.size(), 0, NULL, NULL); 
+  memset(pattern, 2, 10);
+
+  clEnqueueWriteBuffer(oclCommandQueue, (cl_mem)ocl_data, CL_TRUE, 0, 10, 
+    (void *)pattern, 0, NULL, NULL);
+
   cpu_data = mem.cpu_data();
   for (int i = 0; i < mem.size(); ++i) {
     EXPECT_EQ((static_cast<const char*>(cpu_data))[i], 2);
   }
   EXPECT_EQ(mem.head(), SyncedMemory::SYNCED);
+  delete pattern;
 }
 
 #endif
