@@ -30,6 +30,7 @@ DEFINE_string(weights, "",
     "Cannot be set simultaneously with snapshot.");
 DEFINE_int32(iterations, 50,
     "The number of iterations to run.");
+DEFINE_int32(ocl, -1, "Run using OCL mode.");
 
 // A simple registry for caffe commands.
 typedef int (*BrewFunction)();
@@ -113,6 +114,9 @@ int train() {
     LOG(INFO) << "Use GPU with device ID " << FLAGS_gpu;
     Caffe::SetDevice(FLAGS_gpu);
     Caffe::set_mode(Caffe::GPU);
+  } else if (FLAGS_ocl >= 0) {
+    Caffe::SetOCLDevice();
+    Caffe::set_mode(Caffe::OCL);
   } else {
     LOG(INFO) << "Use CPU.";
     Caffe::set_mode(Caffe::CPU);
@@ -147,6 +151,9 @@ int test() {
     LOG(INFO) << "Use GPU with device ID " << FLAGS_gpu;
     Caffe::SetDevice(FLAGS_gpu);
     Caffe::set_mode(Caffe::GPU);
+  } else if (FLAGS_ocl >= 0) {
+    Caffe::SetOCLDevice();
+    Caffe::set_mode(Caffe::OCL);
   } else {
     LOG(INFO) << "Use CPU.";
     Caffe::set_mode(Caffe::CPU);
@@ -212,6 +219,9 @@ int time() {
     LOG(INFO) << "Use GPU with device ID " << FLAGS_gpu;
     Caffe::SetDevice(FLAGS_gpu);
     Caffe::set_mode(Caffe::GPU);
+  } else if (FLAGS_ocl >= 0) {
+    Caffe::SetOCLDevice();
+    Caffe::set_mode(Caffe::OCL);
   } else {
     LOG(INFO) << "Use CPU.";
     Caffe::set_mode(Caffe::CPU);
