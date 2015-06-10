@@ -94,7 +94,7 @@ void ConvolutionLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
   const vector<shared_ptr<Blob<float> > > weight = this->blobs_;
   const float* weight_data = weight[0]->ocl_data();
   int weight_c = weight[0]->channels();
-  const float* bias_data = NULL;
+  const float* bias_data = weight_data; 
   if(this->bias_term_)
     bias_data = weight[1]->ocl_data();
 
@@ -155,7 +155,7 @@ void ConvolutionLayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
   const vector<shared_ptr<Blob<double> > > weight = this->blobs_;
   const double* weight_data = weight[0]->ocl_data();
   int weight_c = weight[0]->channels();
-  const double* bias_data = NULL;
+  const double* bias_data = weight_data;
   if(this->bias_term_)
     bias_data = weight[1]->ocl_data();
 
