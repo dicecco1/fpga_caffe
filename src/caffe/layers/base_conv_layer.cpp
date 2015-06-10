@@ -8,18 +8,6 @@
 
 namespace caffe {
 
-#ifdef USE_OCL
-template <typename Dtype>
-BaseConvolutionLayer<Dtype>::~BaseConvolutionLayer() {
-  const char *filename = this->oclKernel();
-  if(filename[0] != '\0') {
-    clReleaseKernel(this->ocl_float_kernel);
-    clReleaseKernel(this->ocl_double_kernel);
-    clReleaseProgram(this->ocl_layer_program);
-  }
-}
-#endif
-
 template <typename Dtype>
 void BaseConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
