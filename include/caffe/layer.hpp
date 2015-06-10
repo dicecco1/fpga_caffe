@@ -185,6 +185,12 @@ class Layer {
   virtual inline const char* type() const { return ""; }
 
   /**
+   * @brief Returns the OpenCL Kernel Location
+   */
+
+  virtual inline const char* oclKernel() const { return ""; }
+
+  /**
    * @brief Returns the exact number of bottom blobs required by the layer,
    *        or -1 if no exact number is required.
    *
@@ -299,6 +305,19 @@ class Layer {
   /** The vector that indicates whether each top blob has a non-zero weight in
    *  the objective function. */
   vector<Dtype> loss_;
+
+#ifdef USE_OCL
+  /** The variable that stores the program for a given layer. */
+  cl_program ocl_layer_program;
+
+  /** The variable that stores the floating point implementation of the given 
+   * layer. */
+  cl_kernel ocl_float_kernel;
+
+  /** The variable that stores the double precision implementation of the given
+   * layer. */
+  cl_kernel ocl_double_kernel;
+#endif
 
   /** @brief Using the CPU device, compute the layer output. */
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,

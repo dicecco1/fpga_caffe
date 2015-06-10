@@ -163,6 +163,9 @@ class ConvolutionLayer : public BaseConvolutionLayer<Dtype> {
 
   virtual inline const char* type() const { return "Convolution"; }
 
+  virtual inline const char* oclKernel() const { return 
+    "src/caffe/layers/conv_layer.cl"; }
+
  protected:
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);

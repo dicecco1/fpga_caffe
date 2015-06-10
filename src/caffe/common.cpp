@@ -13,8 +13,6 @@ namespace caffe {
   cl_device_id oclDevices;
   cl_context oclContext;
   cl_command_queue oclCommandQueue;
-  std::vector<cl_program> oclProgram;
-  std::vector<cl_kernel> oclKernel;
 #endif
 
 
@@ -89,18 +87,6 @@ void Caffe::SetOCLDevice() {
   clGetDeviceIDs(oclPlatform[0], CL_DEVICE_TYPE_ALL, 1, &oclDevices, NULL);
   oclContext = clCreateContext(NULL, 1, &oclDevices, NULL, NULL, NULL);
   oclCommandQueue = clCreateCommandQueue(oclContext, oclDevices, 0, NULL);
-  const char *filename = "src/caffe/layers/conv_layer.cl";
-  std::string sourceStr;
-  caffe::convertToString(filename, sourceStr);
-	const char *source = sourceStr.c_str();
-	size_t sourceSize[] = {strlen(source)};
-
-  oclProgram.push_back(clCreateProgramWithSource(oclContext, 1, &source, 
-        sourceSize, NULL));
-  clBuildProgram(oclProgram[0], 1, &oclDevices, NULL, NULL, NULL);
-  
-  oclKernel.push_back(clCreateKernel(oclProgram[0], "conv_forward_float", NULL));
-  oclKernel.push_back(clCreateKernel(oclProgram[0], "conv_forward_double", NULL));
 }
 
 #else
