@@ -6,6 +6,10 @@
 
 # OPENCL switch (uncomment to build with OpenCL)
 # USE_OCL := 1
+# DSA := xilinx:adm-pcie-7v3:1ddr:1.0
+
+# OPENCL FPGA switch (uncomment to build with FPGA)
+# USE_FPGA := 1
 
 # CPU-only switch (uncomment to build without GPU support).
 # CPU_ONLY := 1
@@ -38,7 +42,7 @@ BLAS := atlas
 # Leave commented to accept the defaults for your choice of BLAS
 # (which should work)!
 # BLAS_INCLUDE := /path/to/your/blas
-# BLAS_LIB := /usr/lib64/atlas
+BLAS_LIB := /usr/lib64/atlas
 
 # This is required only if you will compile the matlab interface.
 # MATLAB directory should contain the mex binary in /bin.
