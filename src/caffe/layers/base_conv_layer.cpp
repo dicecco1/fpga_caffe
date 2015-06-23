@@ -99,23 +99,10 @@ void BaseConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   // Propagate gradients to the parameters (as directed by backward pass).
   this->param_propagate_down_.resize(this->blobs_.size(), true);
 
-#ifdef USE_OCL
-  const char *filename = this->oclKernel();
-  if(filename[0] != '\0') {
-    std::string sourceStr;
-    caffe::convertToString(filename, sourceStr);
-    const char *source = sourceStr.c_str();
-    size_t sourceSize[] = {strlen(source)};
-
-    this->ocl_layer_program = clCreateProgramWithSource(oclContext, 1, 
-        &source, sourceSize, NULL);
-    clBuildProgram(this->ocl_layer_program, 1, &oclDevices, NULL, NULL, NULL);
-    
-    this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program, 
-        "conv_forward_float", NULL);
-    this->ocl_double_kernel = clCreateKernel(this->ocl_layer_program, 
-        "conv_forward_double", NULL);
-  }
+#ifdef USE_OCLi
+    cl_int status;
+    this->ocl_float_kernel = clCreateKernel(oclProgram,
+        "conv_forward_float", &status);
 #endif
 }
 

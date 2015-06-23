@@ -976,7 +976,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestSobelConvolution) {
 }
 
 TYPED_TEST(oclConvolutionLayerTest, TestGradient) {
-  Caffe::set_mode(Caffe::OCL);
+//  Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
   ConvolutionParameter* convolution_param =
@@ -995,7 +995,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestGradient) {
 }
 
 TYPED_TEST(oclConvolutionLayerTest, Test1x1Gradient) {
-  Caffe::set_mode(Caffe::OCL);
+//  Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
   ConvolutionParameter* convolution_param =
@@ -1014,7 +1014,7 @@ TYPED_TEST(oclConvolutionLayerTest, Test1x1Gradient) {
 }
 
 TYPED_TEST(oclConvolutionLayerTest, TestGradientGroup) {
-  Caffe::set_mode(Caffe::OCL);
+//  Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
   ConvolutionParameter* convolution_param =

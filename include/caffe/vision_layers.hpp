@@ -164,7 +164,7 @@ class ConvolutionLayer : public BaseConvolutionLayer<Dtype> {
   virtual inline const char* type() const { return "Convolution"; }
 
   virtual inline const char* oclKernel() const { return 
-    "src/caffe/layers/conv_layer.cl"; }
+    ".build_release/opencl/src/caffe/layers/conv_layer.xclbin"; }
 #ifdef USE_OCL
   virtual ~ConvolutionLayer();
 #endif

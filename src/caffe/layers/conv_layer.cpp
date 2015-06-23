@@ -11,12 +11,9 @@ namespace caffe {
 #ifdef USE_OCL
 template <typename Dtype>
 ConvolutionLayer<Dtype>::~ConvolutionLayer() {
-  const char *filename = this->oclKernel();
-  if(filename[0] != '\0') {
-    clReleaseKernel(this->ocl_float_kernel);
-    clReleaseKernel(this->ocl_double_kernel);
-    clReleaseProgram(this->ocl_layer_program);
-  }
+  //clReleaseKernel(this->ocl_float_kernel);
+  //clReleaseKernel(this->ocl_double_kernel);
+  //clReleaseProgram(this->ocl_layer_program);
 }
 #endif
 
@@ -118,33 +115,54 @@ void ConvolutionLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
     int bottom_channel = bottom[i]->channels();
     int top_num = top[i]->num();
     int bias_term = this->bias_term_;
-    clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem), (const void *)&in_data);
-    clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem), (const void *)&out_data);
+    cl_int error;
+    clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
+        (const void *)&in_data);
+    clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
+        (const void *)&out_data);
     clSetKernelArg(this->ocl_float_kernel, 2, sizeof(cl_mem), 
         (const void *)&weight_data);
-    clSetKernelArg(this->ocl_float_kernel, 3, sizeof(int), (const void *)&groups);
-    clSetKernelArg(this->ocl_float_kernel, 4, sizeof(int), (const void *)&kernel_h);
-    clSetKernelArg(this->ocl_float_kernel, 5, sizeof(int), (const void *)&kernel_w);
-    clSetKernelArg(this->ocl_float_kernel, 6, sizeof(int), (const void *)&pad_h);
-    clSetKernelArg(this->ocl_float_kernel, 7, sizeof(int), (const void *)&pad_w);
-    clSetKernelArg(this->ocl_float_kernel, 8, sizeof(int), (const void *)&stride_h);
-    clSetKernelArg(this->ocl_float_kernel, 9, sizeof(int), (const void *)&stride_w);
-    clSetKernelArg(this->ocl_float_kernel, 10, sizeof(int), (const void *)&top_h);
-    clSetKernelArg(this->ocl_float_kernel, 11, sizeof(int), (const void *)&top_w);
-    clSetKernelArg(this->ocl_float_kernel, 12, sizeof(int), (const void *)&bottom_h);
-    clSetKernelArg(this->ocl_float_kernel, 13, sizeof(int), (const void *)&bottom_w);
-    clSetKernelArg(this->ocl_float_kernel, 14, sizeof(int), (const void *)&top_num);
-    clSetKernelArg(this->ocl_float_kernel, 15, sizeof(int), (const void *)&bias_term);
-    clSetKernelArg(this->ocl_float_kernel, 16, sizeof(int), (const void *)&top_channel);
-    clSetKernelArg(this->ocl_float_kernel, 17, sizeof(int), (const void *)&bottom_channel);
+    clSetKernelArg(this->ocl_float_kernel, 3, sizeof(int),
+        (const void *)&groups);
+    clSetKernelArg(this->ocl_float_kernel, 4, sizeof(int),
+        (const void *)&kernel_h);
+    clSetKernelArg(this->ocl_float_kernel, 5, sizeof(int),
+        (const void *)&kernel_w);
+    clSetKernelArg(this->ocl_float_kernel, 6, sizeof(int),
+        (const void *)&pad_h);
+    clSetKernelArg(this->ocl_float_kernel, 7, sizeof(int),
+        (const void *)&pad_w);
+    clSetKernelArg(this->ocl_float_kernel, 8, sizeof(int),
+        (const void *)&stride_h);
+    clSetKernelArg(this->ocl_float_kernel, 9, sizeof(int),
+        (const void *)&stride_w);
+    clSetKernelArg(this->ocl_float_kernel, 10, sizeof(int),
+        (const void *)&top_h);
+    clSetKernelArg(this->ocl_float_kernel, 11, sizeof(int),
+        (const void *)&top_w);
+    clSetKernelArg(this->ocl_float_kernel, 12, sizeof(int),
+        (const void *)&bottom_h);
+    clSetKernelArg(this->ocl_float_kernel, 13, sizeof(int),
+        (const void *)&bottom_w);
+    clSetKernelArg(this->ocl_float_kernel, 14, sizeof(int),
+        (const void *)&top_num);
+    clSetKernelArg(this->ocl_float_kernel, 15, sizeof(int),
+        (const void *)&bias_term);
+    clSetKernelArg(this->ocl_float_kernel, 16, sizeof(int),
+        (const void *)&top_channel);
+    clSetKernelArg(this->ocl_float_kernel, 17, sizeof(int),
+        (const void *)&bottom_channel);
     clSetKernelArg(this->ocl_float_kernel, 18, sizeof(cl_mem), 
         (const void *)&bias_data);
-    clSetKernelArg(this->ocl_float_kernel, 19, sizeof(int), (const void *)&weight_c);
+    clSetKernelArg(this->ocl_float_kernel, 19, sizeof(int),
+        (const void *)&weight_c);
     
-    size_t global_work_size[1] = {1};
-
-    clEnqueueNDRangeKernel(oclCommandQueue, this->ocl_float_kernel, 1, NULL, 
-        global_work_size, NULL, 0, NULL, NULL);
+    size_t global_work_size[3] = {1, 1, 1};
+    size_t local_work_size[3] = {1, 1, 1};
+    cl_event event;
+    clEnqueueNDRangeKernel(oclCommandQueue, this->ocl_float_kernel, 3, NULL, 
+        global_work_size, local_work_size, 0, NULL, &event); 
+    clWaitForEvents(1, &event);  
   }
 }
 
@@ -152,7 +170,7 @@ template <>
 void ConvolutionLayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
     const vector<Blob<double>*>& top) {
 
-  const vector<shared_ptr<Blob<double> > > weight = this->blobs_;
+/*  const vector<shared_ptr<Blob<double> > > weight = this->blobs_;
   const double* weight_data = weight[0]->ocl_data();
   int weight_c = weight[0]->channels();
   const double* bias_data = weight_data;
@@ -202,11 +220,13 @@ void ConvolutionLayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
         (const void *)&bias_data);
     clSetKernelArg(this->ocl_double_kernel, 19, sizeof(int), (const void *)&weight_c);
     
-    size_t global_work_size[1] = {1};
-
-    clEnqueueNDRangeKernel(oclCommandQueue, this->ocl_double_kernel, 1, NULL, 
-        global_work_size, NULL, 0, NULL, NULL);
-  }
+    size_t global_work_size[3] = {1, 1, 1};
+    size_t local_work_size[3] = {1, 1, 1};
+    cl_event event;
+    clEnqueueNDRangeKernel(oclCommandQueue, this->ocl_double_kernel, 3, NULL, 
+        global_work_size, local_work_size, 0, NULL, &event);
+    clWaitForEvents(1, &event);
+  }*/
 }
 
 template <typename Dtype>

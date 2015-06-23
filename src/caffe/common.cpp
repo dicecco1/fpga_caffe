@@ -13,6 +13,7 @@ namespace caffe {
   cl_device_id oclDevices;
   cl_context oclContext;
   cl_command_queue oclCommandQueue;
+  cl_program oclProgram;
 #endif
 
 
@@ -48,31 +49,29 @@ void GlobalInit(int* pargc, char*** pargv) {
   ::google::InstallFailureSignalHandler();
 }
 
-int convertToString(const char *filename, std::string& s)
+int convertToString(const char *filename, char **str)
 {
 	size_t size;
-	char*  str;
-	std::fstream f(filename, (std::fstream::in | std::fstream::binary));
+  
+  FILE *f = fopen(filename, "rb");  
 
-	if(f.is_open())
+	if(f != NULL)
 	{
-		size_t fileSize;
-		f.seekg(0, std::fstream::end);
-		size = fileSize = (size_t)f.tellg();
-		f.seekg(0, std::fstream::beg);
-		str = new char[size+1];
+		fseek(f, 0, SEEK_END);
+		size = ftell(f);
+		fseek(f, 0, SEEK_SET);
+		*str = new char[size+1];
 		if(!str)
 		{
-			f.close();
-			return 0;
+			fclose(f);
+			return -1;
 		}
 
-		f.read(str, fileSize);
-		f.close();
-		str[size] = '\0';
-		s = str;
-		delete[] str;
-		return 0;
+		fread(*str, sizeof(char), size, f);
+		fclose(f);
+		(*str)[size] = '\0';
+		
+		return size;
 	}
   std::cout<<"Error: failed to open file\n:"<<filename<<std::endl;
 	return -1;
@@ -81,12 +80,20 @@ int convertToString(const char *filename, std::string& s)
 #ifdef USE_OCL
 
 void Caffe::SetOCLDevice() { 
+  cl_int status, bstatus;
   oclPlatform.resize(1);
-  clGetPlatformIDs(0, NULL, &oclNumPlatforms); 
-  clGetPlatformIDs(1, &(oclPlatform[0]), NULL);
-  clGetDeviceIDs(oclPlatform[0], CL_DEVICE_TYPE_ALL, 1, &oclDevices, NULL);
-  oclContext = clCreateContext(NULL, 1, &oclDevices, NULL, NULL, NULL);
-  oclCommandQueue = clCreateCommandQueue(oclContext, oclDevices, 0, NULL);
+  status = clGetPlatformIDs(0, NULL, &oclNumPlatforms); 
+  status = clGetPlatformIDs(1, &(oclPlatform[0]), NULL);
+  status = clGetDeviceIDs(oclPlatform[0], CL_DEVICE_TYPE_ACCELERATOR, 1, &oclDevices, NULL);
+  oclContext = clCreateContext(NULL, 1, &oclDevices, NULL, NULL, &status);
+  oclCommandQueue = clCreateCommandQueue(oclContext, oclDevices, 0, &status);
+  const char *filename = ".build_release/opencl/src/caffe/layers/conv_layer.xclbin";
+  char *sourceStr;
+  size_t sourceSize = caffe::convertToString(filename, &sourceStr);
+  oclProgram = clCreateProgramWithBinary(oclContext, 1,
+          &oclDevices, &sourceSize, (const unsigned char **)&sourceStr,
+          &bstatus, &status);
+  status = clBuildProgram(oclProgram, 0, NULL, NULL, NULL, NULL); 
 }
 
 #else

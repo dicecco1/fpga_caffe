@@ -1,11 +1,12 @@
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
+//#pragma OPENCL EXTENSION cl_khr_fp64 : enable
 
 int offset(int channels, int height, int width, int n, int c, int h, int w)
 { 
   return ((n * channels + c) * height + h)* width +w;
 }
 
-__kernel void conv_forward_float(__global float *bottom, __global float *top,
+__kernel __attribute__ ((reqd_work_group_size(1, 1, 1)))  
+void conv_forward_float(__global float *bottom, __global float *top,
                                __global float *weight_data, int groups, 
                                int kernel_h, int kernel_w, int pad_h, 
                                int pad_w, int stride_h, int stride_w,
@@ -18,7 +19,7 @@ __kernel void conv_forward_float(__global float *bottom, __global float *top,
 
   o_g = top_channel/groups;
   k_g = bottom_channel/groups;
- 
+   
   for(int i = 0; i < top_num*top_channel*top_h*top_w; i++)
     top[i] = 0;
   for (int n = 0; n < top_num; n++) {
@@ -60,7 +61,8 @@ __kernel void conv_forward_float(__global float *bottom, __global float *top,
   }
 }
 
-__kernel void conv_forward_double(__global double *bottom, __global double *top,
+/*__kernel __attribute__ ((reqd_work_group_size(1, 1, 1)))
+void conv_forward_double(__global double *bottom, __global double *top,
                                 __global double *weight_data, int groups, 
                                int kernel_h, int kernel_w, int pad_h, 
                                int pad_w, int stride_h, int stride_w,
@@ -113,5 +115,4 @@ __kernel void conv_forward_double(__global double *bottom, __global double *top,
       }
     }
   }
-}
-//test123
+}*/

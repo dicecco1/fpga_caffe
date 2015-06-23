@@ -96,6 +96,7 @@ using std::vector;
   extern cl_device_id oclDevices;
   extern cl_context oclContext;
   extern cl_command_queue oclCommandQueue;
+  extern cl_program oclProgram;
 #endif
 
 // A global initialization function that you should call in your main function.
@@ -103,7 +104,7 @@ using std::vector;
 void GlobalInit(int* pargc, char*** pargv);
 
 // A function for converting ocl kernels into strings
-int convertToString(const char *filename, std::string &s);
+int convertToString(const char *filename, char **str);
 
 // A singleton class to hold common caffe stuff, such as the handler that
 // caffe is going to use for cublas, curand, etc.

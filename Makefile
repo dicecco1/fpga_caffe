@@ -40,11 +40,14 @@ DYNAMIC_NAME := $(LIB_BUILD_DIR)/lib$(PROJECT).so
 CXX_SRCS := $(shell find src/$(PROJECT) ! -name "test_*.cpp" -name "*.cpp")
 # CU_SRCS are the cuda source files
 CU_SRCS := $(shell find src/$(PROJECT) ! -name "test_*.cu" -name "*.cu")
+# CL_SRCS are the opencl source files
+CL_SRCS := $(shell find src/$(PROJECT) ! -name "test_*.cl" -name "*.cl")
 # TEST_SRCS are the test source files
 TEST_MAIN_SRC := src/$(PROJECT)/test/test_caffe_main.cpp
 TEST_SRCS := $(shell find src/$(PROJECT) -name "test_*.cpp")
 TEST_SRCS := $(filter-out $(TEST_MAIN_SRC), $(TEST_SRCS))
 TEST_CU_SRCS := $(shell find src/$(PROJECT) -name "test_*.cu")
+TEST_CL_SRCS := $(shell find src/$(PROJECT) -name "test_*.cl")
 GTEST_SRC := src/gtest/gtest-all.cpp
 # TOOL_SRCS are the source files for the tool binaries
 TOOL_SRCS := $(shell find tools -name "*.cpp")
@@ -105,7 +108,7 @@ PROTO_GEN_PY := $(foreach file,${PROTO_SRCS:.proto=_pb2.py}, \
 CXX_OBJS := $(addprefix $(BUILD_DIR)/, ${CXX_SRCS:.cpp=.o})
 CU_OBJS := $(addprefix $(BUILD_DIR)/cuda/, ${CU_SRCS:.cu=.o})
 PROTO_OBJS := ${PROTO_GEN_CC:.cc=.o}
-OBJS := $(PROTO_OBJS) $(CXX_OBJS) $(CU_OBJS)
+OBJS := $(PROTO_OBJS) $(CXX_OBJS) $(CU_OBJS) 
 # tool, example, and test objects
 TOOL_OBJS := $(addprefix $(BUILD_DIR)/, ${TOOL_SRCS:.cpp=.o})
 TOOL_BUILD_DIR := $(BUILD_DIR)/tools
@@ -133,7 +136,8 @@ TEST_CXX_BINS := $(addsuffix .testbin,$(addprefix $(TEST_BIN_DIR)/, \
 TEST_BINS := $(TEST_CXX_BINS) $(TEST_CU_BINS)
 # TEST_ALL_BIN is the test binary that links caffe dynamically.
 TEST_ALL_BIN := $(TEST_BIN_DIR)/test_all.testbin
-
+# OpenCL binaries
+CL_BINS := $(addprefix $(BUILD_DIR)/opencl/, ${CL_SRCS:.cl=.xclbin})    
 ##############################
 # Derive compiler warning dump locations
 ##############################
@@ -175,6 +179,9 @@ LIBRARIES += glog gflags protobuf leveldb snappy \
 PYTHON_LIBRARIES := boost_python python2.7
 WARNINGS := -Wall -Wno-sign-compare
 
+#CLFLAGS := --xdevice $(DSA) -t hw_emu
+CLFLAGS := -b vc690-admpcie7v3-1ddr-gen2 -f bit 
+
 ##############################
 # Set build directories
 ##############################
@@ -189,7 +196,11 @@ endif
 ALL_BUILD_DIRS := $(sort $(BUILD_DIR) $(addprefix $(BUILD_DIR)/, $(SRC_DIRS)) \
 	$(addprefix $(BUILD_DIR)/cuda/, $(SRC_DIRS)) \
 	$(LIB_BUILD_DIR) $(TEST_BIN_DIR) $(PY_PROTO_BUILD_DIR) $(LINT_OUTPUT_DIR) \
-	$(DISTRIBUTE_SUBDIRS) $(PROTO_BUILD_INCLUDE_DIR))
+	$(DISTRIBUTE_SUBDIRS) $(PROTO_BUILD_INCLUDE_DIR)) 
+
+ifeq ($(USE_OCL), 1)
+ALL_BUILD_DIRS += $(addprefix $(BUILD_DIR)/opencl/, $(SRC_DIRS))
+endif
 
 ##############################
 # Set directory for Doxygen-generated documentation
@@ -234,6 +245,9 @@ ifeq ($(LINUX), 1)
 	# boost::thread is reasonably called boost_thread (compare OS X)
 	# We will also explicitly add stdc++ to the link target.
 	LIBRARIES += boost_thread stdc++
+	ifeq ($(FPGA_DEVICE), 1)
+		XOCC := $(XILINX_SDACCEL)/bin/xocc
+	endif
 endif
 
 # OS X:
@@ -347,10 +361,14 @@ endif
 INCLUDE_DIRS += $(BLAS_INCLUDE)
 LIBRARY_DIRS += $(BLAS_LIB)
 
+ifeq ($(USE_OCL), 1)
+INCLUDE_DIRS += $(XILINX_SDACCEL)/runtime/include/1_2	
+LIBRARY_DIRS += $(XILINX_SDACCEL)/runtime/lib/x86_64
+endif
 LIBRARY_DIRS += $(LIB_BUILD_DIR)
 
 # Automatic dependency generation (nvcc is handled separately)
-CXXFLAGS += -MMD -MP
+CXXFLAGS += -MMD -MP -std=c++0x
 
 # Complete build flags.
 COMMON_FLAGS += $(foreach includedir,$(INCLUDE_DIRS),-I$(includedir))
@@ -393,9 +411,14 @@ endif
 ##############################
 .PHONY: all test clean docs linecount lint lintclean tools examples $(DIST_ALIASES) \
 	py mat py$(PROJECT) mat$(PROJECT) proto runtest \
-	superclean supercleanlist supercleanfiles warn everything
+	superclean supercleanlist supercleanfiles warn everything xclbin
 
-all: $(STATIC_NAME) $(DYNAMIC_NAME) tools examples
+all: $(STATIC_NAME) $(DYNAMIC_NAME) tools examples xclbin
+
+xclbin: $(CL_BINS)
+
+$(CL_BINS): $(CL_SRCS)
+	$(XOCC) $(CLFLAGS) $< -o $@
 
 everything: $(EVERYTHING_TARGETS)
 
@@ -587,6 +610,7 @@ clean:
 	@- $(RM) -rf $(DISTRIBUTE_DIR)
 	@- $(RM) $(PY$(PROJECT)_SO)
 	@- $(RM) $(MAT$(PROJECT)_SO)
+	@- $(RM) -rf conv_forward.xclbin xocc* sdaccel*
 
 supercleanfiles:
 	$(eval SUPERCLEAN_FILES := $(strip \
