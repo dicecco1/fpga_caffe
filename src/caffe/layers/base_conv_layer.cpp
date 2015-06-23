@@ -99,10 +99,10 @@ void BaseConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   // Propagate gradients to the parameters (as directed by backward pass).
   this->param_propagate_down_.resize(this->blobs_.size(), true);
 
-#ifdef USE_OCLi
+#ifdef USE_OCL
     cl_int status;
     this->ocl_float_kernel = clCreateKernel(oclProgram,
-        "conv_forward_float", &status);
+        "conv_forward_float", &status); 
 #endif
 }
 
