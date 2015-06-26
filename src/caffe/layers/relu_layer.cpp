@@ -36,6 +36,55 @@ void ReLULayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   }
 }
 
+#ifdef USE_OCL
+template <typename Dtype>
+void ReLULayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+        const vector <Blob<Dtype>*>& top) {                                                               
+  NeuronLayer<Dtype>::LayerSetUp(bottom, top);   
+}  
+
+template <>
+void ReLULayer<float>::Call_ocl(const vector<Blob<float>*>& bottom, 
+    const vector<Blob<float>*>& top) {
+  
+  const float* bottom_data = bottom[0]->ocl_data();
+  float* top_data = top[0]->mutable_ocl_data();
+
+  cl_event event;
+
+  clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
+      (const void *)&bottom_data);
+  clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
+      (const void *)&top_data);
+
+  clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, &event);
+  clWaitForEvents(1, &event);
+}
+
+template <>
+void ReLULayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
+    const vector<Blob<double>*>& top) {
+  Forward_cpu(bottom, top);
+}
+
+template <typename Dtype>
+void ReLULayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
+    const vector<Blob<Dtype>*>& top) {
+  const char *filename =
+    ".build_release/opencl/src/caffe/layers/relu1_float.xclbin";
+  char *sourceStr;
+  size_t sourceSize = caffe::convertToString(filename, &sourceStr);
+  this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1,
+      &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL, 
+      NULL);
+  clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, NULL);
+  delete sourceStr;
+  this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program, 
+      "relu1_float", NULL);
+  Call_ocl(bottom, top);
+}
+#endif
+
 
 #ifdef CPU_ONLY
 STUB_GPU(ReLULayer);

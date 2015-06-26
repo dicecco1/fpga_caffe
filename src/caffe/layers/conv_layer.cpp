@@ -169,7 +169,8 @@ void ConvolutionLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
 template <>
 void ConvolutionLayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
     const vector<Blob<double>*>& top) {
-
+  
+  Forward_cpu(bottom, top);
 /*  const vector<shared_ptr<Blob<double> > > weight = this->blobs_;
   const double* weight_data = weight[0]->ocl_data();
   int weight_c = weight[0]->channels();
@@ -233,6 +234,17 @@ template <typename Dtype>
 void ConvolutionLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
 
+  const char *filename = 
+    ".build_release/opencl/src/caffe/layers/conv_layer.xclbin";
+  char *sourceStr;
+  size_t sourceSize = caffe::convertToString(filename, &sourceStr);
+  this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1, 
+      &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL, 
+      NULL);
+  clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, NULL);
+  delete sourceStr;
+  this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program, 
+      "conv_forward_float", NULL);
   Call_ocl(bottom, top);
  /* const vector<shared_ptr<Blob<Dtype> > > weight = this->blobs_;
   const Dtype* weight_data = weight[0]->cpu_data();

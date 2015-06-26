@@ -180,7 +180,7 @@ PYTHON_LIBRARIES := boost_python python2.7
 WARNINGS := -Wall -Wno-sign-compare
 
 #CLFLAGS := --xdevice $(DSA) -t hw_emu
-CLFLAGS := -b vc690-admpcie7v3-1ddr-gen2 -f bit 
+CLFLAGS := -b vc690-admpcie7v3-1ddr-gen2 -f cpu 
 
 ##############################
 # Set build directories
@@ -245,7 +245,7 @@ ifeq ($(LINUX), 1)
 	# boost::thread is reasonably called boost_thread (compare OS X)
 	# We will also explicitly add stdc++ to the link target.
 	LIBRARIES += boost_thread stdc++
-	ifeq ($(FPGA_DEVICE), 1)
+	ifeq ($(USE_OCL), 1)
 		XOCC := $(XILINX_SDACCEL)/bin/xocc
 	endif
 endif
@@ -415,10 +415,12 @@ endif
 
 all: $(STATIC_NAME) $(DYNAMIC_NAME) tools examples xclbin
 
+ifeq ($(USE_OCL), 1)
 xclbin: $(CL_BINS)
 
 $(CL_BINS): $(CL_SRCS)
 	$(XOCC) $(CLFLAGS) $< -o $@
+endif
 
 everything: $(EVERYTHING_TARGETS)
 

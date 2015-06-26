@@ -96,7 +96,6 @@ using std::vector;
   extern cl_device_id oclDevices;
   extern cl_context oclContext;
   extern cl_command_queue oclCommandQueue;
-  extern cl_program oclProgram;
 #endif
 
 // A global initialization function that you should call in your main function.

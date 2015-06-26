@@ -13,7 +13,6 @@ namespace caffe {
   cl_device_id oclDevices;
   cl_context oclContext;
   cl_command_queue oclCommandQueue;
-  cl_program oclProgram;
 #endif
 
 
@@ -81,19 +80,12 @@ int convertToString(const char *filename, char **str)
 
 void Caffe::SetOCLDevice() { 
   cl_int status, bstatus;
-  oclPlatform.resize(1);
+  oclPlatform.resize(1); 
   status = clGetPlatformIDs(0, NULL, &oclNumPlatforms); 
   status = clGetPlatformIDs(1, &(oclPlatform[0]), NULL); 
   status = clGetDeviceIDs(oclPlatform[0], CL_DEVICE_TYPE_ACCELERATOR, 1, &oclDevices, NULL);
   oclContext = clCreateContext(NULL, 1, &oclDevices, NULL, NULL, &status);
   oclCommandQueue = clCreateCommandQueue(oclContext, oclDevices, 0, &status);
-  const char *filename = ".build_release/opencl/src/caffe/layers/conv_layer.xclbin";
-  char *sourceStr;
-  size_t sourceSize = caffe::convertToString(filename, &sourceStr);
-  oclProgram = clCreateProgramWithBinary(oclContext, 1,
-          &oclDevices, &sourceSize, (const unsigned char **)&sourceStr,
-          &bstatus, &status);
-  status = clBuildProgram(oclProgram, 0, NULL, NULL, NULL, NULL); 
 }
 
 #else

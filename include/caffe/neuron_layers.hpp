@@ -357,7 +357,10 @@ class ReLULayer : public NeuronLayer<Dtype> {
       : NeuronLayer<Dtype>(param) {}
 
   virtual inline const char* type() const { return "ReLU"; }
-
+#ifdef USE_OCL  
+  virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+            const vector<Blob<Dtype>*>& top);
+#endif
  protected:
   /**
    * @param bottom input Blob vector (length 1)
@@ -374,7 +377,12 @@ class ReLULayer : public NeuronLayer<Dtype> {
       const vector<Blob<Dtype>*>& top);
   virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
-
+#ifdef USE_OCL
+  virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+  virtual void Call_ocl(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+#endif
   /**
    * @brief Computes the error gradient w.r.t. the ReLU inputs.
    *

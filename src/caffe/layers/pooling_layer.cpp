@@ -125,6 +125,62 @@ void PoolingLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   }
 }
 
+#ifdef USE_OCL
+template <>
+void PoolingLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
+    const vector<Blob<float>*>& top) {
+ 
+  const float* bottom_data = bottom[0]->ocl_data();  
+  float* top_data = top[0]->mutable_ocl_data();
+  
+  cl_event event;
+
+  clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
+      (const void *)&bottom_data);
+  clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
+      (const void *)&top_data);
+
+  switch (this->layer_param_.pooling_param().pool()) {
+  case PoolingParameter_PoolMethod_MAX:
+    clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, &event);
+    clWaitForEvents(1, &event);
+    break;
+  case PoolingParameter_PoolMethod_AVE: 
+    clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, &event);  
+    clWaitForEvents(1, &event); 
+    break;
+  case PoolingParameter_PoolMethod_STOCHASTIC:
+    NOT_IMPLEMENTED;  
+    break;
+  default:
+    LOG(FATAL) << "Unknown pooling method.";    
+  }    
+}
+
+template <>
+void PoolingLayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
+    const vector<Blob<double>*>& top) {
+  Forward_cpu(bottom, top);
+}
+
+template <typename Dtype>
+void PoolingLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
+    const vector<Blob<Dtype>*>& top) {
+  const char *filename =
+    ".build_release/opencl/src/caffe/layers/pool5_max_float.xclbin";
+  char *sourceStr;
+  size_t sourceSize = caffe::convertToString(filename, &sourceStr);
+  this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1, 
+      &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL, 
+      NULL);
+  clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, NULL);
+  delete sourceStr;
+  this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program, 
+     "pool5_max_float", NULL);
+  Call_ocl(bottom, top);
+}
+#endif
+
 // TODO(Yangqing): Is there a faster way to do pooling in the channel-first
 // case?
 template <typename Dtype>
