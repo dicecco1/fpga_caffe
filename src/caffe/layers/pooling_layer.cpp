@@ -129,23 +129,56 @@ void PoolingLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
 template <>
 void PoolingLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
     const vector<Blob<float>*>& top) {
- 
-  const float* bottom_data = bottom[0]->ocl_data();  
-  float* top_data = top[0]->mutable_ocl_data();
-  
+  const float* bottom_data = bottom[0]->cpu_data();  
+  float* top_data = top[0]->mutable_cpu_data();
+
   cl_event event;
+  cl_int error; 
+
+  int bot_size = bottom[0]->height()*bottom[0]->width();
+  int top_size = top[0]->height()*top[0]->width();
+
+  cl_mem input = clCreateBuffer(oclContext, CL_MEM_READ_ONLY,
+      bot_size * sizeof(float), NULL, &error);
+  cl_mem output = clCreateBuffer(oclContext, CL_MEM_WRITE_ONLY,
+      top_size * sizeof(float), NULL, &error);
 
   clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
-      (const void *)&bottom_data);
-  clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
-      (const void *)&top_data);
+      (const void *)&input);
+  clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
+      (const void *)&output);
 
   switch (this->layer_param_.pooling_param().pool()) {
   case PoolingParameter_PoolMethod_MAX:
-    clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, &event);
-    clWaitForEvents(1, &event);
+    for(int n = 0; n < bottom[0]->num(); ++n) {
+      for(int c = 0; c < channels_; ++c) {
+        clEnqueueWriteBuffer(oclCommandQueue, input, CL_TRUE, 0,
+          bot_size * sizeof(float), 
+          (const void *)(bottom_data + bottom[0]->offset(n, c)), NULL, NULL,
+          NULL); 
+        clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, &event);
+        clWaitForEvents(1, &event);
+        clEnqueueReadBuffer(oclCommandQueue, output, CL_TRUE, 0,
+         top_size * sizeof(float), (void *)(top_data + top[0]->offset(n, c)),
+         NULL, NULL, NULL);   
+      }
+    }
     break;
-  case PoolingParameter_PoolMethod_AVE: 
+  case PoolingParameter_PoolMethod_AVE:
+    for(int n = 0; n < bottom[0]->num(); ++n) {
+      for(int c = 0; c < channels_; ++c) {
+        clEnqueueWriteBuffer(oclCommandQueue, input, CL_TRUE, 0,
+          bot_size * sizeof(float),
+          (const void *)(bottom_data + bottom[0]->offset(n, c)), NULL, NULL,
+          NULL);
+         clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, &event);
+         clWaitForEvents(1, &event);
+         clEnqueueReadBuffer(oclCommandQueue, output, CL_TRUE, 0,
+          top_size * sizeof(float), (void *)(top_data + top[0]->offset(n, c)),
+          NULL, NULL, NULL);
+      }
+    }
+
     clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, &event);  
     clWaitForEvents(1, &event); 
     break;
@@ -155,6 +188,8 @@ void PoolingLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
   default:
     LOG(FATAL) << "Unknown pooling method.";    
   }    
+  clReleaseMemObject(input);
+  clReleaseMemObject(output);
 }
 
 template <>
@@ -166,18 +201,23 @@ void PoolingLayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
 template <typename Dtype>
 void PoolingLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top) {
-  const char *filename =
-    ".build_release/opencl/src/caffe/layers/pool5_max_float.xclbin";
+  cl_int error;
+  std::string path(".build_release/opencl/src/caffe/layers/");
+
+  const char *filename = (path+this->layer_param_.xcl_name()).c_str();
+
   char *sourceStr;
   size_t sourceSize = caffe::convertToString(filename, &sourceStr);
   this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1, 
       &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL, 
-      NULL);
-  clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, NULL);
+      &error);
+  clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, &error);
   delete sourceStr;
   this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program, 
-     "pool5_max_float", NULL);
+     this->layer_param_.kernel_name().c_str(), &error);
   Call_ocl(bottom, top);
+  clReleaseKernel(this->ocl_float_kernel);
+  clReleaseProgram(this->ocl_layer_program);
 }
 #endif
 

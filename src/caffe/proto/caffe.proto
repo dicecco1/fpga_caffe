@@ -259,12 +259,14 @@ message ParamSpec {
 // NOTE
 // Update the next available ID when you add a new LayerParameter field.
 //
-// LayerParameter next available layer-specific ID: 134 (last added: reshape_param)
+// LayerParameter next available layer-specific ID: 136 (last added: reshape_param)
 message LayerParameter {
   optional string name = 1; // the layer name
   optional string type = 2; // the layer type
   repeated string bottom = 3; // the name of each bottom blob
   repeated string top = 4; // the name of each top blob
+  optional string xcl_name = 134; //the name of the xcl file
+  optional string kernel_name = 135; //the name of the ocl kernel
 
   // The train / test phase for computation.
   optional Phase phase = 10;

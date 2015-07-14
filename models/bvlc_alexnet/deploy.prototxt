@@ -7,6 +7,8 @@ input_dim: 227
 layer {
   name: "conv1"
   type: "Convolution"
+  xcl_name: "conv1_layer.xclbin"
+  kernel_name: "conv1_layer"
   bottom: "data"
   top: "conv1"
   param {
@@ -26,12 +28,16 @@ layer {
 layer {
   name: "relu1"
   type: "ReLU"
+  xcl_name: "relu_layer.xclbin"
+  kernel_name: "relu_layer"
   bottom: "conv1"
   top: "conv1"
 }
 layer {
   name: "norm1"
   type: "LRN"
+  xcl_name: "lrn1_ac_layer.xclbin"
+  kernel_name: "lrn1_ac_layer"
   bottom: "conv1"
   top: "norm1"
   lrn_param {
@@ -43,6 +49,8 @@ layer {
 layer {
   name: "pool1"
   type: "Pooling"
+  xcl_name: "pool1_max_layer.xclbin"
+  kernel_name: "pool1_max_layer"
   bottom: "norm1"
   top: "pool1"
   pooling_param {
@@ -54,6 +62,8 @@ layer {
 layer {
   name: "conv2"
   type: "Convolution"
+  xcl_name: "conv2_layer.xclbin"
+  kernel_name: "conv2_layer"
   bottom: "pool1"
   top: "conv2"
   param {
@@ -74,12 +84,16 @@ layer {
 layer {
   name: "relu2"
   type: "ReLU"
+  xcl_name: "relu_layer.xclbin"
+  kernel_name: "relu_layer"
   bottom: "conv2"
   top: "conv2"
 }
 layer {
   name: "norm2"
   type: "LRN"
+  xcl_name: "lrn2_ac_layer.xclbin"
+  kernel_name: "lrn2_ac_layer"
   bottom: "conv2"
   top: "norm2"
   lrn_param {
@@ -91,6 +105,8 @@ layer {
 layer {
   name: "pool2"
   type: "Pooling"
+  xcl_name: "pool2_max_layer.xclbin"
+  kernel_name: "pool2_max_layer"
   bottom: "norm2"
   top: "pool2"
   pooling_param {
@@ -102,6 +118,8 @@ layer {
 layer {
   name: "conv3"
   type: "Convolution"
+  xcl_name: "conv3_layer.xclbin"
+  kernel_name: "conv3_layer"
   bottom: "pool2"
   top: "conv3"
   param {
@@ -121,12 +139,16 @@ layer {
 layer {
   name: "relu3"
   type: "ReLU"
+  xcl_name: "relu_layer.xclbin"
+  kernel_name: "relu_layer"
   bottom: "conv3"
   top: "conv3"
 }
 layer {
   name: "conv4"
   type: "Convolution"
+  xcl_name: "conv3_layer.xclbin"
+  kernel_name: "conv3_layer"
   bottom: "conv3"
   top: "conv4"
   param {
@@ -147,12 +169,16 @@ layer {
 layer {
   name: "relu4"
   type: "ReLU"
+  xcl_name: "relu_layer.xclbin"
+  kernel_name: "relu_layer"
   bottom: "conv4"
   top: "conv4"
 }
 layer {
   name: "conv5"
   type: "Convolution"
+  xcl_name: "conv3_layer.xclbin"
+  kernel_name: "conv3_layer"
   bottom: "conv4"
   top: "conv5"
   param {
@@ -173,12 +199,16 @@ layer {
 layer {
   name: "relu5"
   type: "ReLU"
+  xcl_name: "relu_layer.xclbin"
+  kernel_name: "relu_layer"
   bottom: "conv5"
   top: "conv5"
 }
 layer {
-  name: "pool5"
+  name: "pool3"
   type: "Pooling"
+  xcl_name: "pool3_max_layer.xclbin"
+  kernel_name: "pool3_max_layer"
   bottom: "conv5"
   top: "pool5"
   pooling_param {
@@ -207,6 +237,8 @@ layer {
 layer {
   name: "relu6"
   type: "ReLU"
+  xcl_name: "relu_layer.xclbin"
+  kernel_name: "relu_layer"
   bottom: "fc6"
   top: "fc6"
 }
@@ -239,6 +271,8 @@ layer {
 layer {
   name: "relu7"
   type: "ReLU"
+  xcl_name: "relu_layer.xclbin"
+  kernel_name: "relu_layer"
   bottom: "fc7"
   top: "fc7"
 }
