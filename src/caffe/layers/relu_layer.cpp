@@ -47,10 +47,9 @@ void ReLULayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 template <>
 void ReLULayer<float>::Call_ocl(const vector<Blob<float>*>& bottom, 
     const vector<Blob<float>*>& top) {
-  
+
   const float* bottom_data = bottom[0]->cpu_data();
   float* top_data = top[0]->mutable_cpu_data();
-
   int nodes = 3025;
   cl_int error; 
 
@@ -66,12 +65,11 @@ void ReLULayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
   error = clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
       (const void *)&output);
   
-  int limit = std::ceil(bottom[0]->count()/nodes);
+  int limit = std::ceil((bottom[0]->count())/(float)nodes);
 
   size_t cb_size; 
   if(limit == 0)
     limit = 1;
-
   for(int i = 0; i < limit; i++) {
     if(i != limit - 1)
       cb_size = nodes;
@@ -80,15 +78,13 @@ void ReLULayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
     error = clEnqueueWriteBuffer(oclCommandQueue, input, CL_TRUE, 0,
        cb_size * sizeof(float), (const void *)(bottom_data + i * nodes), NULL,
        NULL, NULL); 
-    clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, NULL);
-    //clWaitForEvents(1, &event); 
+    clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, NULL); 
     clEnqueueReadBuffer(oclCommandQueue, output, CL_TRUE, 0, 
        cb_size * sizeof(float), (void *) (top_data + i * nodes), NULL, NULL, 
        NULL);
   }
   clReleaseMemObject(input);
   clReleaseMemObject(output);
-  clReleaseKernel(this->ocl_float_kernel);
 }
 
 template <>
@@ -115,6 +111,7 @@ void ReLULayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
   this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program, 
       this->layer_param_.kernel_name().c_str(), &error);
   Call_ocl(bottom, top);
+  clReleaseKernel(this->ocl_float_kernel);
   clReleaseProgram(this->ocl_layer_program);
 }
 #endif
