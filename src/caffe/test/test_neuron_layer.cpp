@@ -727,6 +727,8 @@ TYPED_TEST(NeuronLayerTest, TestReLUOCL) {
   Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
+  layer_param.set_xcl_name("relu_layer.xclbin");
+  layer_param.set_kernel_name("relu_layer");
   ReLULayer<Dtype> layer(layer_param);
   layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
