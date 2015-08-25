@@ -1225,10 +1225,11 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
     void TestForwardPool (int layer_num) {
       LayerParameter layer_param;
       PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
-      int in_height, in_width, out_height, out_width;
+      int in_height, in_width, out_height, out_width, channels;
       if(layer_num == 1) {
         layer_param.set_xcl_name("pool1_max_layer.xclbin");
         layer_param.set_kernel_name("pool1_max_layer");
+        channels = 96;
         in_height = 55;
         in_width = 55;
         out_height = 27;
@@ -1236,6 +1237,7 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
       } else if(layer_num == 2) {
         layer_param.set_xcl_name("pool2_max_layer.xclbin");
         layer_param.set_kernel_name("pool2_max_layer");
+        channels = 256;
         in_height = 27;
         in_width = 27;
         out_height = 13;
@@ -1243,6 +1245,7 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
       } else {
         layer_param.set_xcl_name("pool3_max_layer.xclbin");
         layer_param.set_kernel_name("pool3_max_layer");
+        channels = 256;
         in_height = 13;
         in_width = 13;
         out_height = 6;
@@ -1252,7 +1255,6 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
       pooling_param->set_kernel_size(3);
       pooling_param->set_pool(PoolingParameter_PoolMethod_MAX);
       const int num = 1;
-      const int channels = 1;
       blob_bottom_->Reshape(num, channels, in_height, in_width);
       // Input: 1 x 1 channels of:
       //    [1 2 3]
@@ -1281,7 +1283,7 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
         EXPECT_EQ(blob_top_mask_->height(), out_height);   
         EXPECT_EQ(blob_top_mask_->width(), out_width); 
       }    
-      layer.Forward(blob_bottom_vec_, blob_top_vec_);  
+      layer.Forward(blob_bottom_vec_, blob_top_vec_); 
       // Expect output: 1 x 1 channels of:
       // [5 5 5 5 5 5]
       // [7 7 7 7 7 7]
@@ -1300,79 +1302,6 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
         }
       }
     }
-
-    // Test for 2 x 2 square pooling layer
-    void TestForwardSquare () {
-      LayerParameter layer_param;
-      PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
-      pooling_param->set_kernel_size(2);
-      pooling_param->set_pool(PoolingParameter_PoolMethod_MAX);
-      const int num = 5;
-      const int channels = 7;
-      blob_bottom_->Reshape(num, channels, 3, 5);
-      // Input: 2 x 2 channels of: 
-      //    [1 2 5 2 3]
-      //    [9 4 1 4 8]
-      //    [1 2 5 2 3]
-      for (int i = 0; i < 15 * num * channels; i += 15) {
-        blob_bottom_->mutable_cpu_data()[i +  0] = 1;
-        blob_bottom_->mutable_cpu_data()[i +  1] = 2;
-        blob_bottom_->mutable_cpu_data()[i +  2] = 5;
-        blob_bottom_->mutable_cpu_data()[i +  3] = 2;
-        blob_bottom_->mutable_cpu_data()[i +  4] = 3;
-        blob_bottom_->mutable_cpu_data()[i +  5] = 9;
-        blob_bottom_->mutable_cpu_data()[i +  6] = 4;
-        blob_bottom_->mutable_cpu_data()[i +  7] = 1;
-        blob_bottom_->mutable_cpu_data()[i +  8] = 4;
-        blob_bottom_->mutable_cpu_data()[i +  9] = 8;
-        blob_bottom_->mutable_cpu_data()[i + 10] = 1;
-        blob_bottom_->mutable_cpu_data()[i + 11] = 2;
-        blob_bottom_->mutable_cpu_data()[i + 12] = 5;
-        blob_bottom_->mutable_cpu_data()[i + 13] = 2;
-        blob_bottom_->mutable_cpu_data()[i + 14] = 3;
-      }
-      PoolingLayer<Dtype> layer(layer_param);
-      layer.SetUp(blob_bottom_vec_, blob_top_vec_);
-      EXPECT_EQ(blob_top_->num(), num);
-      EXPECT_EQ(blob_top_->channels(), channels);
-      EXPECT_EQ(blob_top_->height(), 2);
-      EXPECT_EQ(blob_top_->width(), 4);
-      if (blob_top_vec_.size() > 1) {
-        EXPECT_EQ(blob_top_mask_->num(), num);
-        EXPECT_EQ(blob_top_mask_->channels(), channels);
-        EXPECT_EQ(blob_top_mask_->height(), 2);
-        EXPECT_EQ(blob_top_mask_->width(), 4);
-      }
-      layer.Forward(blob_bottom_vec_, blob_top_vec_);
-      // Expected output: 2 x 2 channels of:
-      //    [9 5 5 8]
-      //    [9 5 5 8]
-      for (int i = 0; i < 8 * num * channels; i += 8) {
-        EXPECT_EQ(blob_top_->cpu_data()[i + 0], 9);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 1], 5);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 2], 5);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 3], 8);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 4], 9);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 5], 5);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 6], 5);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 7], 8);
-      }
-      if (blob_top_vec_.size() > 1) {
-        // Expected mask output: 2 x 2 channels of:
-        //     [5  2  2 9]
-        //     [5 12 12 9]
-        for (int i = 0; i < 8 * num * channels; i += 8) {
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 0],  5);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 1],  2);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 2],  2);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 3],  9);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 4],  5);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 5], 12);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 6], 12);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 7],  9);
-        }
-      }
-    }
 };
 
 TYPED_TEST_CASE(OCLPoolingLayerTest, TestDtypesAndDevices);
@@ -1380,7 +1309,15 @@ TYPED_TEST_CASE(OCLPoolingLayerTest, TestDtypesAndDevices);
 TYPED_TEST(OCLPoolingLayerTest, OCLTestForwardMax) {
   Caffe::set_mode(Caffe::OCL);
   this->TestForwardPool(1);
+}
+
+TYPED_TEST(OCLPoolingLayerTest, OCLTestForwardMax2) {
+  Caffe::set_mode(Caffe::OCL);
   this->TestForwardPool(2);
+}
+
+TYPED_TEST(OCLPoolingLayerTest, OCLTestForwardMax3) {
+  Caffe::set_mode(Caffe::OCL);
   this->TestForwardPool(3);
 }
 #endif

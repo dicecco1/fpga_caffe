@@ -179,8 +179,7 @@ LIBRARIES += glog gflags protobuf leveldb snappy \
 PYTHON_LIBRARIES := boost_python python2.7
 WARNINGS := -Wall -Wno-sign-compare
 
-#CLFLAGS := --xdevice $(DSA) -t hw_emu
-CLFLAGS := -b vc690-admpcie7v3-1ddr-gen2 -f cpu 
+CLFLAGS := --xdevice $(DSA) -t sw_emu
 
 ##############################
 # Set build directories

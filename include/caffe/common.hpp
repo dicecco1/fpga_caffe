@@ -4,7 +4,7 @@
 #include <boost/shared_ptr.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
-#include <CL/cl.h>
+#include <CL/opencl.h>
 
 #include <climits>
 #include <cmath>

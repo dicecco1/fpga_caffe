@@ -259,7 +259,7 @@ class OCLLRNLayerTest : public MultiDeviceTest<TypeParam> {
           blob_top_(new Blob<Dtype>()) {}
     virtual void SetUp() {
       Caffe::set_random_seed(1701);
-      blob_bottom_->Reshape(10, 96, 55, 55);
+      blob_bottom_->Reshape(1, 96, 55, 55);
       // fill the values
       FillerParameter filler_param;
       GaussianFiller<Dtype> filler(filler_param);
@@ -348,7 +348,7 @@ TYPED_TEST(OCLLRNLayerTest, TestSetupAcrossChannels) {
   LayerParameter layer_param;                                                                                         
   LRNLayer<Dtype> layer(layer_param);                                                                                 
   layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);                                                           
-  EXPECT_EQ(this->blob_top_->num(), 10);
+  EXPECT_EQ(this->blob_top_->num(), 1);
   EXPECT_EQ(this->blob_top_->channels(), 96);
   EXPECT_EQ(this->blob_top_->height(), 55);
   EXPECT_EQ(this->blob_top_->width(), 55);

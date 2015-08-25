@@ -11,9 +11,6 @@ namespace caffe {
 #ifdef USE_OCL
 template <typename Dtype>
 ConvolutionLayer<Dtype>::~ConvolutionLayer() {
-  //clReleaseKernel(this->ocl_float_kernel);
-  //clReleaseKernel(this->ocl_double_kernel);
-  //clReleaseProgram(this->ocl_layer_program);
 }
 #endif
 
@@ -86,67 +83,30 @@ void ConvolutionLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 #ifdef USE_OCL
 template <>
 void ConvolutionLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
-    const vector<Blob<float>*>& top) {
+    const vector<Blob<float>*>& top) {  
   const vector<shared_ptr<Blob<float> > > weight = this->blobs_;
-  const float* weight_data = weight[0]->cpu_data();
-  int groups = this->group_;
-
+  const float* weight_data = weight[0]->ocl_data();
   cl_event event;
   cl_int error;
 
-  int o_head, k_head, o_g, k_g;
-
-  int bot_size = bottom[0]->height() * bottom[0]->width();
-  int top_size = top[0]->height() * top[0]->width();
-    
-  cl_mem input = clCreateBuffer(oclContext, CL_MEM_READ_ONLY,
-        bot_size * sizeof(float), NULL, &error);
-  cl_mem output = clCreateBuffer(oclContext, CL_MEM_READ_WRITE,
-        top_size * sizeof(float), NULL, &error);
-  cl_mem cl_weights = clCreateBuffer(oclContext, CL_MEM_READ_ONLY,
-        this->kernel_h_ * this->kernel_w_ * sizeof(float), NULL, &error);
-    
-  clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
-      (const void *)&input);
-  clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
-      (const void *)&cl_weights);
-  clSetKernelArg(this->ocl_float_kernel, 2, sizeof(cl_mem),
-      (const void *)&output);
+  size_t global[3] = {1, 1, 1};
+  size_t local[3] = {1, 1, 1};
 
   for (int i = 0; i < bottom.size(); i++) {
-    const float *bottom_data = bottom[i]->cpu_data();
+    const float *bottom_data = bottom[i]->ocl_data();
+    float *top_data = top[i]->mutable_ocl_data();
+    clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
+        (const void *)&bottom_data);
+    clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
+        (const void *)&weight_data);
+    clSetKernelArg(this->ocl_float_kernel, 2, sizeof(cl_mem), 
+        (const void *)&top_data);
+    clEnqueueNDRangeKernel(oclCommandQueue, this->ocl_float_kernel, 3, NULL,
+       (size_t *)&global, (size_t *)&local, 0, NULL, &event);
+    clWaitForEvents(1, &event); 
+  }
+  for (int i = 0; i < bottom.size(); i++) {
     float *top_data = top[i]->mutable_cpu_data();
-    o_g = top[i]->channels()/groups;
-    k_g = bottom[i]->channels()/groups;
-     
-    for (int n = 0; n < top[i]->num(); n++) {
-      for (int g = 0; g < groups; g++) {
-        o_head = o_g * g;
-        k_head = k_g * g;
-        for (int o = 0; o < o_g; o++) {
-          for (int k = 0; k < k_g; k++) {
-            clEnqueueWriteBuffer(oclCommandQueue, input, CL_TRUE, 0,
-                bot_size * sizeof(float),
-                (const void *)(bottom_data + bottom[i]->offset(n, k + k_head)), NULL, 
-                NULL, NULL);
-            clEnqueueWriteBuffer(oclCommandQueue, cl_weights, CL_TRUE, 0,
-                kernel_h_ * kernel_w_ * sizeof(float), 
-                (const void *)(weight_data + weight[0]->offset(o + o_head, k)), NULL,
-                NULL, NULL);
-            clEnqueueWriteBuffer(oclCommandQueue, output, CL_TRUE, 0, 
-                top_size * sizeof(float),
-                (const void *)(top_data + top[i]->offset(n, o + o_head)), NULL, NULL,
-                NULL);
-            clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, 
-                &event);
-            clWaitForEvents(1, &event);
-            clEnqueueReadBuffer(oclCommandQueue, output, CL_TRUE, 0, 
-                top_size * sizeof(float), 
-                (void *)(top_data + top[i]->offset(n, o + o_head)), NULL, NULL, NULL);
-          }
-        }
-      }
-    }
     //bias
     if (this->bias_term_) {
       const float* bias_data = weight[1]->cpu_data();
@@ -160,10 +120,7 @@ void ConvolutionLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
         }
       }
     }
-  }
-  clReleaseMemObject(input);
-  clReleaseMemObject(cl_weights);
-  clReleaseMemObject(output);
+  }  
 }
 
 template <>

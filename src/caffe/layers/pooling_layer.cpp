@@ -128,68 +128,41 @@ void PoolingLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
 #ifdef USE_OCL
 template <>
 void PoolingLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
-    const vector<Blob<float>*>& top) {
-  const float* bottom_data = bottom[0]->cpu_data();  
-  float* top_data = top[0]->mutable_cpu_data();
+    const vector<Blob<float>*>& top) { 
+  const float* bottom_data = bottom[0]->ocl_data();  
+  float* top_data = top[0]->mutable_ocl_data();
 
   cl_event event;
   cl_int error; 
 
-  int bot_size = bottom[0]->height()*bottom[0]->width();
-  int top_size = top[0]->height()*top[0]->width();
-
-  cl_mem input = clCreateBuffer(oclContext, CL_MEM_READ_ONLY,
-      bot_size * sizeof(float), NULL, &error);
-  cl_mem output = clCreateBuffer(oclContext, CL_MEM_WRITE_ONLY,
-      top_size * sizeof(float), NULL, &error);
-
-  clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
-      (const void *)&input);
-  clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
-      (const void *)&output);
+  size_t global[3] = {channels_, 1, 1};
+  size_t local[3] = {channels_/4, 1, 1};
 
   switch (this->layer_param_.pooling_param().pool()) {
   case PoolingParameter_PoolMethod_MAX:
-    for(int n = 0; n < bottom[0]->num(); ++n) {
-      for(int c = 0; c < channels_; ++c) {
-        clEnqueueWriteBuffer(oclCommandQueue, input, CL_TRUE, 0,
-          bot_size * sizeof(float), 
-          (const void *)(bottom_data + bottom[0]->offset(n, c)), NULL, NULL,
-          NULL); 
-        clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, &event);
-        clWaitForEvents(1, &event);
-        clEnqueueReadBuffer(oclCommandQueue, output, CL_TRUE, 0,
-         top_size * sizeof(float), (void *)(top_data + top[0]->offset(n, c)),
-         NULL, NULL, NULL);   
-      }
-    }
+    clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
+      (const void *)&bottom_data);
+    clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
+      (const void *)&top_data);
+    error = clEnqueueNDRangeKernel(oclCommandQueue, this->ocl_float_kernel, 3, 
+        NULL, (size_t *)&global, (size_t *)&local, 0, NULL, &event);
+    clWaitForEvents(1, &event);
     break;
   case PoolingParameter_PoolMethod_AVE:
-    for(int n = 0; n < bottom[0]->num(); ++n) {
-      for(int c = 0; c < channels_; ++c) {
-        clEnqueueWriteBuffer(oclCommandQueue, input, CL_TRUE, 0,
-          bot_size * sizeof(float),
-          (const void *)(bottom_data + bottom[0]->offset(n, c)), NULL, NULL,
-          NULL);
-         clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, &event);
-         clWaitForEvents(1, &event);
-         clEnqueueReadBuffer(oclCommandQueue, output, CL_TRUE, 0,
-          top_size * sizeof(float), (void *)(top_data + top[0]->offset(n, c)),
-          NULL, NULL, NULL);
-      }
-    }
-
-    clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, &event);  
-    clWaitForEvents(1, &event); 
+    clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
+        (const void *)&bottom_data);
+    clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
+        (const void *)&top_data);
+    error = clEnqueueNDRangeKernel(oclCommandQueue, this->ocl_float_kernel, 3, 
+        NULL, (size_t *)&global, (size_t *)&local, 0, NULL, NULL);
+    clWaitForEvents(1, &event);
     break;
   case PoolingParameter_PoolMethod_STOCHASTIC:
     NOT_IMPLEMENTED;  
     break;
   default:
     LOG(FATAL) << "Unknown pooling method.";    
-  }    
-  clReleaseMemObject(input);
-  clReleaseMemObject(output);
+  } 
 }
 
 template <>
@@ -200,7 +173,7 @@ void PoolingLayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
 
 template <typename Dtype>
 void PoolingLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
-    const vector<Blob<Dtype>*>& top) {
+    const vector<Blob<Dtype>*>& top) { 
   cl_int error;
   std::string path(".build_release/opencl/src/caffe/layers/");
 

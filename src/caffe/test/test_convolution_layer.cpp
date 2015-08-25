@@ -708,10 +708,10 @@ class oclConvolutionLayerTest : public MultiDeviceTest<TypeParam> {
 
  protected:
   oclConvolutionLayerTest()
-      : blob_bottom_(new Blob<Dtype>(1, 1, 227, 227)),
-        blob_bottom_2_(new Blob<Dtype>(1, 1, 227, 227)),
-        blob_bottom_3_(new Blob<Dtype>(1, 1, 27, 27)),
-        blob_bottom_4_(new Blob<Dtype>(1, 1, 13, 13)),
+      : blob_bottom_(new Blob<Dtype>(1, 3, 227, 227)),
+        blob_bottom_2_(new Blob<Dtype>(1, 3, 227, 227)),
+        blob_bottom_3_(new Blob<Dtype>(1, 96, 27, 27)),
+        blob_bottom_4_(new Blob<Dtype>(1, 256, 13, 13)),
         blob_top_(new Blob<Dtype>()),
         blob_top_2_(new Blob<Dtype>()),
         blob_top_3_(new Blob<Dtype>()),
@@ -769,31 +769,31 @@ TYPED_TEST(oclConvolutionLayerTest, TestSetup) {
       layer_param.mutable_convolution_param();
   convolution_param->set_kernel_size(11);
   convolution_param->set_stride(4);
-  convolution_param->set_num_output(1);
+  convolution_param->set_num_output(96);
   this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
   this->blob_top_vec_.push_back(this->blob_top_2_);
   shared_ptr<Layer<Dtype> > layer(
       new ConvolutionLayer<Dtype>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   EXPECT_EQ(this->blob_top_->num(), 1);
-  EXPECT_EQ(this->blob_top_->channels(), 1);
+  EXPECT_EQ(this->blob_top_->channels(), 96);
   EXPECT_EQ(this->blob_top_->height(), 55);
   EXPECT_EQ(this->blob_top_->width(), 55);
   EXPECT_EQ(this->blob_top_2_->num(), 1);
-  EXPECT_EQ(this->blob_top_2_->channels(), 1);
+  EXPECT_EQ(this->blob_top_2_->channels(), 96);
   EXPECT_EQ(this->blob_top_2_->height(), 55);
   EXPECT_EQ(this->blob_top_2_->width(), 55);
   // setting group should not change the shape
-  convolution_param->set_num_output(1);
+  convolution_param->set_num_output(96);
   convolution_param->set_group(1);
   layer.reset(new ConvolutionLayer<Dtype>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   EXPECT_EQ(this->blob_top_->num(), 1);
-  EXPECT_EQ(this->blob_top_->channels(), 1);
+  EXPECT_EQ(this->blob_top_->channels(), 96);
   EXPECT_EQ(this->blob_top_->height(), 55);
   EXPECT_EQ(this->blob_top_->width(), 55);
   EXPECT_EQ(this->blob_top_2_->num(), 1);
-  EXPECT_EQ(this->blob_top_2_->channels(), 1);
+  EXPECT_EQ(this->blob_top_2_->channels(), 96);
   EXPECT_EQ(this->blob_top_2_->height(), 55);
   EXPECT_EQ(this->blob_top_2_->width(), 55);
 }
@@ -810,7 +810,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestConv1) {
       layer_param.mutable_convolution_param();
   convolution_param->set_kernel_size(11);
   convolution_param->set_stride(4);
-  convolution_param->set_num_output(1);
+  convolution_param->set_num_output(96);
   convolution_param->mutable_weight_filler()->set_type("constant");
   convolution_param->mutable_weight_filler()->set_value(1);
   convolution_param->mutable_bias_filler()->set_type("constant");
@@ -852,8 +852,9 @@ TYPED_TEST(oclConvolutionLayerTest, TestConv2) {
       layer_param.mutable_convolution_param();
   convolution_param->set_kernel_size(5);
   convolution_param->set_stride(1);
-  convolution_param->set_num_output(1);
+  convolution_param->set_num_output(256);
   convolution_param->set_pad(2);
+  convolution_param->set_group(2);
   convolution_param->mutable_weight_filler()->set_type("constant");
   convolution_param->mutable_weight_filler()->set_value(1);
   convolution_param->mutable_bias_filler()->set_type("constant");
@@ -888,7 +889,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestConv3) {
       layer_param.mutable_convolution_param();
   convolution_param->set_kernel_size(3);
   convolution_param->set_stride(1);
-  convolution_param->set_num_output(1);
+  convolution_param->set_num_output(384);
   convolution_param->set_pad(1);
   convolution_param->mutable_weight_filler()->set_type("constant");
   convolution_param->mutable_weight_filler()->set_value(1);

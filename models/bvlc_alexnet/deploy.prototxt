@@ -1,6 +1,6 @@
 name: "AlexNet"
 input: "data"
-input_dim: 10
+input_dim: 1
 input_dim: 3
 input_dim: 227
 input_dim: 227
@@ -147,8 +147,8 @@ layer {
 layer {
   name: "conv4"
   type: "Convolution"
-  xcl_name: "conv3_layer.xclbin"
-  kernel_name: "conv3_layer"
+  xcl_name: "conv4_layer.xclbin"
+  kernel_name: "conv4_layer"
   bottom: "conv3"
   top: "conv4"
   param {
@@ -177,8 +177,8 @@ layer {
 layer {
   name: "conv5"
   type: "Convolution"
-  xcl_name: "conv3_layer.xclbin"
-  kernel_name: "conv3_layer"
+  xcl_name: "conv5_layer.xclbin"
+  kernel_name: "conv5_layer"
   bottom: "conv4"
   top: "conv5"
   param {

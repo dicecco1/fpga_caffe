@@ -90,23 +90,22 @@ inline void SyncedMemory::to_gpu() {
 
 inline void SyncedMemory::to_ocl() {
 #ifdef USE_OCL
-  char *pattern; 
   switch(head_) {
   case UNINITIALIZED:
-    pattern = new char[size_];
-    memset(pattern, 0, size_);
+    CaffeMallocHost(&cpu_ptr_, size_);
+    caffe_memset(size_, 0, cpu_ptr_);
+    own_cpu_data_ = true;
     ocl_ptr_ = (void *)clCreateBuffer(oclContext, 
-      CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, size_, pattern, NULL); 
+        CL_MEM_COPY_HOST_PTR, size_, cpu_ptr_, NULL);
     head_ = HEAD_AT_OCL;
-    delete pattern;
     break;
   case HEAD_AT_CPU:
     if(ocl_ptr_ == NULL)
-      ocl_ptr_ = (void *)clCreateBuffer(oclContext, 
-      CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, size_, cpu_ptr_, NULL);
+      ocl_ptr_ = (void *)clCreateBuffer(oclContext,
+          CL_MEM_COPY_HOST_PTR, size_, cpu_ptr_, NULL);
     else
-      clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0, size_, 
-                           cpu_ptr_, 0, NULL, NULL);
+      clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0, 
+          size_, cpu_ptr_, 0, NULL, NULL);
     head_ = SYNCED;
     break;
   case HEAD_AT_GPU:

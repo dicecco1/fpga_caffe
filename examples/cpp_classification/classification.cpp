@@ -45,9 +45,7 @@ Classifier::Classifier(const string& model_file,
                        const string& trained_file,
                        const string& mean_file,
                        const string& label_file) {
-#ifdef CPU_ONLY
-  Caffe::set_mode(Caffe::CPU);
-#else
+#ifndef CPU_ONLY
   Caffe::set_mode(Caffe::GPU);
 #endif
 
@@ -222,10 +220,10 @@ void Classifier::Preprocess(const cv::Mat& img,
 }
 
 int main(int argc, char** argv) {
-  if (argc != 6) {
+  if (argc != 7) {
     std::cerr << "Usage: " << argv[0]
               << " deploy.prototxt network.caffemodel"
-              << " mean.binaryproto labels.txt img.jpg" << std::endl;
+              << " mean.binaryproto labels.txt img.jpg OCL_enable" << std::endl;
     return 1;
   }
 
@@ -235,6 +233,13 @@ int main(int argc, char** argv) {
   string trained_file = argv[2];
   string mean_file    = argv[3];
   string label_file   = argv[4];
+  string use_ocl = argv[6];
+  if (use_ocl == "OCL_enable") {
+    Caffe::set_mode(Caffe::OCL);
+    caffe::Caffe::SetOCLDevice();
+  } else 
+    Caffe::set_mode(Caffe::CPU);
+
   Classifier classifier(model_file, trained_file, mean_file, label_file);
 
   string file = argv[5];

@@ -94,42 +94,22 @@ void LRNLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
 
 template <>
 void LRNLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
-    const vector<Blob<float>*>& top) {
-//  Forward_cpu(bottom, top);
-  
+    const vector<Blob<float>*>& top) { 
   cl_event event;
   cl_int error;
 
-  const float *bottom_data = bottom[0]->cpu_data();
-  float *top_data = top[0]->mutable_cpu_data();
-
-  int size = bottom[0]->height() * bottom[0]->width() *
-    bottom[0]->channels();
-
-  cl_mem input =  clCreateBuffer(oclContext, CL_MEM_READ_ONLY,
-      size * sizeof(float), NULL, &error);
-  cl_mem output = clCreateBuffer(oclContext, CL_MEM_WRITE_ONLY,
-      size * sizeof(float), NULL, &error);
-
+  const float *bottom_data = bottom[0]->ocl_data();
+  float *top_data = top[0]->mutable_ocl_data();
   clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
-      (const void *)&input);
+      (const void *)&bottom_data);
   clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
-      (const void *)&output);
-
-  for(int n = 0; n < bottom[0]->num(); ++n) {
-    clEnqueueWriteBuffer(oclCommandQueue, input, CL_TRUE, 0, 
-        size * sizeof(float), 
-        (const void *)(bottom_data + bottom[0]->offset(n)), NULL, NULL, 
-        NULL);
-    clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, &event);
-    clWaitForEvents(1, &event);
-    clEnqueueReadBuffer(oclCommandQueue, output, CL_TRUE, 0, 
-        size * sizeof(float), (void *)(top_data + top[0]->offset(n)), NULL,
-        NULL, NULL);
-  }
-  clReleaseMemObject(input);
-  clReleaseMemObject(output);
-  clReleaseKernel(this->ocl_float_kernel);
+      (const void *)&top_data);
+  size_t global[3] = {channels_, 1, 1};
+  size_t local[3] = {channels_/4, 1, 1};
+  
+  clEnqueueNDRangeKernel(oclCommandQueue, this->ocl_float_kernel, 3, NULL, 
+      (size_t *)&global, (size_t *)&local, 0, NULL, &event);
+  clWaitForEvents(1, &event);
 }
 
 template <>
@@ -140,33 +120,30 @@ void LRNLayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
 
 template <typename Dtype>
 void LRNLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
-    const vector<Blob<Dtype>*>& top) {
-  
+    const vector<Blob<Dtype>*>& top) { 
   Dtype* scale_data = scale_.mutable_cpu_data();
   // start with the constant value
   for (int i = 0; i < scale_.count(); ++i) {
     scale_data[i] = k_;
-  }
-
-  Blob<Dtype> padded_square(1, channels_ + size_ - 1, height_, width_);
-  Dtype* padded_square_data = padded_square.mutable_cpu_data();
-  caffe_set(padded_square.count(), Dtype(0), padded_square_data);
-  
+  } 
   cl_int error;
   std::string path(".build_release/opencl/src/caffe/layers/");
   
-  const char *filename = (path+this->layer_param_.xcl_name()).c_str();
+  const char *filename = (path + this->layer_param_.xcl_name()).c_str();
 
   char *sourceStr;
   size_t sourceSize = caffe::convertToString(filename, &sourceStr);
+
   this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1, 
       &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL,
       &error);
+
   clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, &error);
   delete sourceStr;
   this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program,
       this->layer_param_.kernel_name().c_str(), &error);
   Call_ocl(bottom, top);
+  clReleaseKernel(this->ocl_float_kernel);
   clReleaseProgram(this->ocl_layer_program);
 }
 
