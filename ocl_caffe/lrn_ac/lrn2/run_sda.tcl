@@ -18,7 +18,7 @@ create_kernel lrn2_ac_layer -type clc
 add_files -kernel [get_kernels lrn2_ac_layer] "lrn2_ac_layer.cl"
 
 # Define Binary Containers
-set_property max_memory_ports true [get_kernels lrn2_ac_layer]
+#set_property max_memory_ports true [get_kernels lrn2_ac_layer]
 create_opencl_binary lrn2_ac_layer
 set_property region "OCL_REGION_0" [get_opencl_binary lrn2_ac_layer]
 create_compute_unit -opencl_binary [get_opencl_binary lrn2_ac_layer] -kernel [get_kernels lrn2_ac_layer] -name ocl_lrn1
@@ -36,8 +36,8 @@ run_emulation -flow cpu -args "lrn2_ac_layer.xclbin"
 report_estimate
 
 # Compile the application to run on the accelerator card
-#build_system
+build_system
 #
 # Package the application binaries
-#package_system
+package_system
 

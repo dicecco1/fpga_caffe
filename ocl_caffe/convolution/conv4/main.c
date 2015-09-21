@@ -296,7 +296,7 @@ int main(int argc, char** argv)
 #ifdef C_KERNEL
   err = clEnqueueTask(commands, kernel, 0, NULL, NULL);
 #else
-  global[0] = 1;
+  global[0] = 192;
   global[1] = 1;
   global[2] = 1;
   local[0] = 1;

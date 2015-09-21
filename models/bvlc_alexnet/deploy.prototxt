@@ -220,6 +220,8 @@ layer {
 layer {
   name: "fc6"
   type: "InnerProduct"
+  xcl_name: "fc6_layer.xclbin"
+  kernel_name: "fc6_layer"
   bottom: "pool5"
   top: "fc6"
   param {
@@ -254,6 +256,8 @@ layer {
 layer {
   name: "fc7"
   type: "InnerProduct"
+  xcl_name: "fc7_layer.xclbin"
+  kernel_name: "fc7_layer"
   bottom: "fc6"
   top: "fc7"
   param {
@@ -288,6 +292,8 @@ layer {
 layer {
   name: "fc8"
   type: "InnerProduct"
+  xcl_name: "fc8_layer.xclbin"
+  kernel_name: "fc8_layer"
   bottom: "fc7"
   top: "fc8"
   param {

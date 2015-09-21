@@ -96,7 +96,6 @@ template <>
 void LRNLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
     const vector<Blob<float>*>& top) { 
   cl_event event;
-  cl_int error;
 
   const float *bottom_data = bottom[0]->ocl_data();
   float *top_data = top[0]->mutable_ocl_data();
@@ -105,12 +104,13 @@ void LRNLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
   clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
       (const void *)&top_data);
   size_t global[3] = {channels_, 1, 1};
-  size_t local[3] = {channels_/4, 1, 1};
-  
+  size_t local[3] = {1, 1, 1};
+
   clEnqueueNDRangeKernel(oclCommandQueue, this->ocl_float_kernel, 3, NULL, 
       (size_t *)&global, (size_t *)&local, 0, NULL, &event);
+
   clWaitForEvents(1, &event);
-}
+}  
 
 template <>
 void LRNLayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
@@ -137,7 +137,6 @@ void LRNLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
   this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1, 
       &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL,
       &error);
-
   clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, &error);
   delete sourceStr;
   this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program,

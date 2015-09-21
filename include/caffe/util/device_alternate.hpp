@@ -1,6 +1,9 @@
 #ifndef CAFFE_UTIL_DEVICE_ALTERNATE_H_
 #define CAFFE_UTIL_DEVICE_ALTERNATE_H_
 
+#define NO_OCL LOG(FATAL) << "Cannot use OCL in non-OCL Caffe: check mode."
+
+
 #ifdef CPU_ONLY  // CPU-only Caffe.
 
 #include <vector>
@@ -8,8 +11,6 @@
 // Stub out GPU calls as unavailable.
 
 #define NO_GPU LOG(FATAL) << "Cannot use GPU in CPU-only Caffe: check mode."
-
-#define NO_OCL LOG(FATAL) << "Cannot use OCL in non-OCL Caffe: check mode."
 
 #define STUB_GPU(classname) \
 template <typename Dtype> \

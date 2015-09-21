@@ -18,8 +18,8 @@ void lrn2_ac_layer(__global float *input, __global float *output) {
   int off;
   float base, arg, scale, value;
 
-  __local float inbuf[LOCAL_SIZE * IHEIGHT * IWIDTH];// __attribute__((xcl_array_partition(complete, 1)));
-  __local float outbuf[OHEIGHT * OWIDTH];// __attribute__((xcl_array_partition(complete, 1)));
+  __local float inbuf[LOCAL_SIZE * IHEIGHT * IWIDTH];
+  __local float outbuf[OHEIGHT * OWIDTH];
   
   int c = get_global_id(0);
   int c_start = c - ((LOCAL_SIZE - 1) / 2);
@@ -28,19 +28,19 @@ void lrn2_ac_layer(__global float *input, __global float *output) {
   int c_idx = c - c_start;
   off = c_end - c_start;
   
-  async_work_group_copy(inbuf, input + (c_start * IHEIGHT * IWIDTH), LOCAL_SIZE * IHEIGHT * IWIDTH, 0);
+  async_work_group_copy(inbuf, input + (c_start * IHEIGHT * IWIDTH), (c_end - c_start) * IHEIGHT * IWIDTH, 0);
 
   for (int h = 0; h < IHEIGHT; ++h) {
     __attribute__((xcl_pipeline_loop))
     for (int w = 0; w < IWIDTH; ++w) {
-      scale = 1.0;
+      scale = 0;
       for (int i = 0; i < LOCAL_SIZE; ++i) {
         if(i < off) {
           value = inbuf[(i * IHEIGHT + h) * IWIDTH + w]; 
           scale += value * value;
         }
       }
-      scale = scale * ALPHA * INV_SIZE;
+      scale = scale * ALPHA * INV_SIZE + 1;
       base = native_log(scale);
       arg = -1 * BETA * base;
       outbuf[h * OWIDTH + w] = inbuf[(c_idx * IHEIGHT + h) * IWIDTH + w] * native_exp(arg); 

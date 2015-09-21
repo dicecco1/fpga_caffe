@@ -89,10 +89,10 @@ void ConvolutionLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
   cl_event event;
   cl_int error;
 
-  size_t global[3] = {1, 1, 1};
+  size_t global[3] = {top[0]->channels() / group_, 1, 1};
   size_t local[3] = {1, 1, 1};
 
-  for (int i = 0; i < bottom.size(); i++) {
+  for (int i = 0; i < bottom.size(); i++) { 
     const float *bottom_data = bottom[i]->ocl_data();
     float *top_data = top[i]->mutable_ocl_data();
     clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),

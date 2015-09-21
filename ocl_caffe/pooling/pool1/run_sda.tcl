@@ -22,9 +22,9 @@ add_files -kernel [get_kernels pool1_max_layer] "pool1_max_layer.cl"
 create_opencl_binary pool1_max_layer
 set_property region "OCL_REGION_0" [get_opencl_binary pool1_max_layer]
 create_compute_unit -opencl_binary [get_opencl_binary pool1_max_layer] -kernel [get_kernels pool1_max_layer] -name ocl_pooling1
-create_compute_unit -opencl_binary [get_opencl_binary pool1_max_layer] -kernel [get_kernels pool1_max_layer] -name ocl_pooling2
-create_compute_unit -opencl_binary [get_opencl_binary pool1_max_layer] -kernel [get_kernels pool1_max_layer] -name ocl_pooling3
-create_compute_unit -opencl_binary [get_opencl_binary pool1_max_layer] -kernel [get_kernels pool1_max_layer] -name ocl_pooling4
+#create_compute_unit -opencl_binary [get_opencl_binary pool1_max_layer] -kernel [get_kernels pool1_max_layer] -name ocl_pooling2
+#create_compute_unit -opencl_binary [get_opencl_binary pool1_max_layer] -kernel [get_kernels pool1_max_layer] -name ocl_pooling3
+#create_compute_unit -opencl_binary [get_opencl_binary pool1_max_layer] -kernel [get_kernels pool1_max_layer] -name ocl_pooling4
 #Compile the design for CPU based emulation
 compile_emulation -flow cpu -opencl_binary [get_opencl_binary pool1_max_layer]
 

@@ -96,7 +96,10 @@ int main(int argc, char** argv)
   // Fill input with data pattern
   float tmp;
   for (int x = 0; x < ISIZE; ++x) {
-    input[x] = x;
+    if(x % 2 == 0)
+      input[x] = x;
+    else
+      input[x] = -x;
   }
 
   ref_lrn_ac(input, swout);
@@ -221,10 +224,10 @@ int main(int argc, char** argv)
 
   // Create the input and output arrays in device memory for our calculation
   //Inputs
-  chin = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float)*(ISIZE + LOCAL_SIZE * IHEIGHT * IWIDTH), NULL, NULL);
+  chin = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float)*(ISIZE + (LOCAL_SIZE + 1) * IHEIGHT * IWIDTH), NULL, NULL);
  
   // Outputs
-  chout = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float)*(OSIZE + LOCAL_SIZE * OHEIGHT * OWIDTH), NULL, NULL);
+  chout = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float)*(OSIZE + (LOCAL_SIZE + 1) * OHEIGHT * OWIDTH), NULL, NULL);
 
   if (!chin || !chout)
   {
@@ -297,11 +300,17 @@ int main(int argc, char** argv)
 
   int maxdiff = 0;
    // compare
-    
-  for (int x = 0; x < OSIZE; x++) {
-    if (abs(swout[x] - output[x]) > 1E-55555) {
-      printf("SW VALUE %f, HW VALUE %f\n", swout[x], output[x]);
-      err_cnt++;
+  
+  for (int c = 0; c < NUM_CHANNELS; ++c) {
+    for (int y = 0; y < OHEIGHT; ++y) {
+      for (int x = 0; x < OWIDTH; ++x) {
+        if (abs(swout[(c * OHEIGHT + y) * OWIDTH + x] - output[(c * OHEIGHT + y) * OWIDTH + x]) > 1E-5) {
+          printf("SW VALUE %f, HW VALUE %f\n", swout[(c * OHEIGHT + y) * OWIDTH + x], output[(c * OHEIGHT + y) * OWIDTH + x]);
+          err_cnt++;
+          printf("c %d x %d y %d\n", c, x, y);
+        }
+        printf("SW VALUE %f, HW VALUE %f\n", swout[(c * OHEIGHT + y) * OWIDTH + x], output[(c * OHEIGHT + y) * OWIDTH + x]);
+      }
     }
   }
     

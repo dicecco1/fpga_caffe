@@ -384,13 +384,13 @@ TYPED_TEST(OCLLRNLayerTest, TestForwardAcrossChannelsLRN2) {
   layer_param.mutable_lrn_param()->set_local_size(5);
   layer_param.mutable_lrn_param()->set_alpha((Dtype)0.0001);
   layer_param.mutable_lrn_param()->set_beta((Dtype)0.75);
-  this->blob_bottom_->Reshape(10, 256, 27, 27);
+  this->blob_bottom_->Reshape(1, 256, 27, 27);
   LRNLayer<Dtype> layer(layer_param);
-  layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
-  layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
   Blob<Dtype> top_reference;
   this->ReferenceLRNForward(*(this->blob_bottom_), layer_param,
-      &top_reference);
+            &top_reference);
+  layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
+  layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
   for (int i = 0; i < this->blob_bottom_->count(); ++i) {
     EXPECT_NEAR(this->blob_top_->cpu_data()[i], top_reference.cpu_data()[i],
         this->epsilon_);

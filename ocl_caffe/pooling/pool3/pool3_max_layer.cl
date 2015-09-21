@@ -18,7 +18,7 @@ void pool3_max_layer(__global float *in, __global float *out) {
   int in_x, in_y;
   float val;
   int k = get_global_id(0);
-
+  
   async_work_group_copy(inbuf, in + (k << 3) * IHEIGHT * IWIDTH, BURST * IHEIGHT * IWIDTH, 0);
 
   for (int blk = 0; blk < BURST; ++blk) {

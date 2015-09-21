@@ -13,7 +13,6 @@ void ReLULayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   Dtype* top_data = top[0]->mutable_cpu_data();
   const int count = bottom[0]->count();
   Dtype negative_slope = this->layer_param_.relu_param().negative_slope();
-
   for (int i = 0; i < count; ++i) {
     top_data[i] = std::max(bottom_data[i], Dtype(0))
         + negative_slope * std::min(bottom_data[i], Dtype(0));
@@ -47,44 +46,25 @@ void ReLULayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 template <>
 void ReLULayer<float>::Call_ocl(const vector<Blob<float>*>& bottom, 
     const vector<Blob<float>*>& top) {
+  const float* bottom_data = bottom[0]->ocl_data();
+  float* top_data = top[0]->mutable_ocl_data();
 
-  const float* bottom_data = bottom[0]->cpu_data();
-  float* top_data = top[0]->mutable_cpu_data();
-  int nodes = 3025;
   cl_int error; 
-
-  cl_mem input = clCreateBuffer(oclContext, CL_MEM_READ_ONLY, 
-     nodes*sizeof(float), NULL, &error);
-  cl_mem output = clCreateBuffer(oclContext, CL_MEM_WRITE_ONLY, 
-      nodes*sizeof(float), NULL, &error);
-
   cl_event event;
 
   error = clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
-      (const void *)&input);
+      (const void *)&bottom_data);
   error = clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
-      (const void *)&output);
+      (const void *)&top_data);
   
-  int limit = std::ceil((bottom[0]->count())/(float)nodes);
-
-  size_t cb_size; 
-  if(limit == 0)
-    limit = 1;
-  for(int i = 0; i < limit; i++) {
-    if(i != limit - 1)
-      cb_size = nodes;
-    else
-      cb_size = bottom[0]->count() - (limit - 1) * nodes;
-    error = clEnqueueWriteBuffer(oclCommandQueue, input, CL_TRUE, 0,
-       cb_size * sizeof(float), (const void *)(bottom_data + i * nodes), NULL,
-       NULL, NULL); 
-    clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0, NULL, NULL); 
-    clEnqueueReadBuffer(oclCommandQueue, output, CL_TRUE, 0, 
-       cb_size * sizeof(float), (void *) (top_data + i * nodes), NULL, NULL, 
-       NULL);
-  }
-  clReleaseMemObject(input);
-  clReleaseMemObject(output);
+  float count = bottom[0]->count();
+  int g_size = std::ceil(count / 4096.0);
+  size_t global[3] = {g_size, 1, 1};
+  size_t local[3] = {1, 1, 1};
+  
+  clEnqueueNDRangeKernel(oclCommandQueue, this->ocl_float_kernel, 3, NULL, 
+     (size_t *)&global, (size_t *)&local, 0, NULL, &event);
+  clWaitForEvents(1, &event); 
 }
 
 template <>
@@ -95,17 +75,16 @@ void ReLULayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
 
 template <typename Dtype>
 void ReLULayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
-    const vector<Blob<Dtype>*>& top) {
+    const vector<Blob<Dtype>*>& top) { 
   cl_int error;
   std::string path(".build_release/opencl/src/caffe/layers/");
-    
-  const char *filename = (path+this->layer_param_.xcl_name()).c_str();
-   
+  const char *filename = (path+this->layer_param_.xcl_name()).c_str(); 
   char *sourceStr;
   size_t sourceSize = caffe::convertToString(filename, &sourceStr);
+  
   this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1,
       &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL, 
-      &error);
+      &error); 
   clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, &error);
   delete sourceStr;
   this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program, 

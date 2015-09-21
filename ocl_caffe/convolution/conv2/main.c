@@ -118,14 +118,14 @@ int main(int argc, char** argv)
   //
   int i = 0;
   for(i = 0; i < DATA_SIZE1; i++) {
-    a1[i] = (float)1;
+    a1[i] = (float)(rand() % 100 + 1);
   }
   for(i = 0; i < OUTPUT_SIZE1; i++) {
     results1[i] = 0;
 //    sw_results1[i] = FILTER_SIZE1;
   }
   for(i = 0; i < FILTER_SIZE1; i++) {
-    b1[i] = (float)1;
+    b1[i] = (float)(rand() % 100 + 1);
   }
   for(i = 0; i < OUTPUT_SIZE1; i++) {
     c1[i] = (float)0;
@@ -296,7 +296,7 @@ int main(int argc, char** argv)
 #ifdef C_KERNEL
   err = clEnqueueTask(commands, kernel, 0, NULL, NULL);
 #else
-  global[0] = 1;
+  global[0] = 128;
   global[1] = 1;
   global[2] = 1;
   local[0] = 1;
@@ -325,55 +325,16 @@ int main(int argc, char** argv)
 
   clWaitForEvents(1, &readevent);
   ref_conv(a1, b1, sw_results1);    
-  printf("A\n");
-/*  for (i=0;i<DATA_SIZE1;i++) {
-    printf("%f ",a1[i]);
-    if (((i+1) % NUM_DATA_ROWS) == 0)
-      printf("\n");
-  }*/
-  printf("B\n");
-/*  for (i=0;i< FILTER_SIZE1;i++) {
-    printf("%f ",b1[i]);
-    if (((i+1) % NUM_MASK_ROWS) == 0)
-      printf("\n");
-  }
-  */
-/*  printf("res\n");
-  for (i=0;i< OUTPUT_SIZE1;i++) {
-    printf("%f ",results1[i]);
-    if (((i+1) % NUM_OUT_ROWS) == 0)
-      printf("\n");
-  }*/
-
-    
+ 
   // Validate our results
   //
   correct = 0;
-  /* for(i = 0; i < OUTPUT_SIZE1; i++)
-  {
-    int row = i/MATRIX_RANK;
-    int col = i%MATRIX_RANK;
-    int running = 0;
-    int index;
-    for (index=0;index<MATRIX_RANK;index++) {
-      int aIndex = row*MATRIX_RANK + index;
-      int bIndex = col + index*MATRIX_RANK;
-      running += a[aIndex] * b[bIndex];
-    }
-    sw_results[i] = running;
-    }*/
     
-  for (i = 0;i < OUTPUT_SIZE1; i++) 
-    if(results1[i] == sw_results1[i])
-      correct++;
-/*  printf("Software\n");
-  for (i=0;i<OUTPUT_SIZE1;i++) {
-    //printf("%0.2f ",sw_results[i]);
-    printf("%f ",sw_results1[i]);
-    if (((i+1) % NUM_OUT_ROWS) == 0)
-      printf("\n");
-  }*/
-    
+  for (i = 0; i < OUT_CHANNEL; i++) 
+    for (int j = 0; j < NUM_OUT_ROWS; ++j)
+      for (int k = 0; k < NUM_OUT_COLS; ++k)
+        if(results1[i * NUM_OUT_ROWS * NUM_OUT_COLS + j * NUM_OUT_ROWS + k] == sw_results1[i * NUM_OUT_ROWS * NUM_OUT_COLS + j * NUM_OUT_ROWS + k])
+          correct++; 
     
   // Print a brief summary detailing the results
   //

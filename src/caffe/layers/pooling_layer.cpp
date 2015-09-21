@@ -128,15 +128,15 @@ void PoolingLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
 #ifdef USE_OCL
 template <>
 void PoolingLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
-    const vector<Blob<float>*>& top) { 
+    const vector<Blob<float>*>& top) {
   const float* bottom_data = bottom[0]->ocl_data();  
   float* top_data = top[0]->mutable_ocl_data();
-
+ 
   cl_event event;
   cl_int error; 
 
-  size_t global[3] = {channels_, 1, 1};
-  size_t local[3] = {channels_/4, 1, 1};
+  size_t global[3] = {bottom[0]->channels() / 8, 1, 1};
+  size_t local[3] = {1, 1, 1};
 
   switch (this->layer_param_.pooling_param().pool()) {
   case PoolingParameter_PoolMethod_MAX:
@@ -162,7 +162,7 @@ void PoolingLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
     break;
   default:
     LOG(FATAL) << "Unknown pooling method.";    
-  } 
+  }
 }
 
 template <>

@@ -15,7 +15,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 void ref_pool(float *input, float *output) {
   for (int i = 0; i < CHANNEL * OHEIGHT * OWIDTH; i++)
-    output[i] = -1000;
+    output[i] = -INFINITY;
 
   for (int c = 0; c < CHANNEL; ++c) {
     for (int ph = 0; ph < OHEIGHT; ph++) {

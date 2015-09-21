@@ -118,14 +118,14 @@ int main(int argc, char** argv)
   //
   int i = 0;
   for(i = 0; i < DATA_SIZE1; i++) {
-    a1[i] = (float)1;
+    a1[i] = (float)(rand() % 100 + 1);
   }
   for(i = 0; i < OUTPUT_SIZE1; i++) {
     results1[i] = 0;
 //    sw_results1[i] = FILTER_SIZE1;
   }
   for(i = 0; i < FILTER_SIZE1; i++) {
-    b1[i] = (float)1;
+    b1[i] = (float)(rand() % 100 + 1);
   }
   for(i = 0; i < OUTPUT_SIZE1; i++) {
     c1[i] = (float)0;
@@ -296,7 +296,7 @@ int main(int argc, char** argv)
 #ifdef C_KERNEL
   err = clEnqueueTask(commands, kernel, 0, NULL, NULL);
 #else
-  global[0] = 1;
+  global[0] = 384;
   global[1] = 1;
   global[2] = 1;
   local[0] = 1;
@@ -366,6 +366,8 @@ int main(int argc, char** argv)
   for (i = 0;i < OUTPUT_SIZE1; i++) 
     if(results1[i] == sw_results1[i])
       correct++;
+    else
+      printf("%f\t%f\n", results1[i], sw_results1[i]);
 /*  printf("Software\n");
   for (i=0;i<OUTPUT_SIZE1;i++) {
     //printf("%0.2f ",sw_results[i]);

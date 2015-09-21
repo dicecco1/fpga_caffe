@@ -96,13 +96,18 @@ inline void SyncedMemory::to_ocl() {
     caffe_memset(size_, 0, cpu_ptr_);
     own_cpu_data_ = true;
     ocl_ptr_ = (void *)clCreateBuffer(oclContext, 
-        CL_MEM_COPY_HOST_PTR, size_, cpu_ptr_, NULL);
+        CL_MEM_READ_WRITE, size_, NULL, NULL); 
+    clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
+        size_, cpu_ptr_, 0, NULL, NULL);
     head_ = HEAD_AT_OCL;
     break;
   case HEAD_AT_CPU:
-    if(ocl_ptr_ == NULL)
+    if(ocl_ptr_ == NULL) {
       ocl_ptr_ = (void *)clCreateBuffer(oclContext,
-          CL_MEM_COPY_HOST_PTR, size_, cpu_ptr_, NULL);
+          CL_MEM_READ_WRITE, size_, NULL, NULL);
+      clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
+          size_, cpu_ptr_, 0, NULL, NULL);
+    }
     else
       clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0, 
           size_, cpu_ptr_, 0, NULL, NULL);

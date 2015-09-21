@@ -258,7 +258,7 @@ int main(int argc, char** argv)
   global[0] = 96;
   global[1] = 1;
   global[2] = 1;
-  local[0] = 24;
+  local[0] = 1;
   local[1] = 1;
   local[2] = 1;
   err = clEnqueueNDRangeKernel(commands, kernel, 3, NULL, 

@@ -18,13 +18,18 @@ create_kernel conv5_layer -type clc
 add_files -kernel [get_kernels conv5_layer] "conv5_layer.cl"
 
 # Define Binary Containers
-set_property max_memory_ports true [get_kernels conv5_layer]
+#set_property max_memory_ports true [get_kernels conv5_layer]
 create_opencl_binary conv5_layer
 set_property region "OCL_REGION_0" [get_opencl_binary conv5_layer]
 create_compute_unit -opencl_binary [get_opencl_binary conv5_layer] -kernel [get_kernels conv5_layer] -name ocl_conv1
-#create_compute_unit -opencl_binary [get_opencl_binary conv5_layer] -kernel [get_kernels conv5_layer] -name ocl_conv2
-#create_compute_unit -opencl_binary [get_opencl_binary conv5_layer] -kernel [get_kernels conv5_layer] -name ocl_pooling3
-#create_compute_unit -opencl_binary [get_opencl_binary conv5_layer] -kernel [get_kernels conv5_layer] -name ocl_pooling4
+create_compute_unit -opencl_binary [get_opencl_binary conv5_layer] -kernel [get_kernels conv5_layer] -name ocl_conv2
+create_compute_unit -opencl_binary [get_opencl_binary conv5_layer] -kernel [get_kernels conv5_layer] -name ocl_conv3
+create_compute_unit -opencl_binary [get_opencl_binary conv5_layer] -kernel [get_kernels conv5_layer] -name ocl_conv4
+create_compute_unit -opencl_binary [get_opencl_binary conv5_layer] -kernel [get_kernels conv5_layer] -name ocl_conv5
+create_compute_unit -opencl_binary [get_opencl_binary conv5_layer] -kernel [get_kernels conv5_layer] -name ocl_conv6
+#create_compute_unit -opencl_binary [get_opencl_binary conv5_layer] -kernel [get_kernels conv5_layer] -name ocl_conv7
+#create_compute_unit -opencl_binary [get_opencl_binary conv5_layer] -kernel [get_kernels conv5_layer] -name ocl_conv8
+
 #Compile the design for CPU based emulation
 compile_emulation -flow cpu -opencl_binary [get_opencl_binary conv5_layer]
 
@@ -34,8 +39,8 @@ run_emulation -flow cpu -args "conv5_layer.xclbin"
 report_estimate
 
 # Compile the application to run on the accelerator card
-#build_system
+build_system
 #
 # Package the application binaries
-#package_system
+package_system
 

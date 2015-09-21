@@ -37,8 +37,8 @@ run_emulation -flow cpu -args "lrn1_ac_layer.xclbin"
 report_estimate
 
 # Compile the application to run on the accelerator card
-#build_system
+build_system
 #
 # Package the application binaries
-#package_system
+package_system
 
