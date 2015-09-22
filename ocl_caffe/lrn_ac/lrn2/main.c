@@ -309,7 +309,7 @@ int main(int argc, char** argv)
           err_cnt++;
           printf("c %d x %d y %d\n", c, x, y);
         }
-        printf("SW VALUE %f, HW VALUE %f\n", swout[(c * OHEIGHT + y) * OWIDTH + x], output[(c * OHEIGHT + y) * OWIDTH + x]);
+        //printf("SW VALUE %f, HW VALUE %f\n", swout[(c * OHEIGHT + y) * OWIDTH + x], output[(c * OHEIGHT + y) * OWIDTH + x]);
       }
     }
   }
