@@ -418,7 +418,7 @@ ifeq ($(USE_OCL), 1)
 xclbin: $(CL_BINS)
 
 $(CL_BINS): %.xclbin: %.cl
-	$(XOCC) $(CLFLAGS) -o $(addprefix $(BUILD_DIR)/opencl/, $(notdir $@)) $<
+	$(XOCC) $(CLFLAGS) -o $(addprefix $(BUILD_DIR)/opencl/src/caffe/layers/, $(notdir $@)) $<
 endif
 
 everything: $(EVERYTHING_TARGETS)
