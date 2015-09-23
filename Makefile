@@ -137,7 +137,7 @@ TEST_BINS := $(TEST_CXX_BINS) $(TEST_CU_BINS)
 # TEST_ALL_BIN is the test binary that links caffe dynamically.
 TEST_ALL_BIN := $(TEST_BIN_DIR)/test_all.testbin
 # OpenCL binaries
-CL_BINS := $(addprefix $(BUILD_DIR)/opencl/, ${CL_SRCS:.cl=.xclbin})    
+CL_BINS := ${CL_SRCS:.cl=.xclbin} #$(addprefix $(BUILD_DIR)/opencl/, ${CL_SRCS:.cl=.xclbin})    
 ##############################
 # Derive compiler warning dump locations
 ##############################
@@ -417,8 +417,8 @@ all: $(STATIC_NAME) $(DYNAMIC_NAME) tools examples xclbin
 ifeq ($(USE_OCL), 1)
 xclbin: $(CL_BINS)
 
-$(CL_BINS): $(CL_SRCS)
-	$(XOCC) $(CLFLAGS) $< -o $@
+$(CL_BINS): %.xclbin: %.cl
+	$(XOCC) $(CLFLAGS) -o $(addprefix $(BUILD_DIR)/opencl/, $(notdir $@)) $<
 endif
 
 everything: $(EVERYTHING_TARGETS)
