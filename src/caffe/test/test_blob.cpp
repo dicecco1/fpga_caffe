@@ -1,4 +1,3 @@
-#include <cstring>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -43,12 +42,14 @@ TYPED_TEST(BlobSimpleTest, TestPointersCPUGPU) {
   EXPECT_TRUE(this->blob_preshaped_->mutable_cpu_data());
 }
 
+#ifdef USE_OCL
 TYPED_TEST(BlobSimpleTest, TestPointersCPUOCL) {
   EXPECT_TRUE(this->blob_preshaped_->ocl_data());
   EXPECT_TRUE(this->blob_preshaped_->cpu_data());
   EXPECT_TRUE(this->blob_preshaped_->mutable_ocl_data());
   EXPECT_TRUE(this->blob_preshaped_->mutable_cpu_data());
 }
+#endif
 
 TYPED_TEST(BlobSimpleTest, TestReshape) {
   this->blob_->Reshape(2, 3, 4, 5);

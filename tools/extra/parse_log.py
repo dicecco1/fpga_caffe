@@ -36,11 +36,10 @@ def parse_log(path_to_log):
     for the two dict_lists
     """
 
-    re_iteration = re.compile('Iteration (\d+)')
-    re_accuracy = re.compile('output #\d+: accuracy = ([\.\d]+)')
-    re_train_loss = re.compile('Iteration \d+, loss = ([\.\d]+)')
-    re_output_loss = re.compile('output #\d+: loss = ([\.\d]+)')
-    re_lr = re.compile('lr = ([\.\d]+)')
+    regex_iteration = re.compile('Iteration (\d+)')
+    regex_train_output = re.compile('Train net output #(\d+): (\S+) = ([\.\deE+-]+)')
+    regex_test_output = re.compile('Test net output #(\d+): (\S+) = ([\.\deE+-]+)')
+    regex_learning_rate = re.compile('lr = ([-+]?[0-9]*\.?[0-9]+([eE]?[-+]?[0-9]+)?)')
 
     # Pick out lines of interest
     iteration = -1

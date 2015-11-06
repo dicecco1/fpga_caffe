@@ -1,11 +1,8 @@
 #include <vector>
 
-#include "caffe/blob.hpp"
-#include "caffe/common.hpp"
+#include "caffe/common_layers.hpp"
 #include "caffe/filler.hpp"
-#include "caffe/layer.hpp"
 #include "caffe/util/math_functions.hpp"
-#include "caffe/vision_layers.hpp"
 
 namespace caffe {
 
@@ -77,6 +74,7 @@ void InnerProductLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   }
 }
 
+#ifdef USE_OCL
 template <>
 void InnerProductLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
     const vector<Blob<float>*>& top) {
@@ -135,6 +133,7 @@ void InnerProductLayer<Dtype>::Forward_ocl(const vector <Blob<Dtype>*>& bottom,
   clReleaseKernel(this->ocl_float_kernel);
   clReleaseProgram(this->ocl_layer_program);
 }
+#endif
 
 template <typename Dtype>
 void InnerProductLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
