@@ -691,7 +691,7 @@ TYPED_TEST(ConvolutionLayerTest, TestGradientGroup) {
 #ifdef USE_CUDNN
 
 template <typename Dtype>
-class CuDNNConvolutionLayerTest : public ::testing::Test {
+class CuDNNConvolutionLayerTest : public : GPUDeviceTest<Dtype> {
  protected:
   CuDNNConvolutionLayerTest()
       : blob_bottom_(new Blob<Dtype>(2, 3, 6, 4)),

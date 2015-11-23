@@ -30,7 +30,7 @@ __global__ void im2col_nd_gpu_kernel(const int n, const Dtype* data_im,
 extern cudaDeviceProp CAFFE_TEST_CUDA_PROP;
 
 template <typename Dtype>
-class Im2colKernelTest : public ::testing::Test {
+class Im2colKernelTest : public GPUDeviceTest<Dtype> {
  protected:
   Im2colKernelTest()
         // big so launches > 1024 threads

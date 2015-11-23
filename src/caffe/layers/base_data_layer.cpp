@@ -19,11 +19,11 @@ void BaseDataLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   } else {
     output_labels_ = true;
   }
-  // The subclasses should setup the size of bottom and top
-  DataLayerSetUp(bottom, top);
   data_transformer_.reset(
       new DataTransformer<Dtype>(transform_param_, this->phase_));
   data_transformer_->InitRand();
+  // The subclasses should setup the size of bottom and top
+  DataLayerSetUp(bottom, top);
 }
 
 template <typename Dtype>
