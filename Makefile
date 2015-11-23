@@ -264,7 +264,7 @@ ifeq ($(LINUX), 1)
 	# We will also explicitly add stdc++ to the link target.
 	LIBRARIES += boost_thread stdc++
 	ifeq ($(USE_OCL), 1)
-		XOCC := $(XILINX_SDACCEL)/bin/xocc
+		XOCC := $(XILINX_OPENCL)bin/xocc
 	endif
 endif
 
@@ -394,8 +394,8 @@ INCLUDE_DIRS += $(BLAS_INCLUDE)
 LIBRARY_DIRS += $(BLAS_LIB)
 
 ifeq ($(USE_OCL), 1)
-INCLUDE_DIRS += $(XILINX_SDACCEL)/runtime/include/1_2	
-LIBRARY_DIRS += $(XILINX_SDACCEL)/runtime/lib/x86_64
+INCLUDE_DIRS += $(XILINX_OPENCL)runtime/include/1_2	
+LIBRARY_DIRS += $(XILINX_OPENCL)runtime/lib/x86_64
 endif
 LIBRARY_DIRS += $(LIB_BUILD_DIR)
 
