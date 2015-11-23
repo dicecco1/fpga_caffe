@@ -607,7 +607,7 @@ TYPED_TEST(PoolingLayerTest, TestGradientAvePadded) {
 
 #ifdef USE_CUDNN
 template <typename Dtype>
-class CuDNNPoolingLayerTest : public ::testing::Test {
+class CuDNNPoolingLayerTest : public GPUDeviceTest<Dtype> {
  protected:
   CuDNNPoolingLayerTest()
       : blob_bottom_(new Blob<Dtype>()),
