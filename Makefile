@@ -37,7 +37,7 @@ DYNAMIC_NAME := $(LIB_BUILD_DIR)/lib$(PROJECT).so
 # Get all source files
 ##############################
 # CXX_SRCS are the source files excluding the test ones.
-CXX_SRCS := $(shell find src/$(PROJECT) ! -name "test_*.cpp" -name "*.cpp")
+CXX_SRCS := $(shell find src/$(PROJECT) ! -name "test_*.cpp" -name "*.cpp" ! -name "xcl_top.cpp")
 # CU_SRCS are the cuda source files
 CU_SRCS := $(shell find src/$(PROJECT) ! -name "test_*.cu" -name "*.cu")
 # CL_SRCS are the opencl source files
