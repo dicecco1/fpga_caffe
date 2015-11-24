@@ -318,7 +318,6 @@ int main(int argc, char** argv)
 
   clWaitForEvents(1, &readevent);
   gemm(a1, b1, sw_results1);   
-//  gemm(a1, b_t, sw_results2);
 
   // Validate our results
   //
@@ -327,20 +326,9 @@ int main(int argc, char** argv)
   for (i = 0;i < OUTPUT_SIZE1; i++) 
     if(results1[i] == sw_results1[i])
       correct++;
-    else
-      printf("%f\t%f\n", results1[i], sw_results1[i]);
- 
-//  for (i = 0; i < OUTPUT_SIZE1; ++i)
-//    if(results1[i] == sw_results2[i])
-//      correct2++;
-//    else
-//      printf("%f\t%f\n", results1[i], sw_results2[i]);
-
-
   // Print a brief summary detailing the results
   //
   printf("Computed '%d/%d' correct values!\n", correct, OUTPUT_SIZE1);
-//  printf("Computed '%d/%d' correct values! (Transposed)\n", correct2, OUTPUT_SIZE1);
   // Shutdown and cleanup
   //
   clReleaseMemObject(input_a);
