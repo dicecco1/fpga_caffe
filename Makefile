@@ -448,10 +448,10 @@ endif
 all: lib tools examples xclbin
 
 ifeq ($(USE_OCL), 1)
-xclbin: $(CL_BINS)
+#xclbin: $(CL_BINS)
 
-$(CL_BINS): %.xclbin: %.cl
-	$(XOCC) $(CLFLAGS) -o $(addprefix $(BUILD_DIR)/opencl/src/caffe/layers/, $(notdir $@)) $<
+#$(CL_BINS): %.xclbin: %.cl
+#	$(XOCC) $(CLFLAGS) -o $(addprefix $(BUILD_DIR)/opencl/src/caffe/layers/, $(notdir $@)) $<
 endif
 
 lib: $(STATIC_NAME) $(DYNAMIC_NAME)
