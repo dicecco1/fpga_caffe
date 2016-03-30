@@ -178,6 +178,7 @@ int train() {
   get_gpus(&gpus);
   if (gpus.size() == 0) {
     if (FLAGS_ocl >= 0) {
+	  LOG(INFO) << "Use FPGA.";
       Caffe::SetOCLDevice();
       Caffe::set_mode(Caffe::OCL);
     } else {

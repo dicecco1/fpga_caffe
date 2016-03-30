@@ -123,7 +123,7 @@ void ConvolutionLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
         }
       }
     }
-  }  
+  }
 }
 
 template <>
@@ -135,11 +135,11 @@ void ConvolutionLayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
 template <typename Dtype>
 void ConvolutionLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
-  cl_int error;
+  /*cl_int error;
   std::string path(".build_release/opencl/src/caffe/layers/");
 
   const char *filename = (path + this->layer_param_.xcl_name()).c_str();
-
+  
   char *sourceStr;
   size_t sourceSize = caffe::convertToString(filename, &sourceStr);
   this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1,
@@ -149,7 +149,7 @@ void ConvolutionLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
   delete sourceStr;
   this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program,
       this->layer_param_.kernel_name().c_str(), &error);
-  Call_ocl(bottom, top);
+  */Call_ocl(bottom, top);
   clReleaseKernel(this->ocl_float_kernel);
   clReleaseProgram(this->ocl_layer_program);
 }

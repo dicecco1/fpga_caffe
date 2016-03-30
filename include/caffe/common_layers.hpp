@@ -817,6 +817,33 @@ class TileLayer : public Layer<Dtype> {
   unsigned int axis_, tiles_, outer_dim_, inner_dim_;
 };
 
+/**
+ * @brief Ignores bottom blobs while producing no top blobs. (This is useful
+ *        to suppress outputs during testing.)
+ */
+template <typename Dtype>
+class XCLProgramLayer : public Layer<Dtype> {
+ public:
+  explicit XCLProgramLayer(const LayerParameter& param)
+      : Layer<Dtype>(param) {}
+  virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top) {}
+
+  virtual inline const char* type() const { return "XCLProgram"; }
+  virtual inline int ExactNumBottomBlobs() const { return 0; }
+  virtual inline int ExactNumTopBlobs() const { return 0; }
+
+ protected:
+  virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top) {}
+  virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+  virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+};
+
+
+
 }  // namespace caffe
 
 #endif  // CAFFE_COMMON_LAYERS_HPP_

@@ -339,15 +339,15 @@ class Layer {
 
 #ifdef USE_OCL
   /** The variable that stores the program for a given layer. */
-  cl_program ocl_layer_program;
+  static cl_program ocl_layer_program;
 
   /** The variable that stores the floating point implementation of the given 
    * layer. */
-  cl_kernel ocl_float_kernel;
+  static cl_kernel ocl_float_kernel;
 
   /** The variable that stores the double precision implementation of the given
    * layer. */
-  cl_kernel ocl_double_kernel;
+  static cl_kernel ocl_double_kernel;
 #endif
 
   /** @brief Using the CPU device, compute the layer output. */
@@ -575,6 +575,14 @@ void Layer<Dtype>::ToProto(LayerParameter* param, bool write_diff) {
     blobs_[i]->ToProto(param->add_blobs(), write_diff);
   }
 }
+
+// Added by Griffin
+template <typename Dtype>
+cl_program Layer<Dtype>::ocl_layer_program = NULL;
+template <typename Dtype>
+cl_kernel  Layer<Dtype>::ocl_float_kernel  = NULL;
+template <typename Dtype>
+cl_kernel  Layer<Dtype>::ocl_double_kernel = NULL;
 
 }  // namespace caffe
 
