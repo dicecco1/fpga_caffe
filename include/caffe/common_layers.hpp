@@ -818,8 +818,8 @@ class TileLayer : public Layer<Dtype> {
 };
 
 /**
- * @brief Ignores bottom blobs while producing no top blobs. (This is useful
- *        to suppress outputs during testing.)
+ * @brief Programs FPGA
+ *        
  */
 template <typename Dtype>
 class XCLProgramLayer : public Layer<Dtype> {
@@ -841,8 +841,6 @@ class XCLProgramLayer : public Layer<Dtype> {
   virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
 };
-
-
 
 }  // namespace caffe
 

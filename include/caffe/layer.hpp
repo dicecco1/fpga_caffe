@@ -342,8 +342,10 @@ class Layer {
   static cl_program ocl_layer_program;
 
   /** The variable that stores the floating point implementation of the given 
-   * layer. */
+   * layer. Multiple kernels are used for pipelined layers */
   static cl_kernel ocl_float_kernel;
+  static cl_kernel ocl_float_kernel_2;
+  //static cl_kernel ocl_float_kernel_3;
 
   /** The variable that stores the double precision implementation of the given
    * layer. */
@@ -581,6 +583,10 @@ template <typename Dtype>
 cl_program Layer<Dtype>::ocl_layer_program = NULL;
 template <typename Dtype>
 cl_kernel  Layer<Dtype>::ocl_float_kernel  = NULL;
+template <typename Dtype>
+cl_kernel  Layer<Dtype>::ocl_float_kernel_2  = NULL;
+//template <typename Dtype>
+//cl_kernel  Layer<Dtype>::ocl_float_kernel_3  = NULL;
 template <typename Dtype>
 cl_kernel  Layer<Dtype>::ocl_double_kernel = NULL;
 

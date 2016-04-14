@@ -306,7 +306,7 @@ message ParamSpec {
 // NOTE
 // Update the next available ID when you add a new LayerParameter field.
 //
-// LayerParameter next available layer-specific ID: 140 (last added: batch_norm_param)
+// LayerParameter next available layer-specific ID: 144 (last added: kernel_name_3)
 message LayerParameter {
   optional string name = 1; // the layer name
   optional string type = 2; // the layer type
@@ -314,6 +314,8 @@ message LayerParameter {
   repeated string top = 4; // the name of each top blob
   optional string xcl_name = 140; //the name of the xcl file
   optional string kernel_name = 141; //the name of the ocl kernel
+  optional string kernel_name_2 = 142; //the name of the second ocl kernel (for pipelining)
+  //optional string kernel_name_3 = 143; //the name of the third ocl kernel (for pipelining)
 
   // The train / test phase for computation.
   optional Phase phase = 10;

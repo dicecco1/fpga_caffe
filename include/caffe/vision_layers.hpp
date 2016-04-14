@@ -680,6 +680,46 @@ class SPPLayer : public Layer<Dtype> {
   shared_ptr<ConcatLayer<Dtype> > concat_layer_;
 };
 
+
+/**
+ * @brief Pipeline layer performs convolution, ReLU, and max pooling
+ *        
+ */
+template <typename Dtype>
+class PipelineConvPoolLayer : public BaseConvolutionLayer<Dtype> {
+ public:
+  explicit PipelineConvPoolLayer(const LayerParameter& param)
+      : BaseConvolutionLayer<Dtype>(param) {}
+
+  virtual inline const char* type() const { return "PipelineConvPool"; }
+  virtual inline const char* oclKernel() const { return 
+    ".build_release/opencl/src/caffe/layers/pipeline_conv_pool_layer.xclbin"; }
+#ifdef USE_OCL
+  virtual ~PipelineConvPoolLayer();
+#endif
+
+  // virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
+  //     const vector<Blob<Dtype>*>& top) {}
+
+  //virtual inline const char* type() const { return "ConvPoolPipeline"; }
+  //virtual inline int ExactNumBottomBlobs() const { return 0; }
+  //virtual inline int ExactNumTopBlobs() const { return 0; }
+
+ protected:
+  virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+  virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+  virtual inline bool reverse_dimensions() { return false; }
+  virtual void compute_output_shape();
+#ifdef USE_OCL
+  virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+  virtual void Call_ocl(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+#endif
+};
+
 }  // namespace caffe
 
 #endif  // CAFFE_VISION_LAYERS_HPP_
