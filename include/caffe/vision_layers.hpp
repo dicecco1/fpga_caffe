@@ -406,6 +406,7 @@ class OCLConvolutionLayer : public BaseConvolutionLayer<Dtype> {
       const vector<Blob<Dtype>*>& top);
  private:
   Blob<Dtype> outbuf;
+  Blob<Dtype> trans_weights;
 };
 #endif
 
