@@ -314,7 +314,7 @@ message LayerParameter {
   repeated string top = 4; // the name of each top blob
   optional string xcl_name = 140; //the name of the xcl file
   optional string kernel_name = 141; //the name of the ocl kernel
-
+  optional bool ocl_enable = 142; //flag for bypassing ocl layers
   // The train / test phase for computation.
   optional Phase phase = 10;
 
@@ -538,9 +538,15 @@ message ConvolutionParameter {
     DEFAULT = 0;
     CAFFE = 1;
     CUDNN = 2;
+    OCL = 3;
+  }
+  enum SubEngine {
+    DIRECT = 0;
+    WINOGRAD = 1;
+    MATMUL = 2;
   }
   optional Engine engine = 15 [default = DEFAULT];
-
+  optional SubEngine subengine = 18 [default = DIRECT];
   // The axis to interpret as "channels" when performing convolution.
   // Preceding dimensions are treated as independent inputs;
   // succeeding dimensions are treated as "spatial".

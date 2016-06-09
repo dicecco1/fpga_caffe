@@ -185,9 +185,11 @@ void PoolingLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
   delete sourceStr;
   this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program, 
      this->layer_param_.kernel_name().c_str(), &error);
-  */Call_ocl(bottom, top);
-  clReleaseKernel(this->ocl_float_kernel);
-  clReleaseProgram(this->ocl_layer_program);
+  */
+  if (this->layer_param_.ocl_enable())
+    Call_ocl(bottom, top);
+  else
+    Forward_cpu(bottom, top);
 }
 #endif
 

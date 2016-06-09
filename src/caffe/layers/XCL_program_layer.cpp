@@ -18,17 +18,17 @@ void XCLProgramLayer<Dtype>::Forward_ocl(const vector <Blob<Dtype>*>& bottom,
   char *sourceStr;
   size_t sourceSize = caffe::convertToString(filename, &sourceStr);
 
+  clReleaseKernel(this->ocl_float_kernel);
+  clReleaseProgram(this->ocl_layer_program);
+
   this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1, 
       &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL,
       &error);
   clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, &error);
+
   delete sourceStr;
   this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program,
       this->layer_param_.kernel_name().c_str(), &error);
-  //Call_ocl(bottom, top);
-  //clReleaseKernel(this->ocl_float_kernel);
-  //clReleaseProgram(this->ocl_layer_program);
-
 }
 
 template <typename Dtype>

@@ -69,6 +69,7 @@ int convertToString(const char *filename, char **str)
 		size = ftell(f);
 		fseek(f, 0, SEEK_SET);
 		*str = new char[size+1];
+    memset(*str, 0, size+1);
 		if(!str)
 		{
 			fclose(f);

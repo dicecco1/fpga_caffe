@@ -33,6 +33,8 @@ shared_ptr<Layer<Dtype> > GetConvolutionLayer(
   } else if (engine == ConvolutionParameter_Engine_CUDNN) {
     return shared_ptr<Layer<Dtype> >(new CuDNNConvolutionLayer<Dtype>(param));
 #endif
+  } else if (engine == ConvolutionParameter_Engine_OCL) {
+    return shared_ptr<Layer<Dtype> >(new OCLConvolutionLayer<Dtype>(param));
   } else {
     LOG(FATAL) << "Layer " << param.name() << " has unknown engine.";
   }
