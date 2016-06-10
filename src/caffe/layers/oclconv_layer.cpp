@@ -15,14 +15,10 @@ void OCLConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   shape[1] = (this->blobs_[0])->shape(1);
   shape[2] = 4;
   shape[3] = 4;
-  /*if (subengine == ConvolutionParameter_SubEngine_WINOGRAD) {
-    trans_weights.Reshape(shape);
-    transform_weights();   
-  }*/
   if (subengine == ConvolutionParameter_SubEngine_WINOGRAD) {
     vector<int> outshape(4);
-    outshape[0] = shape[0];
-    outshape[1] = shape[1] * this->group_;
+    outshape[0] = 1;
+    outshape[1] = shape[0];
     outshape[2] = bottom[0]->shape(2);
     if (bottom[0]->shape(3) % 16 != 0) {
       outshape[3] = (bottom[0]->shape(3) / 16 + 1) * 16;
@@ -30,6 +26,7 @@ void OCLConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       outshape[3] = bottom[0]->shape(3);
     }
     outbuf.Reshape(outshape);
+    trans_flag_ = 0;
   }
 }
 
@@ -44,9 +41,11 @@ void OCLConvolutionLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   shape[1] = (this->blobs_[0])->shape(1);
   shape[2] = 4;
   shape[3] = 4;
-  if (subengine == ConvolutionParameter_SubEngine_WINOGRAD) {
+  if (subengine == ConvolutionParameter_SubEngine_WINOGRAD
+      && trans_flag_ <= 1) {
     trans_weights.Reshape(shape);
     transform_weights();
+    trans_flag_++;
   } 
 }
 
@@ -253,13 +252,12 @@ void OCLConvolutionLayer<float>::winograd_conv(
                     NULL, &event);
       clWaitForEvents(1, &event);
     } 
- 
     const float *outdata = outbuf.cpu_data();
     for (int j = 0; j < top[0]->shape(0) * top[0]->shape(1); ++j) {
       for (int y = 0; y < ydim; ++y) {
         for (int x = 0; x < xdim; ++x) {
-          idx_off = j * ydim * offshape + y * offshape + x;
-          idx = j * ydim * xdim + y * xdim + x;
+          idx_off = (j * ydim + y) * offshape + x;
+          idx = (j * ydim + y) * xdim + x;
           top_data[idx] = outdata[idx_off];
         }
       }
@@ -313,7 +311,7 @@ void OCLConvolutionLayer<float>::direct_conv(const vector<Blob<float>*>& bottom,
 
   int groups = this->group_;
   int o_g = top[0]->shape(1) / groups;
-  int k_g = top[0]->shape(2) / groups;
+  int k_g = bottom[0]->shape(1) / groups;
 
   for (int i = 0; i < bottom.size(); i++) {
     const float *bottom_data = bottom[i]->ocl_data();

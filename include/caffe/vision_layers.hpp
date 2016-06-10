@@ -405,6 +405,7 @@ class OCLConvolutionLayer : public BaseConvolutionLayer<Dtype> {
   void direct_conv(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
  private:
+  int trans_flag_; 
   Blob<Dtype> outbuf;
   Blob<Dtype> trans_weights;
 };
