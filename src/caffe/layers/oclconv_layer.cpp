@@ -17,7 +17,7 @@ void OCLConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   shape[3] = 4;
   if (subengine == ConvolutionParameter_SubEngine_WINOGRAD) {
     vector<int> outshape(4);
-    outshape[0] = 1;
+    outshape[0] = bottom[0]->shape(0);
     outshape[1] = shape[0];
     outshape[2] = bottom[0]->shape(2);
     if (bottom[0]->shape(3) % 16 != 0) {
@@ -177,9 +177,9 @@ void OCLConvolutionLayer<float>::winograd_conv(
   const float* weight = this->blobs_[0]->cpu_data();
   const float* weight_data = trans_weights.ocl_data();
   const float* bias_data = this->blobs_[1]->ocl_data();
-  
-  cl_event event;
-   
+    
+  std::vector<cl_event> events(this->num_ * this->group_);
+
   int offshape = outbuf.shape(3);
   int ydim = top[0]->shape(2);
   int xdim = top[0]->shape(3);
@@ -205,60 +205,71 @@ void OCLConvolutionLayer<float>::winograd_conv(
   int ytile_pad = offshape / 2;
   int xtile_pad = offshape / 2;
   int rburst = ydim * burstchannels; 
- 
-  float *tempdata;
-  event = 0;
+  int numgroups = this->group_; 
 
+  float *tempdata; 
+ 
   for (int i = 0; i < bottom.size(); i++) {
     const float *bottom_data = bottom[i]->ocl_data();
     float *top_data = top[i]->mutable_cpu_data();
 
     tempdata = outbuf.mutable_ocl_data();
-    for (int g = 0; g < this->group_; ++g) {
-      clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem), 
-        (const void *)&bottom_data);
-      clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem), 
-        (const void *)&weight_data);
-      clSetKernelArg(this->ocl_float_kernel, 2, sizeof(cl_mem), 
-        (const void *)&bias_data);
-      clSetKernelArg(this->ocl_float_kernel, 3, sizeof(cl_mem), 
-        (const void *)&tempdata);
-      clSetKernelArg(this->ocl_float_kernel, 4, sizeof(cl_int), 
-        (const void *)&g);
-      clSetKernelArg(this->ocl_float_kernel, 5, sizeof(cl_int), 
-        (const void *)&inchannels);
-      clSetKernelArg(this->ocl_float_kernel, 6, sizeof(cl_int), 
-        (const void *)&outchannels);
-      clSetKernelArg(this->ocl_float_kernel, 7, sizeof(cl_int), 
-        (const void *)&burstchannels);
-      clSetKernelArg(this->ocl_float_kernel, 8, sizeof(cl_int), 
-        (const void *)&rpo);
-      clSetKernelArg(this->ocl_float_kernel, 9, sizeof(cl_int), 
-        (const void *)&ydim);
-      clSetKernelArg(this->ocl_float_kernel, 10, sizeof(cl_int), 
-        (const void *)&xdim);
-      clSetKernelArg(this->ocl_float_kernel, 11, sizeof(cl_int), 
-        (const void *)&ytile);
-      clSetKernelArg(this->ocl_float_kernel, 12, sizeof(cl_int), 
-        (const void *)&xtile);
-      clSetKernelArg(this->ocl_float_kernel, 13, sizeof(cl_int), 
-        (const void *)&ytile_pad);
-      clSetKernelArg(this->ocl_float_kernel, 14, sizeof(cl_int), 
-        (const void *)&xtile_pad);
-      clSetKernelArg(this->ocl_float_kernel, 15, sizeof(cl_int), 
-        (const void *)&rburst);
+    for (int n = 0; n < this->num_; ++n) {
+      for (int g = 0; g < numgroups; ++g) {
+        clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem), 
+          (const void *)&bottom_data);
+        clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem), 
+          (const void *)&weight_data);
+        clSetKernelArg(this->ocl_float_kernel, 2, sizeof(cl_mem), 
+          (const void *)&bias_data);
+        clSetKernelArg(this->ocl_float_kernel, 3, sizeof(cl_mem), 
+          (const void *)&tempdata);
+        clSetKernelArg(this->ocl_float_kernel, 4, sizeof(cl_int), 
+          (const void *)&g);
+        clSetKernelArg(this->ocl_float_kernel, 5, sizeof(cl_int), 
+          (const void *)&inchannels);
+        clSetKernelArg(this->ocl_float_kernel, 6, sizeof(cl_int), 
+          (const void *)&outchannels);
+        clSetKernelArg(this->ocl_float_kernel, 7, sizeof(cl_int), 
+          (const void *)&burstchannels);
+        clSetKernelArg(this->ocl_float_kernel, 8, sizeof(cl_int), 
+          (const void *)&rpo);
+        clSetKernelArg(this->ocl_float_kernel, 9, sizeof(cl_int), 
+          (const void *)&ydim);
+        clSetKernelArg(this->ocl_float_kernel, 10, sizeof(cl_int), 
+          (const void *)&xdim);
+        clSetKernelArg(this->ocl_float_kernel, 11, sizeof(cl_int), 
+          (const void *)&ytile);
+        clSetKernelArg(this->ocl_float_kernel, 12, sizeof(cl_int), 
+          (const void *)&xtile);
+        clSetKernelArg(this->ocl_float_kernel, 13, sizeof(cl_int), 
+          (const void *)&ytile_pad);
+        clSetKernelArg(this->ocl_float_kernel, 14, sizeof(cl_int), 
+          (const void *)&xtile_pad);
+        clSetKernelArg(this->ocl_float_kernel, 15, sizeof(cl_int), 
+          (const void *)&rburst);
+        clSetKernelArg(this->ocl_float_kernel, 16, sizeof(cl_int),
+          (const void *)&n);
+        clSetKernelArg(this->ocl_float_kernel, 17, sizeof(cl_int),
+          (const void *)&numgroups);
 
-      clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0,
-                    NULL, &event);
-      clWaitForEvents(1, &event);
+        clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0,
+                    NULL, &(events[n * numgroups + g]));
+      }
     } 
+    for (int n = 0; n < this->num_ * numgroups; ++n)
+      clWaitForEvents(1, &(events[n]));
     const float *outdata = outbuf.cpu_data();
-    for (int j = 0; j < top[0]->shape(0) * top[0]->shape(1); ++j) {
-      for (int y = 0; y < ydim; ++y) {
-        for (int x = 0; x < xdim; ++x) {
-          idx_off = (j * ydim + y) * offshape + x;
-          idx = (j * ydim + y) * xdim + x;
-          top_data[idx] = outdata[idx_off];
+    for (int n = 0; n < this->num_; ++n) {
+      for (int j = 0; j < top[0]->shape(1); ++j) {
+        for (int y = 0; y < ydim; ++y) {
+          for (int x = 0; x < xdim; ++x) {
+            idx_off = n * outchannels * numgroups * ydim * offshape + 
+                      (j * ydim + y) * offshape + x;
+            idx = n * outchannels * numgroups * ydim * xdim + 
+                  (j * ydim + y) * xdim + x;
+            top_data[idx] = outdata[idx_off];
+          }
         }
       }
     }
