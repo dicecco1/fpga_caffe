@@ -22,12 +22,14 @@ create_compute_unit -opencl_binary [get_opencl_binary winograd_pe] -kernel [get_
 compile_emulation -flow cpu -opencl_binary [get_opencl_binary winograd_pe]
 
 # Run the compiled application in CPU based emulation mode
-run_emulation -flow cpu -args "winograd_pe.xclbin 1 512 512 256 2 14 7 8"
+run_emulation -flow cpu -args "winograd_pe.xclbin 1 64 64 1 64 224 112 112 2"
+run_emulation -flow cpu -args "winograd_pe.xclbin 1 64 112 4 16 112 56 56 2"
+run_emulation -flow cpu -args "winograd_pe.xclbin 1 512 512 256 2 14 7 8 2"
 
 report_estimate
 
 # Compile the application to run on the accelerator card
-build_system
+#build_system
 
 # Package the application binaries
-package_system
+#package_system

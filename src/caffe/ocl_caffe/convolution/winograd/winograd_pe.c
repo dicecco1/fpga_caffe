@@ -4,7 +4,7 @@
 
 #include <stdbool.h>
 
-void transform_inrow(float *input) {
+void transform_incol(float *input) {
 #pragma HLS INLINE off
   float A0 = input[0] - input[2];
   float A1 = input[1] + input[2];
@@ -16,18 +16,16 @@ void transform_inrow(float *input) {
   input[3] = A3;
 }
 
-void transform_intile(float *input) {
-#pragma HLS INLINE off
+void transform_intilecol(float input[4 * 4]) {
+#pragma HLS INLINE off 
   float A0 = input[0];
   float A1 = input[1];
   float A2 = input[2];
   float A3 = input[3];
-
   float B0 = input[4];
   float B1 = input[5];
   float B2 = input[6];
   float B3 = input[7];
-
   float C0 = input[8];
   float C1 = input[9];
   float C2 = input[10];
@@ -37,59 +35,22 @@ void transform_intile(float *input) {
   float D2 = input[14];
   float D3 = input[15];
 
-  input[0] = A0 - C0;
-  input[1] = A1 - C1;
-  input[2] = A2 - C2;
-  input[3] = A3 - C3;
-  input[4] = B0 + C0;
-  input[5] = B1 + C1;
-  input[6] = B2 + C2;
-  input[7] = B3 + C3;
-  input[8] = C0 - B0;
-  input[9] = C1 - B1;
-  input[10] = C2 - B2;
-  input[11] = C3 - B3;
-  input[12] = B0 - D0;
-  input[13] = B1 - D1;
-  input[14] = B2 - D2;
-  input[15] = B3 - D3;
-}
-
-void transform_weights(float *weights_in, float *weights_out) {
-#pragma HLS INLINE off
-  float x0 = weights_in[1];
-  float x1 = weights_in[0] + weights_in[2];
-  float x2 = weights_in[6] + weights_in[8];
-  float x3 = weights_in[3];
-  float x4 = weights_in[5];
-  float x5 = weights_in[1] + weights_in[7];
-  float x6 = weights_in[0] + weights_in[6];
-  float x7 = weights_in[3] + weights_in[5];
-  float x8 = weights_in[7];
-  float x9 = weights_in[4];
-  float x10 = x1 + x2;
-  float x11 = x10 + x5;
-  float x12 = weights_in[2] + weights_in[8];
-  float x13 = (x7 + x9);
-  float x14 = x10 - x5;
-  float x15 = (x7 - x9);
-
-  weights_out[0] = weights_in[0];
-  weights_out[3] = weights_in[2];
-  weights_out[12] = weights_in[6];
-  weights_out[15] = weights_in[8];
-  weights_out[1] = (float)0.5 * (x1 + x0);
-  weights_out[2] = (float)0.5 * (x1 - x0);
-  weights_out[4] = (float)0.5 * (x6 + x3);
-  weights_out[5] = (float)0.25 * (x11 + x13);
-  weights_out[6] = (float)0.25 * (x14 + x15);
-  weights_out[7] = (float)0.5 * (x12 + x4);
-  weights_out[8] = (float)0.5 * (x6 - x3);
-  weights_out[9] = (float)0.25 * (x11 - x13);
-  weights_out[10] = (float)0.25 * (x14 - x15);
-  weights_out[11] = (float)0.5 * (x12 - x4);
-  weights_out[13] = (float)0.5 * (x2 + x8);
-  weights_out[14] = (float)0.5 * (x2 - x8);
+  input[0] = A0 - A2;
+  input[1] = A1 + A2;
+  input[2] = A2 - A1;
+  input[3] = A1 - A3;
+  input[4] = B0 - B2;
+  input[5] = B1 + B2;
+  input[6] = B2 - B1;
+  input[7] = B1 - B3;
+  input[8] = C0 - C2;
+  input[9] = C1 + C2;
+  input[10] = C2 - C1;
+  input[11] = C1 - C3;
+  input[12] = D0 - D2;
+  input[13] = D1 + D2;
+  input[14] = D2 - D1;
+  input[15] = D1 - D3; 
 }
 
 void transform_outtile(float *output_t, float output[4][4], int j) {
@@ -128,8 +89,7 @@ typedef struct {
   float val15;
 } floatv16;
 
-void acc_out(floatv16 *outbuf, floatv16 *tempout, float ot[4][4], int bank_off, 
-    int offset, int offset2) {
+void acc_out(floatv16 *outbuf, floatv16 *tempout, float ot[4][4], int bank_off, int offset, int offset2) {
 #pragma HLS INLINE off
   if (bank_off == 0) {
     outbuf[offset].val0 += ot[0][0];
@@ -171,7 +131,7 @@ void acc_out(floatv16 *outbuf, floatv16 *tempout, float ot[4][4], int bank_off,
 void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output, 
       int group, int inchannels, int outchannels, int burstchannels, int rpo,
       int ydim, int xdim, int ytile, int xtile, int ytile_pad, int xtile_pad, 
-      int rburst) {
+      int rburst, int dataoff, int numgroups) {
 #pragma HLS data_pack variable=weights
 #pragma HLS data_pack variable=output
 #pragma HLS INTERFACE m_axi port=input offset=slave bundle=gmem1
@@ -189,6 +149,8 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
 #pragma HLS INTERFACE s_axilite port=burstchannels bundle=control
 #pragma HLS INTERFACE s_axilite port=rpo bundle=control
 #pragma HLS INTERFACE s_axilite port=rburst bundle=control
+#pragma HLS INTERFACE s_axilite port=dataoff bundle=control
+#pragma HLS INTERFACE s_axilite port=numgroups bundle=control
 
 #pragma HLS INTERFACE s_axilite port=ydim bundle=control
 #pragma HLS INTERFACE s_axilite port=xdim bundle=control
@@ -199,10 +161,14 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
 #pragma HLS INTERFACE s_axilite port=rburst bundle=control
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
-  float inbuf[128 * 128][4][4];
-#pragma HLS ARRAY_PARTITION variable=inbuf cyclic factor=4 dim=3
+  float inbuf[128 * 128][4][2];
+#pragma HLS ARRAY_PARTITION variable=inbuf cyclic factor=2 dim=3
 #pragma HLS ARRAY_PARTITION variable=inbuf cyclic factor=4 dim=2
-#pragma HLS ARRAY_PARTITION variable=inbuf cyclic factor=8 dim=1
+#pragma HLS ARRAY_PARTITION variable=inbuf cyclic factor=4 dim=1
+
+  float sidebuf[2048][4][2];
+#pragma HLS ARRAY_PARTITION variable=sidebuf cyclic factor=2 dim=3
+#pragma HLS ARRAY_PARTITION variable=sidebuf cyclic factor=4 dim=2
 
   floatv16 outbuf[256 * 16];
   floatv16 tempout[128 * 16];
@@ -214,9 +180,13 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
 
   float biasbuf[512];
 
-  float inrow[4];
+  float inrow[2];
 #pragma HLS ARRAY_PARTITION variable=inrow complete
 
+  float itcol[4];
+#pragma HLS ARRAY_PARTITION variable=itcol complete
+  float itt[4 * 4];
+#pragma HLS ARRAY_PARTITION variable=itt complete
   float it[4 * 4];
 #pragma HLS ARRAY_PARTITION variable=it complete
   float wt[4 * 4];
@@ -228,7 +198,7 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
   int bank_off;
 
   assert(rburst >= 13);
-  assert(rburst <= 3584);
+  assert(rburst <= 4096);
   assert(inchannels >= 1);
   assert(inchannels <= 512);
   assert(outchannels >= 1);
@@ -238,27 +208,31 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
   assert(burstchannels <= 256);
 
   assert(xdim >= 13);
-  assert(xdim <= 224);
+  assert(xdim <= 256);
   assert(ydim >= 13);
-  assert(ydim <= 224);
+  assert(ydim <= 256);
   assert(xtile >= 7);
-  assert(xtile <= 112);
+  assert(xtile <= 128);
   assert(ytile >= 7);
-  assert(ytile <= 112);
+  assert(ytile <= 128);
 
   assert(group >= 0);
   assert(group <= 1);
 
+  assert(numgroups <= 2);
+  assert(numgroups >= 1);
+
   assert(xtile_pad >= 8);
-  assert(xtile_pad <= 112);
+  assert(xtile_pad <= 128);
   assert(ytile_pad >= 8);
-  assert(ytile_pad <= 112);
+  assert(ytile_pad <= 128);
 
   assert(rpo >= 1);
   assert(rpo <= 64);
 
   int n, i, y, x, p, q, j, o;
 
+  int sb_off = 0;
   int w_off = 0;
   int tile_cnt = 0;
   int xt_off = 0;
@@ -269,8 +243,6 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
   int p_off = 1;
   int i_off = 0;
 
-  floatv16 init1[1];
-  floatv16 init2[1];
   int in_y = 0;
   int offset = 0;
   int in_y2 = 0;
@@ -290,20 +262,26 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
     p_off = 1;
     i_off = 0;
     RESETLOOP:for (i = 0; i < burstchannels; ++i) {
-      for (x = 0; x < xtile; ++x) {
+      for (x = 0; x < xtile_pad; ++x) {
 #pragma HLS pipeline
-        for (p = 0; p < 4; ++p) {
+        for (p = 0; p < 2; ++p) {
           inbuf[i * ytile * xtile_pad + x][0][p] = 0;
           inbuf[i * ytile * xtile_pad + x + (ytile - 1) * xtile_pad][0][p] = 0;
           inbuf[i * ytile * xtile_pad + x + (ytile - 1) * xtile_pad][1][p] = 0;
           inbuf[i * ytile * xtile_pad + x + (ytile - 1) * xtile_pad][2][p] = 0;
           inbuf[i * ytile * xtile_pad + x + (ytile - 1) * xtile_pad][3][p] = 0;
+          sidebuf[i * ytile + x][0][p] = 0;
+          sidebuf[i * ytile + x][1][p] = 0;
+          sidebuf[i * ytile + x][2][p] = 0;
+          sidebuf[i * ytile + x][3][p] = 0;
         }
       }
     }
 
     IREADLOOP: for (i = 0; i < rburst; ++i) {
-      memcpy(line + 1, input + i * xdim + group * inchannels * ydim * xdim + n * burstchannels * ydim * xdim, sizeof(float) * xdim);
+      memcpy(line + 1, input + dataoff * numgroups * inchannels * ydim * xdim + 
+          i * xdim + group * inchannels * ydim * xdim + 
+          n * burstchannels * ydim * xdim, sizeof(float) * xdim);
 
       if (y_off * 2 + (p_off - 1) == ydim) {
         i_off++;
@@ -320,23 +298,16 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
 
       XTILELOOP: for (x = 0; x < xtile_pad; ++x) {
 #pragma HLS DEPENDENCE variable=inbuf inter false
+//#pragma HLS DEPENDENCE variable=inbuf intra false
 #pragma HLS pipeline
         int start_x = x * 2;
 
-        if (x < xtile) {
-          for (p = 0; p < 4; ++p) {
-            int in_x = start_x + p;
-            inrow[p] = line[in_x];
-          }
-        } else {
-          for (p = 0; p < 4; ++p) {
-            inrow[p] = 0;
-          }
+        for (p = 0; p < 2; ++p) {
+          int in_x = start_x + p;
+          inrow[p] = line[in_x];
         }
-
-        transform_inrow(inrow);
-
-        for (p = 0; p < 4; ++p) {
+        
+        for (p = 0; p < 2; ++p) {
           float temp = inrow[p];
           int id_inx = id_in + x;
           inbuf[id_inx][p_off][p] = temp;
@@ -344,31 +315,55 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
             id_inx = id_inx + xtile_pad;
             inbuf[id_inx][p_off - 2][p] = temp;
           }
+        } 
+      }
+      if (xtile == xtile_pad) {
+        for (p = 0; p < 2; ++p) {
+          float temp = line[xtile_pad * 2 + p];
+          int idx = i_off * ytile + y_off;
+          sidebuf[idx][p_off][p] = temp;
+          if (p_off >= 2 && (y_off + 1) < ytile) {
+            idx = idx + 1;
+            sidebuf[idx][p_off - 2][p] = temp;
+          }
         }
       }
       p_off++;
     }
-
-    ITRANSLOOP: for (i = 0; i < (burstchannels * ytile * xtile_pad) >> 3; ++i) {
+    ITRANSLOOP: for (i = 0; i < (burstchannels * ytile * xtile_pad) >> 2; ++i) {
 #pragma HLS pipeline
-      for (int off = 0; off < 8; ++off) {
-        for (p = 0; p < 4; ++p) {
-          for (q = 0; q < 4; ++ q) {
-            it[p * 4 + q] = inbuf[i * 8 + off][p][q];
+      for (int off = 0; off < 4; ++off) {
+        for (q = 0; q < 2; ++q) {
+          for (p = 0; p < 4; ++p) {
+            itcol[p] = inbuf[i * 4 + off][p][q];
           }
-        }
-        transform_intile(it);
-        for (p = 0; p < 4; ++p) {
-          for (q = 0; q < 4; ++ q) {
-            inbuf[i * 8 + off][p][q] = it[p * 4 + q];
+          transform_incol(itcol);
+          for (p = 0; p < 4; ++p) {
+            inbuf[i * 4 + off][p][q] = itcol[p];
           }
         }
       }
     }
 
+    if (xtile == xtile_pad) {
+      for (i = 0; i < burstchannels * ytile; ++i) {
+#pragma HLS pipeline
+        for (q = 0; q < 2; ++ q) {
+          for (p = 0; p < 4; ++p) {
+            itcol[p] = sidebuf[i][p][q];
+          }
+          transform_incol(itcol);
+          for (p = 0; p < 4; ++p) {
+            sidebuf[i][p][q] = itcol[p];
+          }
+        }
+      }
+    }
+    
     for (o = 0; o < outchannels; ++o) {
       memcpy(wbuf, weights + (o + outchannels * group) * inchannels + n * burstchannels, sizeof(floatv16) * burstchannels);
-      out_offset = ((o + outchannels * group) * ydim) * fact;
+      out_offset = dataoff * numgroups * outchannels * ydim * fact + 
+                    ((o + outchannels * group) * ydim) * fact;
 
       if (n == 0) {
         for (y = 0; y < ytile; ++y) {
@@ -415,9 +410,9 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
         for (y = 0; y < ytile; ++y) {
           for (x = 0; x < fact; ++x) {
 #pragma HLS pipeline
-              offtemp1 = (y * 2 + 1) * fact + x;
-              offtemp2 = y * fact + x;
-              tempout[offtemp2] = outbuf[offtemp1];
+            offtemp1 = (y * 2 + 1) * fact + x;
+            offtemp2 = y * fact + x;
+            tempout[offtemp2] = outbuf[offtemp1];
           }
         }
       }
@@ -427,6 +422,7 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
       xt_off = 0;
       yt_off = 0;
       bank_off = 0;
+      sb_off = 0;
       MULTACCSTAGE: for (i = 0; i < (burstchannels * ytile * xtile_pad) >> 2; ++i, ++tile_cnt, ++xt_off) {
 #pragma HLS DEPENDENCE variable=outbuf inter distance=14 true
 #pragma HLS DEPENDENCE variable=tempout inter distance=14 true
@@ -438,30 +434,73 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
           yt_off = 0;
           xt_off = 0;
           w_off++;
+          sb_off++;
         } else if (xt_off * 4 == xtile_pad) {
+          sb_off++;
           yt_off++;
           xt_off = 0;
         }
         for (j = 0; j < 4; ++j) {
-          it[0] = inbuf[i * 4 + j][0][0] * wbuf[w_off].val0;
-          it[1] = inbuf[i * 4 + j][0][1] * wbuf[w_off].val1;
-          it[2] = inbuf[i * 4 + j][0][2] * wbuf[w_off].val2;
-          it[3] = inbuf[i * 4 + j][0][3] * wbuf[w_off].val3;
+          itt[0] = inbuf[i * 4 + j][0][0];
+          itt[1] = inbuf[i * 4 + j][0][1];
+          if (xtile == xtile_pad && xt_off * 4 + j == xtile_pad - 1) {
+            itt[2] = sidebuf[sb_off][0][0];
+            itt[3] = sidebuf[sb_off][0][1];
+          } else {
+            itt[2] = inbuf[i * 4 + j + 1][0][0];
+            itt[3] = inbuf[i * 4 + j + 1][0][1];
+          }
 
-          it[4] = inbuf[i * 4 + j][1][0] * wbuf[w_off].val4;
-          it[5] = inbuf[i * 4 + j][1][1] * wbuf[w_off].val5;
-          it[6] = inbuf[i * 4 + j][1][2] * wbuf[w_off].val6;
-          it[7] = inbuf[i * 4 + j][1][3] * wbuf[w_off].val7;
+          itt[4] = inbuf[i * 4 + j][1][0];
+          itt[5] = inbuf[i * 4 + j][1][1];
+          if (xtile == xtile_pad && xt_off * 4 + j == xtile_pad - 1) {
+            itt[6] = sidebuf[sb_off][1][0];
+            itt[7] = sidebuf[sb_off][1][1];
+          } else { 
+            itt[6] = inbuf[i * 4 + j + 1][1][0];
+            itt[7] = inbuf[i * 4 + j + 1][1][1];
+          }
 
-          it[8] = inbuf[i * 4 + j][2][0] * wbuf[w_off].val8;
-          it[9] = inbuf[i * 4 + j][2][1] * wbuf[w_off].val9;
-          it[10] = inbuf[i * 4 + j][2][2] * wbuf[w_off].val10;
-          it[11] = inbuf[i * 4 + j][2][3] * wbuf[w_off].val11;
+          itt[8] = inbuf[i * 4 + j][2][0];
+          itt[9] = inbuf[i * 4 + j][2][1];
+          if (xtile == xtile_pad && xt_off * 4 + j == xtile_pad - 1) {
+            itt[10] = sidebuf[sb_off][2][0];
+            itt[11] = sidebuf[sb_off][2][1];
+          } else {
+            itt[10] = inbuf[i * 4 + j + 1][2][0];
+            itt[11] = inbuf[i * 4 + j + 1][2][1];
+          }
 
-          it[12] = inbuf[i * 4 + j][3][0] * wbuf[w_off].val12;
-          it[13] = inbuf[i * 4 + j][3][1] * wbuf[w_off].val13;
-          it[14] = inbuf[i * 4 + j][3][2] * wbuf[w_off].val14;
-          it[15] = inbuf[i * 4 + j][3][3] * wbuf[w_off].val15;
+          itt[12] = inbuf[i * 4 + j][3][0];
+          itt[13] = inbuf[i * 4 + j][3][1];
+          if (xtile == xtile_pad && xt_off * 4 + j == xtile_pad - 1) {
+            itt[14] = sidebuf[sb_off][3][0];
+            itt[15] = sidebuf[sb_off][3][1];
+          } else {
+            itt[14] = inbuf[i * 4 + j + 1][3][0];
+            itt[15] = inbuf[i * 4 + j + 1][3][1];
+          }
+          transform_intilecol(itt);
+
+          it[0] = itt[0] * wbuf[w_off].val0;
+          it[1] = itt[1] * wbuf[w_off].val1;
+          it[2] = itt[2] * wbuf[w_off].val2;
+          it[3] = itt[3] * wbuf[w_off].val3;
+
+          it[4] = itt[4] * wbuf[w_off].val4;
+          it[5] = itt[5] * wbuf[w_off].val5;
+          it[6] = itt[6] * wbuf[w_off].val6;
+          it[7] = itt[7] * wbuf[w_off].val7;
+
+          it[8] = itt[8] * wbuf[w_off].val8;
+          it[9] = itt[9] * wbuf[w_off].val9;
+          it[10] = itt[10] * wbuf[w_off].val10;
+          it[11] = itt[11] * wbuf[w_off].val11;
+
+          it[12] = itt[12] * wbuf[w_off].val12;
+          it[13] = itt[13] * wbuf[w_off].val13;
+          it[14] = itt[14] * wbuf[w_off].val14;
+          it[15] = itt[15] * wbuf[w_off].val15;
 
           transform_outtile(it, ot, j);
         }

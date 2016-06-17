@@ -20,13 +20,13 @@
 #define PAD 1
 
 void ref_conv(float *input, float *weights, float *bias, float *ocl_output, int groups, int inchannel, int outchannel,
-    int xsize, int ysize) {
+    int xsize, int ysize, int numimages) {
   int o_head, k_head;
   int out_idx, in_idx, k_idx;
   // Convolution
-  for (int i = 0; i < TOP_NUM * outchannel * ysize * xsize; ++i)
+  for (int i = 0; i < numimages * outchannel * ysize * xsize; ++i)
     ocl_output[i] = 0;
-  for (int n = 0; n < TOP_NUM; n++) {
+  for (int n = 0; n < numimages; n++) {
     for (int g = 0; g < groups; g++) {
       o_head = (outchannel / groups) * g;
       k_head = (inchannel / groups) * g;
@@ -55,7 +55,7 @@ void ref_conv(float *input, float *weights, float *bias, float *ocl_output, int 
       }
     }
   }
-  for (int n = 0; n < TOP_NUM; n++) {
+  for (int n = 0; n < numimages; n++) {
     for (int o = 0; o < outchannel; ++o) {
       for (int y = 0; y < ysize; ++y) {
         for (int x = 0; x < xsize; ++x) {
@@ -129,7 +129,7 @@ void transform_weights_test(float *weights_in, float *weights_out) {
 
 int main(int argc, char** argv)
 {
-  if (argc != 10){
+  if (argc != 11){
     printf("%s <inputfile> numgroups inchannels outchannels burstchannels rpo dim tilesize padtsize\n", argv[0]);
     return EXIT_FAILURE;
   }
@@ -150,12 +150,13 @@ int main(int argc, char** argv)
   int ytile_pad = atoi(argv[9]);
   int xtile_pad = atoi(argv[9]);
   int rburst = burstchannels * ydim;
-    
-  int insize = inchannels * ydim * xdim * numgroups;
-  int outsize = outchannels * ydim * xdim * numgroups;
+  int numimages = atoi(argv[10]);
+
+  int insize = numimages * inchannels * ydim * xdim * numgroups;
+  int outsize = numimages * outchannels * ydim * xdim * numgroups;
   int wsize = outchannels * inchannels * numgroups * numgroups * 3 * 3;
   int wtsize = outchannels * inchannels * numgroups * numgroups * 4 * 4;
-  int outsize_pad = outchannels * ydim * xtile_pad * 2 * numgroups;
+  int outsize_pad = numimages * outchannels * ydim * xtile_pad * 2 * numgroups;
 
   // Data to be sent to the device
   float *input = (float *)malloc(sizeof(float) * insize);
@@ -203,7 +204,7 @@ int main(int argc, char** argv)
     bias[i] = (float)(rand() % 100 + 1) / 100;
   }
 
-  for(i = 0; i < outchannels * numgroups; i++) {
+  for(i = 0; i < numimages * outchannels * numgroups; i++) {
     for (y = 0; y < ydim; ++y) {
       for (x = 0; x < xtile_pad * 2; ++x) {
         idx_pad = ((i * ydim) + y) * xtile_pad * 2 + x;
@@ -367,37 +368,40 @@ int main(int argc, char** argv)
   err = clEnqueueWriteBuffer(commands, ocl_output, CL_TRUE, 0, sizeof(float) * outsize_pad, hw_results, 0, NULL, NULL);
   
   // Set the arguments to our compute kernel
-  for (int g = 0; g < numgroups; ++g) {
-    err = 0;
-    err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &ocl_input);
-    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &ocl_weights);
-    err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &ocl_bias);
-    err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &ocl_output);
-    err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &g);
-    err |= clSetKernelArg(kernel, 5, sizeof(cl_int), &inchannels);
-    err |= clSetKernelArg(kernel, 6, sizeof(cl_int), &outchannels);
-    err |= clSetKernelArg(kernel, 7, sizeof(cl_int), &burstchannels);
-    err |= clSetKernelArg(kernel, 8, sizeof(cl_int), &rpo);
-    err |= clSetKernelArg(kernel, 9, sizeof(cl_int), &ydim);
-    err |= clSetKernelArg(kernel, 10, sizeof(cl_int), &xdim);
-    err |= clSetKernelArg(kernel, 11, sizeof(cl_int), &ytile);
-    err |= clSetKernelArg(kernel, 12, sizeof(cl_int), &xtile);
-    err |= clSetKernelArg(kernel, 13, sizeof(cl_int), &ytile_pad);
-    err |= clSetKernelArg(kernel, 14, sizeof(cl_int), &xtile_pad);
-    err |= clSetKernelArg(kernel, 15, sizeof(cl_int), &rburst);
+  for (int n = 0; n < numimages; ++n) {
+    for (int g = 0; g < numgroups; ++g) {
+      err = 0;
+      err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &ocl_input);
+      err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &ocl_weights);
+      err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &ocl_bias);
+      err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &ocl_output);
+      err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &g);
+      err |= clSetKernelArg(kernel, 5, sizeof(cl_int), &inchannels);
+      err |= clSetKernelArg(kernel, 6, sizeof(cl_int), &outchannels);
+      err |= clSetKernelArg(kernel, 7, sizeof(cl_int), &burstchannels);
+      err |= clSetKernelArg(kernel, 8, sizeof(cl_int), &rpo);
+      err |= clSetKernelArg(kernel, 9, sizeof(cl_int), &ydim);
+      err |= clSetKernelArg(kernel, 10, sizeof(cl_int), &xdim);
+      err |= clSetKernelArg(kernel, 11, sizeof(cl_int), &ytile);
+      err |= clSetKernelArg(kernel, 12, sizeof(cl_int), &xtile);
+      err |= clSetKernelArg(kernel, 13, sizeof(cl_int), &ytile_pad);
+      err |= clSetKernelArg(kernel, 14, sizeof(cl_int), &xtile_pad);
+      err |= clSetKernelArg(kernel, 15, sizeof(cl_int), &rburst);
+      err |= clSetKernelArg(kernel, 16, sizeof(cl_int), &n);
+      err |= clSetKernelArg(kernel, 17, sizeof(cl_int), &numgroups);
+      if (err != CL_SUCCESS)
+      {
+        printf("Error: Failed to set kernel arguments! %d\n", err);
+        printf("Test failed\n");
+        return EXIT_FAILURE;
+      }
 
-    if (err != CL_SUCCESS)
-    {
-      printf("Error: Failed to set kernel arguments! %d\n", err);
-      printf("Test failed\n");
-      return EXIT_FAILURE;
+      // Execute the kernel over the entire range of our 1d input data set
+      // using the maximum number of work group items for this device
+
+      printf("Running kernel\n");
+      err = clEnqueueTask(commands, kernel, 0, NULL, NULL);
     }
-
-    // Execute the kernel over the entire range of our 1d input data set
-    // using the maximum number of work group items for this device
-
-    printf("Running kernel\n");
-    err = clEnqueueTask(commands, kernel, 0, NULL, NULL);
   }
   if (err)
   {
@@ -420,35 +424,36 @@ int main(int argc, char** argv)
 
   clWaitForEvents(1, &readevent);
   ref_conv(input, weights, bias, sw_results, numgroups, inchannels * numgroups, 
-      outchannels * numgroups, xdim, ydim);
+      outchannels * numgroups, xdim, ydim, numimages);
    
   // Validate our results
   correct = 0;
- 
-  for (i = 0; i < outchannels * numgroups; ++i) {
-    for (y = 0; y < ydim; ++y) {
-      for (x = 0; x < xtile_pad * 2; ++x) {
-        idx_pad = ((i * ydim) + y) * xtile_pad * 2 + x;
-        idx = ((i * ydim) + y) * xdim + x;
-        if (x < xdim) {
-          if (fabs(hw_results[idx_pad] - sw_results[idx]) / sw_results[idx] < 1e-5)
-            correct++;
-          else 
-            printf("%d %d %d hw_results %f sw_results %f\n", i, y, x, 
-                hw_results[idx_pad], sw_results[idx]);
+  for (n = 0; n < numimages; ++n) { 
+    for (i = 0; i < outchannels * numgroups; ++i) {
+      for (y = 0; y < ydim; ++y) {
+        for (x = 0; x < xtile_pad * 2; ++x) {
+          idx_pad = n * outchannels * numgroups * ydim * xtile_pad * 2 + 
+                    ((i * ydim) + y) * xtile_pad * 2 + x;
+          idx = n * outchannels * numgroups * ydim * xdim + 
+                ((i * ydim) + y) * xdim + x;
+          if (x < xdim) {
+            if (fabs(hw_results[idx_pad] - sw_results[idx]) / sw_results[idx] < 1e-5)
+              correct++;
+            else 
+              printf("%d %d %d hw_results %f sw_results %f\n", i, y, x, 
+                  hw_results[idx_pad], sw_results[idx]);
+          }
         }
       }
     }
   }
-
 
   if (correct != outsize) {
     for (i = 0; i < outchannels * numgroups; i++) {
       printf("FPGA OUTPUT Channel %d\n", i);
       for (int y = 0; y < ydim; ++y) {
         for (int x = 0; x < xtile_pad * 2; ++x) {
-          //if (x < xdim)
-            printf("%f\t", hw_results[i * ydim * xtile_pad * 2 + y * xtile_pad * 2 + x]);
+          printf("%f\t", hw_results[i * ydim * xtile_pad * 2 + y * xtile_pad * 2 + x]);
         }
         printf("\n");
       }
