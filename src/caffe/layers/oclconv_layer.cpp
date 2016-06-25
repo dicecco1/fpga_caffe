@@ -214,51 +214,53 @@ void OCLConvolutionLayer<float>::winograd_conv(
     float *top_data = top[i]->mutable_cpu_data();
 
     tempdata = outbuf.mutable_ocl_data();
+
+    clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
+      (const void *)&bottom_data);
+    clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
+      (const void *)&weight_data);
+    clSetKernelArg(this->ocl_float_kernel, 2, sizeof(cl_mem),
+      (const void *)&bias_data);
+    clSetKernelArg(this->ocl_float_kernel, 3, sizeof(cl_mem),
+      (const void *)&tempdata);
+    clSetKernelArg(this->ocl_float_kernel, 5, sizeof(cl_int),
+      (const void *)&inchannels);
+    clSetKernelArg(this->ocl_float_kernel, 6, sizeof(cl_int),
+      (const void *)&outchannels);
+    clSetKernelArg(this->ocl_float_kernel, 7, sizeof(cl_int),
+      (const void *)&burstchannels);
+    clSetKernelArg(this->ocl_float_kernel, 8, sizeof(cl_int),
+      (const void *)&rpo);
+    clSetKernelArg(this->ocl_float_kernel, 9, sizeof(cl_int),
+      (const void *)&ydim);
+    clSetKernelArg(this->ocl_float_kernel, 10, sizeof(cl_int),
+      (const void *)&xdim);
+    clSetKernelArg(this->ocl_float_kernel, 11, sizeof(cl_int),
+      (const void *)&ytile);
+    clSetKernelArg(this->ocl_float_kernel, 12, sizeof(cl_int),
+      (const void *)&xtile);
+    clSetKernelArg(this->ocl_float_kernel, 13, sizeof(cl_int),
+      (const void *)&ytile_pad);
+    clSetKernelArg(this->ocl_float_kernel, 14, sizeof(cl_int),
+      (const void *)&xtile_pad);
+    clSetKernelArg(this->ocl_float_kernel, 15, sizeof(cl_int),
+      (const void *)&rburst);
+    clSetKernelArg(this->ocl_float_kernel, 17, sizeof(cl_int),
+      (const void *)&numgroups);
+
     for (int n = 0; n < this->num_; ++n) {
       for (int g = 0; g < numgroups; ++g) {
-        clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem), 
-          (const void *)&bottom_data);
-        clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem), 
-          (const void *)&weight_data);
-        clSetKernelArg(this->ocl_float_kernel, 2, sizeof(cl_mem), 
-          (const void *)&bias_data);
-        clSetKernelArg(this->ocl_float_kernel, 3, sizeof(cl_mem), 
-          (const void *)&tempdata);
         clSetKernelArg(this->ocl_float_kernel, 4, sizeof(cl_int), 
           (const void *)&g);
-        clSetKernelArg(this->ocl_float_kernel, 5, sizeof(cl_int), 
-          (const void *)&inchannels);
-        clSetKernelArg(this->ocl_float_kernel, 6, sizeof(cl_int), 
-          (const void *)&outchannels);
-        clSetKernelArg(this->ocl_float_kernel, 7, sizeof(cl_int), 
-          (const void *)&burstchannels);
-        clSetKernelArg(this->ocl_float_kernel, 8, sizeof(cl_int), 
-          (const void *)&rpo);
-        clSetKernelArg(this->ocl_float_kernel, 9, sizeof(cl_int), 
-          (const void *)&ydim);
-        clSetKernelArg(this->ocl_float_kernel, 10, sizeof(cl_int), 
-          (const void *)&xdim);
-        clSetKernelArg(this->ocl_float_kernel, 11, sizeof(cl_int), 
-          (const void *)&ytile);
-        clSetKernelArg(this->ocl_float_kernel, 12, sizeof(cl_int), 
-          (const void *)&xtile);
-        clSetKernelArg(this->ocl_float_kernel, 13, sizeof(cl_int), 
-          (const void *)&ytile_pad);
-        clSetKernelArg(this->ocl_float_kernel, 14, sizeof(cl_int), 
-          (const void *)&xtile_pad);
-        clSetKernelArg(this->ocl_float_kernel, 15, sizeof(cl_int), 
-          (const void *)&rburst);
         clSetKernelArg(this->ocl_float_kernel, 16, sizeof(cl_int),
           (const void *)&n);
-        clSetKernelArg(this->ocl_float_kernel, 17, sizeof(cl_int),
-          (const void *)&numgroups);
 
         clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0,
                     NULL, &(events[n * numgroups + g]));
       }
     } 
-    for (int n = 0; n < this->num_ * numgroups; ++n)
-      clWaitForEvents(1, &(events[n]));
+
+    clWaitForEvents(this->num_ * numgroups, &(events[0]));
     const float *outdata = outbuf.cpu_data();
     for (int n = 0; n < this->num_; ++n) {
       for (int j = 0; j < top[0]->shape(1); ++j) {
