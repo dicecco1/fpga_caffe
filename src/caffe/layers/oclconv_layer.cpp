@@ -10,22 +10,7 @@ void OCLConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   BaseConvolutionLayer<Dtype>::LayerSetUp(bottom, top);
   ConvolutionParameter_SubEngine subengine =
       this->layer_param_.convolution_param().subengine();
-  vector<int> shape(4);
-  shape[0] = (this->blobs_[0])->shape(0);
-  shape[1] = (this->blobs_[0])->shape(1);
-  shape[2] = 4;
-  shape[3] = 4;
   if (subengine == ConvolutionParameter_SubEngine_WINOGRAD) {
-    vector<int> outshape(4);
-    outshape[0] = bottom[0]->shape(0);
-    outshape[1] = shape[0];
-    outshape[2] = bottom[0]->shape(2);
-    if (bottom[0]->shape(3) % 16 != 0) {
-      outshape[3] = (bottom[0]->shape(3) / 16 + 1) * 16;
-    } else {
-      outshape[3] = bottom[0]->shape(3);
-    }
-    outbuf.Reshape(outshape);
     trans_flag_ = 0;
   }
 }
@@ -174,13 +159,19 @@ void OCLConvolutionLayer<Dtype>::transform_weights(void) {
 template <>
 void OCLConvolutionLayer<float>::winograd_conv(
     const vector<Blob<float>*>& bottom, const vector<Blob<float>*>& top) {
-  const float* weight = this->blobs_[0]->cpu_data();
   const float* weight_data = trans_weights.ocl_data();
   const float* bias_data = this->blobs_[1]->ocl_data();
     
   std::vector<cl_event> events(this->num_ * this->group_);
 
-  int offshape = outbuf.shape(3);
+
+  int offshape;
+
+  if (top[0]->shape(3) % 16 != 0)
+    offshape = (top[0]->shape(3) / 16 + 1) * 16;
+  else
+    offshape = top[0]->shape(3);
+
   int ydim = top[0]->shape(2);
   int xdim = top[0]->shape(3);
   int idx_off;
@@ -207,13 +198,18 @@ void OCLConvolutionLayer<float>::winograd_conv(
   int rburst = ydim * burstchannels; 
   int numgroups = this->group_; 
 
-  float *tempdata; 
- 
-  for (int i = 0; i < bottom.size(); i++) {
-    const float *bottom_data = bottom[i]->ocl_data();
-    float *top_data = top[i]->mutable_cpu_data();
+  vector<int> outshape(4);
 
-    tempdata = outbuf.mutable_ocl_data();
+  for (int i = 0; i < bottom.size(); i++) {
+    if (top[i]->shape(3) % 16 == 0) {
+      outshape[0] = top[i]->shape(0);
+      outshape[1] = top[i]->shape(1);
+      outshape[2] = top[i]->shape(2);
+      outshape[3] = offshape;
+      top[i]->Reshape(outshape);
+    }
+    const float *bottom_data = bottom[i]->ocl_data();
+    float *top_data = top[i]->mutable_ocl_data();
 
     clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
       (const void *)&bottom_data);
@@ -222,7 +218,7 @@ void OCLConvolutionLayer<float>::winograd_conv(
     clSetKernelArg(this->ocl_float_kernel, 2, sizeof(cl_mem),
       (const void *)&bias_data);
     clSetKernelArg(this->ocl_float_kernel, 3, sizeof(cl_mem),
-      (const void *)&tempdata);
+      (const void *)&top_data);
     clSetKernelArg(this->ocl_float_kernel, 5, sizeof(cl_int),
       (const void *)&inchannels);
     clSetKernelArg(this->ocl_float_kernel, 6, sizeof(cl_int),
@@ -261,7 +257,7 @@ void OCLConvolutionLayer<float>::winograd_conv(
     } 
 
     clWaitForEvents(this->num_ * numgroups, &(events[0]));
-    const float *outdata = outbuf.cpu_data();
+    top_data = top[i]->mutable_cpu_data();
     for (int n = 0; n < this->num_; ++n) {
       for (int j = 0; j < top[0]->shape(1); ++j) {
         for (int y = 0; y < ydim; ++y) {
@@ -270,10 +266,17 @@ void OCLConvolutionLayer<float>::winograd_conv(
                       (j * ydim + y) * offshape + x;
             idx = n * outchannels * numgroups * ydim * xdim + 
                   (j * ydim + y) * xdim + x;
-            top_data[idx] = outdata[idx_off];
+            top_data[idx] = top_data[idx_off];
           }
         }
       }
+    }
+    if (top[i]->shape(3) != top[i]->shape(2)) {
+      outshape[0] = top[i]->shape(0);
+      outshape[1] = top[i]->shape(1);
+      outshape[2] = top[i]->shape(2);
+      outshape[3] = xdim;
+      top[i]->Reshape(outshape);
     }
   }
 }
