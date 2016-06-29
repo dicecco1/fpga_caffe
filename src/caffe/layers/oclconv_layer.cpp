@@ -166,21 +166,26 @@ void OCLConvolutionLayer<float>::winograd_conv(
 
 
   int offshape;
+  int ydim = top[0]->shape(2);
+  int xdim = top[0]->shape(3);
+  int ytile = (ydim + 2 - 1) / 2;
+  int xtile = (xdim + 2 - 1) / 2;
 
-  if (top[0]->shape(3) % 16 != 0)
+  if (top[0]->shape(3) % 16 != 0) {
     offshape = (top[0]->shape(3) / 16 + 1) * 16;
+    if (offshape * ytile / 8 < 14) {
+      offshape = offshape * 2;
+    }
+  }
   else
     offshape = top[0]->shape(3);
 
-  int ydim = top[0]->shape(2);
-  int xdim = top[0]->shape(3);
+
   int idx_off;
   int idx;
 
   int inchannels = bottom[0]->shape(1) / this->group_;
   int outchannels = top[0]->shape(1) / this->group_;
-  int ytile = (ydim + 2 - 1) / 2;
-  int xtile = (xdim + 2 - 1) / 2;
   int burstchannels = 128 * 128 / (ytile * (offshape / 2));
   
   if (burstchannels > inchannels) {
@@ -201,7 +206,7 @@ void OCLConvolutionLayer<float>::winograd_conv(
   vector<int> outshape(4);
 
   for (int i = 0; i < bottom.size(); i++) {
-    if (top[i]->shape(3) % 16 == 0) {
+    if (top[i]->shape(3) % 16 != 0) {
       outshape[0] = top[i]->shape(0);
       outshape[1] = top[i]->shape(1);
       outshape[2] = top[i]->shape(2);

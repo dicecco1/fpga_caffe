@@ -1,7 +1,7 @@
 name: "googlenet"
 input: "data"
 input_shape {
-  dim: 1
+  dim: 64 
   dim: 3
   dim: 224
   dim: 224
