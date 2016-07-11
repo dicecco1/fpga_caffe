@@ -62,6 +62,7 @@ class SyncedMemory {
   void* mutable_cpu_data();
   void* mutable_gpu_data();
   void* mutable_ocl_data();
+  void* mutable_ocl_data(int RW);
   enum SyncedHead { UNINITIALIZED, HEAD_AT_CPU, HEAD_AT_GPU, HEAD_AT_OCL, SYNCED };
   SyncedHead head() { return head_; }
   size_t size() { return size_; }
@@ -72,7 +73,7 @@ class SyncedMemory {
  private:
   void to_cpu();
   void to_gpu();
-  void to_ocl();
+  void to_ocl(int RW);
   void* cpu_ptr_;
   void* gpu_ptr_;
   void* ocl_ptr_;
