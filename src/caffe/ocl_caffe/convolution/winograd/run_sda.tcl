@@ -17,14 +17,15 @@ add_files -kernel [get_kernels winograd_pe] "winograd_pe.c"
 create_opencl_binary winograd_pe
 set_property region "OCL_REGION_0" [get_opencl_binary winograd_pe]
 create_compute_unit -opencl_binary [get_opencl_binary winograd_pe] -kernel [get_kernels winograd_pe] -name ocl_conv1
+create_compute_unit -opencl_binary [get_opencl_binary winograd_pe] -kernel [get_kernels winograd_pe] -name ocl_conv2
 
 #Compile the design for CPU based emulation
 compile_emulation -flow cpu -opencl_binary [get_opencl_binary winograd_pe]
 
 # Run the compiled application in CPU based emulation mode
-run_emulation -flow cpu -args "winograd_pe.xclbin 1 64 64 1 64 224 112 112 2"
-run_emulation -flow cpu -args "winograd_pe.xclbin 1 64 112 4 16 112 56 56 2"
-run_emulation -flow cpu -args "winograd_pe.xclbin 1 512 512 256 2 14 7 8 2"
+run_emulation -flow cpu -args "winograd_pe.xclbin 1 64 2 1 64 224 112 112 2"
+run_emulation -flow cpu -args "winograd_pe.xclbin 1 64 2 4 16 112 56 56 2"
+run_emulation -flow cpu -args "winograd_pe.xclbin 1 512 2 256 2 14 7 8 2"
 
 report_estimate
 

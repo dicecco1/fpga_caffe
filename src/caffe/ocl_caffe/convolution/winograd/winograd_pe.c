@@ -4,70 +4,49 @@
 
 #include <stdbool.h>
 
-void transform_incol(float *input) {
+void transform_incol(float input[4], float output[4]) {
 #pragma HLS INLINE off
   float A0 = input[0] - input[2];
   float A1 = input[1] + input[2];
   float A2 = input[2] - input[1];
   float A3 = input[1] - input[3];
-  input[0] = A0;
-  input[1] = A1;
-  input[2] = A2;
-  input[3] = A3;
+  output[0] = A0;
+  output[1] = A1;
+  output[2] = A2;
+  output[3] = A3;
 }
 
-void transform_intilecol(float input[4 * 4]) {
-#pragma HLS INLINE off 
+void transform_intilerow(float input[4], float output[4]) {
+#pragma HLS INLINE off
   float A0 = input[0];
   float A1 = input[1];
   float A2 = input[2];
   float A3 = input[3];
-  float B0 = input[4];
-  float B1 = input[5];
-  float B2 = input[6];
-  float B3 = input[7];
-  float C0 = input[8];
-  float C1 = input[9];
-  float C2 = input[10];
-  float C3 = input[11];
-  float D0 = input[12];
-  float D1 = input[13];
-  float D2 = input[14];
-  float D3 = input[15];
 
-  input[0] = A0 - A2;
-  input[1] = A1 + A2;
-  input[2] = A2 - A1;
-  input[3] = A1 - A3;
-  input[4] = B0 - B2;
-  input[5] = B1 + B2;
-  input[6] = B2 - B1;
-  input[7] = B1 - B3;
-  input[8] = C0 - C2;
-  input[9] = C1 + C2;
-  input[10] = C2 - C1;
-  input[11] = C1 - C3;
-  input[12] = D0 - D2;
-  input[13] = D1 + D2;
-  input[14] = D2 - D1;
-  input[15] = D1 - D3; 
+  output[0] = A0 - A2;
+  output[1] = A1 + A2;
+  output[2] = A2 - A1;
+  output[3] = A1 - A3; 
 }
 
-void transform_outtile(float *output_t, float output[4][4], int j) {
-#pragma HLS INLINE
-  float t00 = output_t[0] + output_t[1] + output_t[2];
-  float t01 = output_t[1] - output_t[2] - output_t[3];
-  float t10 = output_t[4] + output_t[5] + output_t[6];
-  float t11 = output_t[5] - output_t[6] - output_t[7];
-  float t20 = output_t[8] + output_t[9] + output_t[10];
-  float t21 = output_t[9] - output_t[10] - output_t[11];
-  float t30 = output_t[12] + output_t[13] + output_t[14];
-  float t31 = output_t[13] - output_t[14] - output_t[15];
+void transform_outtile_s1(float output_t[16], float output[8]) {
+#pragma HLS INLINE off
+  output[0] = output_t[0] + output_t[1] + output_t[2];
+  output[1] = output_t[1] - output_t[2] - output_t[3];
+  output[2] = output_t[4] + output_t[5] + output_t[6];
+  output[3] = output_t[5] - output_t[6] - output_t[7];
+  output[4] = output_t[8] + output_t[9] + output_t[10];
+  output[5] = output_t[9] - output_t[10] - output_t[11];
+  output[6] = output_t[12] + output_t[13] + output_t[14];
+  output[7] = output_t[13] - output_t[14] - output_t[15];
+}
 
-  output[j][0] = t00 + t10 + t20;
-  output[j][1] = t01 + t11 + t21;
-  output[j][2] = t10 - t20 - t30;
-  output[j][3] = t11 - t21 - t31;
+void transform_outtile_s2(float input[8], float output[4]) {
+#pragma HLS INLINE off
+  output[0] = input[0] + input[2] + input[4];
+  output[1] = input[1] + input[3] + input[5];
+  output[2] = input[2] - input[4] - input[6];
+  output[3] = input[3] - input[5] - input[7];
 }
 
 typedef struct {
@@ -170,27 +149,47 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
 #pragma HLS ARRAY_PARTITION variable=sidebuf cyclic factor=2 dim=3
 #pragma HLS ARRAY_PARTITION variable=sidebuf cyclic factor=4 dim=2
 
+  float sidebuf_val[4][2];
+#pragma HLS ARRAY_PARTITION variable=sidebuf_val cyclic factor=2 dim=2
+#pragma HLS ARRAY_PARTITION variable=sidebuf_val cyclic factor=4 dim=1
+
   floatv16 outbuf[256 * 16];
   floatv16 tempout[128 * 16];
 
-  float line[256] = {0};
+  float line[260] = {0};
 #pragma HLS ARRAY_PARTITION variable=line cyclic factor=2
 
   floatv16 wbuf[256];
 
-  float biasbuf[512];
+  float biasbuf[1024];
 
   float inrow[2];
 #pragma HLS ARRAY_PARTITION variable=inrow complete
 
   float itcol[4];
 #pragma HLS ARRAY_PARTITION variable=itcol complete
-  float itt[4 * 4];
-#pragma HLS ARRAY_PARTITION variable=itt complete
-  float it[4 * 4];
-#pragma HLS ARRAY_PARTITION variable=it complete
-  float wt[4 * 4];
-#pragma HLS ARRAY_PARTITION variable=wt complete
+  float otcol[4];
+#pragma HLS ARRAY_PARTITION variable=otcol complete
+
+  float itt[4][4][4];
+#pragma HLS ARRAY_PARTITION variable=itt complete dim=1
+#pragma HLS ARRAY_PARTITION variable=itt complete dim=2
+#pragma HLS ARRAY_PARTITION variable=itt complete dim=3
+
+  float ott[4][4][4];
+#pragma HLS ARRAY_PARTITION variable=ott complete dim=1
+#pragma HLS ARRAY_PARTITION variable=ott complete dim=2
+#pragma HLS ARRAY_PARTITION variable=ott complete dim=3
+
+  float it[4][4 * 4];
+#pragma HLS ARRAY_PARTITION variable=it complete dim=1
+#pragma HLS ARRAY_PARTITION variable=it complete dim=2
+
+  float ot_s1[4][8];
+#pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
+#pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=2
+
+
   float ot[4][4];
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=2 
@@ -200,20 +199,20 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
   assert(rburst >= 13);
   assert(rburst <= 4096);
   assert(inchannels >= 1);
-  assert(inchannels <= 512);
+  assert(inchannels <= 1024);
   assert(outchannels >= 1);
-  assert(outchannels <= 512);
+  assert(outchannels <= 1024);
 
   assert(burstchannels >= 1);
   assert(burstchannels <= 256);
 
-  assert(xdim >= 13);
+  assert(xdim >= 1);
   assert(xdim <= 256);
-  assert(ydim >= 13);
+  assert(ydim >= 1);
   assert(ydim <= 256);
-  assert(xtile >= 7);
+  assert(xtile >= 4);
   assert(xtile <= 128);
-  assert(ytile >= 7);
+  assert(ytile >= 4);
   assert(ytile <= 128);
 
   assert(group >= 0);
@@ -230,28 +229,29 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
   assert(rpo >= 1);
   assert(rpo <= 64);
 
-  int n, i, y, x, p, q, j, o;
+  int i;
 
-  int sb_off = 0;
-  int w_off = 0;
-  int tile_cnt = 0;
-  int xt_off = 0;
-  int yt_off = 0;
-  int fact = 0;
+  unsigned int n, y, x, p, q, j, o;
+
+  unsigned int sb_off = 0;
+  unsigned int w_off = 0;
+  unsigned int tile_cnt = 0;
+  unsigned int xt_off = 0;
+  unsigned int yt_off = 0;
+  unsigned int fact = 0;
   int out_offset = 0;  
-  int y_off = 0;
-  int p_off = 1;
-  int i_off = 0;
+  unsigned int y_off = 0;
+  unsigned int p_off = 1;
+  unsigned int i_off = 0;
 
-  int in_y = 0;
-  int offset = 0;
-  int in_y2 = 0;
-  int offset2 = 0;
+  unsigned int offset = 0;
+  unsigned int offset2 = 0;
 
-  int offtemp1 = 0;
-  int offtemp2 = 0;
+  unsigned int offtemp1 = 0;
+  unsigned int offtemp2 = 0;
 
-  int init_sel = 0;
+  //unsigned int id_in, id_inx, idx, start_x;
+  unsigned int off;
 
   fact = ((xtile_pad) >> 3);
 
@@ -330,16 +330,17 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
       }
       p_off++;
     }
-    ITRANSLOOP: for (i = 0; i < (burstchannels * ytile * xtile_pad) >> 2; ++i) {
+
+ITRANSLOOP: for (i = 0; i < (burstchannels * ytile * xtile_pad) >> 2; ++i) {
 #pragma HLS pipeline
-      for (int off = 0; off < 4; ++off) {
+      for (off = 0; off < 4; ++off) {
         for (q = 0; q < 2; ++q) {
           for (p = 0; p < 4; ++p) {
             itcol[p] = inbuf[i * 4 + off][p][q];
           }
-          transform_incol(itcol);
+          transform_incol(itcol, otcol);
           for (p = 0; p < 4; ++p) {
-            inbuf[i * 4 + off][p][q] = itcol[p];
+            inbuf[i * 4 + off][p][q] = otcol[p];
           }
         }
       }
@@ -352,9 +353,9 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
           for (p = 0; p < 4; ++p) {
             itcol[p] = sidebuf[i][p][q];
           }
-          transform_incol(itcol);
+          transform_incol(itcol, otcol);
           for (p = 0; p < 4; ++p) {
-            sidebuf[i][p][q] = itcol[p];
+            sidebuf[i][p][q] = otcol[p];
           }
         }
       }
@@ -440,69 +441,72 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
           yt_off++;
           xt_off = 0;
         }
+
+        sidebuf_val[0][0] = sidebuf[sb_off][0][0];
+        sidebuf_val[0][1] = sidebuf[sb_off][0][1];
+        sidebuf_val[1][0] = sidebuf[sb_off][1][0];
+        sidebuf_val[1][1] = sidebuf[sb_off][1][1];
+        sidebuf_val[2][0] = sidebuf[sb_off][2][0];
+        sidebuf_val[2][1] = sidebuf[sb_off][2][1];
+        sidebuf_val[3][0] = sidebuf[sb_off][3][0];
+        sidebuf_val[3][1] = sidebuf[sb_off][3][1];
+
         for (j = 0; j < 4; ++j) {
-          itt[0] = inbuf[i * 4 + j][0][0];
-          itt[1] = inbuf[i * 4 + j][0][1];
-          if (xtile == xtile_pad && xt_off * 4 + j == xtile_pad - 1) {
-            itt[2] = sidebuf[sb_off][0][0];
-            itt[3] = sidebuf[sb_off][0][1];
+          itt[j][0][0] = inbuf[i * 4 + j][0][0];
+          itt[j][0][1] = inbuf[i * 4 + j][0][1];
+          itt[j][1][0] = inbuf[i * 4 + j][1][0];
+          itt[j][1][1] = inbuf[i * 4 + j][1][1];
+          itt[j][2][0] = inbuf[i * 4 + j][2][0];
+          itt[j][2][1] = inbuf[i * 4 + j][2][1];
+          itt[j][3][0] = inbuf[i * 4 + j][3][0];
+          itt[j][3][1] = inbuf[i * 4 + j][3][1];
+          if (xtile == xtile_pad && (xt_off * 4 + j == xtile_pad - 1)) {
+            itt[j][0][2] = sidebuf_val[0][0];
+            itt[j][0][3] = sidebuf_val[0][1];
+            itt[j][1][2] = sidebuf_val[1][0];
+            itt[j][1][3] = sidebuf_val[1][1];
+            itt[j][2][2] = sidebuf_val[2][0];
+            itt[j][2][3] = sidebuf_val[2][1];
+            itt[j][3][2] = sidebuf_val[3][0];
+            itt[j][3][3] = sidebuf_val[3][1];
           } else {
-            itt[2] = inbuf[i * 4 + j + 1][0][0];
-            itt[3] = inbuf[i * 4 + j + 1][0][1];
+            itt[j][0][2] = inbuf[i * 4 + j + 1][0][0];
+            itt[j][0][3] = inbuf[i * 4 + j + 1][0][1];
+            itt[j][1][2] = inbuf[i * 4 + j + 1][1][0];
+            itt[j][1][3] = inbuf[i * 4 + j + 1][1][1]; 
+            itt[j][2][2] = inbuf[i * 4 + j + 1][2][0];
+            itt[j][2][3] = inbuf[i * 4 + j + 1][2][1];
+            itt[j][3][2] = inbuf[i * 4 + j + 1][3][0];
+            itt[j][3][3] = inbuf[i * 4 + j + 1][3][1]; 
           }
 
-          itt[4] = inbuf[i * 4 + j][1][0];
-          itt[5] = inbuf[i * 4 + j][1][1];
-          if (xtile == xtile_pad && xt_off * 4 + j == xtile_pad - 1) {
-            itt[6] = sidebuf[sb_off][1][0];
-            itt[7] = sidebuf[sb_off][1][1];
-          } else { 
-            itt[6] = inbuf[i * 4 + j + 1][1][0];
-            itt[7] = inbuf[i * 4 + j + 1][1][1];
-          }
+          transform_intilerow(itt[j][0], ott[j][0]);
+          transform_intilerow(itt[j][1], ott[j][1]);
+          transform_intilerow(itt[j][2], ott[j][2]);
+          transform_intilerow(itt[j][3], ott[j][3]);
 
-          itt[8] = inbuf[i * 4 + j][2][0];
-          itt[9] = inbuf[i * 4 + j][2][1];
-          if (xtile == xtile_pad && xt_off * 4 + j == xtile_pad - 1) {
-            itt[10] = sidebuf[sb_off][2][0];
-            itt[11] = sidebuf[sb_off][2][1];
-          } else {
-            itt[10] = inbuf[i * 4 + j + 1][2][0];
-            itt[11] = inbuf[i * 4 + j + 1][2][1];
-          }
+          it[j][0] = ott[j][0][0] * wbuf[w_off].val0;
+          it[j][1] = ott[j][0][1] * wbuf[w_off].val1;
+          it[j][2] = ott[j][0][2] * wbuf[w_off].val2;
+          it[j][3] = ott[j][0][3] * wbuf[w_off].val3;
 
-          itt[12] = inbuf[i * 4 + j][3][0];
-          itt[13] = inbuf[i * 4 + j][3][1];
-          if (xtile == xtile_pad && xt_off * 4 + j == xtile_pad - 1) {
-            itt[14] = sidebuf[sb_off][3][0];
-            itt[15] = sidebuf[sb_off][3][1];
-          } else {
-            itt[14] = inbuf[i * 4 + j + 1][3][0];
-            itt[15] = inbuf[i * 4 + j + 1][3][1];
-          }
-          transform_intilecol(itt);
+          it[j][4] = ott[j][1][0] * wbuf[w_off].val4;
+          it[j][5] = ott[j][1][1] * wbuf[w_off].val5;
+          it[j][6] = ott[j][1][2] * wbuf[w_off].val6;
+          it[j][7] = ott[j][1][3] * wbuf[w_off].val7;
 
-          it[0] = itt[0] * wbuf[w_off].val0;
-          it[1] = itt[1] * wbuf[w_off].val1;
-          it[2] = itt[2] * wbuf[w_off].val2;
-          it[3] = itt[3] * wbuf[w_off].val3;
+          it[j][8] = ott[j][2][0] * wbuf[w_off].val8;
+          it[j][9] = ott[j][2][1] * wbuf[w_off].val9;
+          it[j][10] = ott[j][2][2] * wbuf[w_off].val10;
+          it[j][11] = ott[j][2][3] * wbuf[w_off].val11;
 
-          it[4] = itt[4] * wbuf[w_off].val4;
-          it[5] = itt[5] * wbuf[w_off].val5;
-          it[6] = itt[6] * wbuf[w_off].val6;
-          it[7] = itt[7] * wbuf[w_off].val7;
+          it[j][12] = ott[j][3][0] * wbuf[w_off].val12;
+          it[j][13] = ott[j][3][1] * wbuf[w_off].val13;
+          it[j][14] = ott[j][3][2] * wbuf[w_off].val14;
+          it[j][15] = ott[j][3][3] * wbuf[w_off].val15;
 
-          it[8] = itt[8] * wbuf[w_off].val8;
-          it[9] = itt[9] * wbuf[w_off].val9;
-          it[10] = itt[10] * wbuf[w_off].val10;
-          it[11] = itt[11] * wbuf[w_off].val11;
-
-          it[12] = itt[12] * wbuf[w_off].val12;
-          it[13] = itt[13] * wbuf[w_off].val13;
-          it[14] = itt[14] * wbuf[w_off].val14;
-          it[15] = itt[15] * wbuf[w_off].val15;
-
-          transform_outtile(it, ot, j);
+          transform_outtile_s1(it[j], ot_s1[j]);
+          transform_outtile_s2(ot_s1[j], ot[j]);
         }
         
         offset = yt_off * 2 * fact + (xt_off >> 1);
@@ -518,22 +522,7 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
 #pragma HLS pipeline
           offtemp1 = (y * 2 + 1) * fact + x;
           offtemp2 = y * fact + x;
-          outbuf[offtemp1].val0 = tempout[offtemp2].val0;
-          outbuf[offtemp1].val1 = tempout[offtemp2].val1;
-          outbuf[offtemp1].val2 = tempout[offtemp2].val2;
-          outbuf[offtemp1].val3 = tempout[offtemp2].val3;
-          outbuf[offtemp1].val4 = tempout[offtemp2].val4;
-          outbuf[offtemp1].val5 = tempout[offtemp2].val5;
-          outbuf[offtemp1].val6 = tempout[offtemp2].val6;
-          outbuf[offtemp1].val7 = tempout[offtemp2].val7;
-          outbuf[offtemp1].val8 = tempout[offtemp2].val8;
-          outbuf[offtemp1].val9 = tempout[offtemp2].val9;
-          outbuf[offtemp1].val10 = tempout[offtemp2].val10;
-          outbuf[offtemp1].val11 = tempout[offtemp2].val11;
-          outbuf[offtemp1].val12 = tempout[offtemp2].val12;
-          outbuf[offtemp1].val13 = tempout[offtemp2].val13;
-          outbuf[offtemp1].val14 = tempout[offtemp2].val14;
-          outbuf[offtemp1].val15 = tempout[offtemp2].val15;
+          outbuf[offtemp1] = tempout[offtemp2];
         }
       }
       memcpy(output + out_offset, outbuf, sizeof(floatv16) * fact * ydim);
