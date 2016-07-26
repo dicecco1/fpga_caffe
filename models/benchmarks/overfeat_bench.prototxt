@@ -1,7 +1,7 @@
 name: "overfeat"
 input: "data"
 input_shape {
-  dim: 128 
+  dim: 64 
   dim: 3
   dim: 231
   dim: 231
