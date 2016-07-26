@@ -984,7 +984,8 @@ class oclConvolutionLayerTest : public MultiDeviceTest<TypeParam> {
     // fill the values
     FillerParameter filler_param;
     filler_param.set_value(1.);
-    ConstantFiller<Dtype> filler(filler_param);
+    //ConstantFiller<Dtype> filler(filler_param);
+    GaussianFiller<Dtype> filler(filler_param);
     filler.Fill(this->blob_bottom_);
     filler.Fill(this->blob_bottom_2_);
     filler.Fill(this->blob_bottom_3_);
@@ -1021,6 +1022,8 @@ class oclConvolutionLayerTest : public MultiDeviceTest<TypeParam> {
   shared_ptr<Blob<Dtype> > ref_blob_top_;
   vector<Blob<Dtype>*> blob_bottom_vec_;
   vector<Blob<Dtype>*> blob_top_vec_;
+  vector<Blob<Dtype>*> prog_bot_;
+  vector<Blob<Dtype>*> prog_top_;
 };
 
 TYPED_TEST_CASE(oclConvolutionLayerTest, TestDtypesAndDevices);
@@ -1037,7 +1040,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestSetup) {
   this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
   this->blob_top_vec_.push_back(this->blob_top_2_);
   shared_ptr<Layer<Dtype> > layer(
-      new ConvolutionLayer<Dtype>(layer_param));
+      new OCLConvolutionLayer<Dtype>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   EXPECT_EQ(this->blob_top_->num(), 1);
   EXPECT_EQ(this->blob_top_->channels(), 96);
@@ -1062,83 +1065,6 @@ TYPED_TEST(oclConvolutionLayerTest, TestSetup) {
   EXPECT_EQ(this->blob_top_2_->width(), 55);
 }
 
-TYPED_TEST(oclConvolutionLayerTest, TestConv1) {
-  Caffe::set_mode(Caffe::OCL);
-  typedef typename TypeParam::Dtype Dtype;
-  this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
-  this->blob_top_vec_.push_back(this->blob_top_2_);
-  LayerParameter layer_param;
-  layer_param.set_xcl_name("conv1_layer.xclbin");
-  layer_param.set_kernel_name("conv1_layer");
-  ConvolutionParameter* convolution_param =
-      layer_param.mutable_convolution_param();
-  convolution_param->add_kernel_size(11);
-  convolution_param->add_stride(4);
-  convolution_param->set_num_output(96);
-  convolution_param->mutable_weight_filler()->set_type("constant");
-  convolution_param->mutable_weight_filler()->set_value(1);
-  convolution_param->mutable_bias_filler()->set_type("constant");
-  convolution_param->mutable_bias_filler()->set_value(1);
-  shared_ptr<Layer<Dtype> > layer(
-      new ConvolutionLayer<Dtype>(layer_param));
-  layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
-  layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
-  // Check against reference convolution.
-  const Dtype* top_data;
-  const Dtype* ref_top_data;
-  caffe_conv(this->blob_bottom_, convolution_param, layer->blobs(),
-      this->MakeReferenceTop(this->blob_top_));
-  top_data = this->blob_top_->cpu_data();
-  ref_top_data = this->ref_blob_top_->cpu_data();
-  for (int i = 0; i < this->blob_top_->count(); ++i) {
-    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-4);
-  }
-  caffe_conv(this->blob_bottom_2_, convolution_param, layer->blobs(),
-      this->MakeReferenceTop(this->blob_top_2_));
-  top_data = this->blob_top_2_->cpu_data();
-  ref_top_data = this->ref_blob_top_->cpu_data();
-  for (int i = 0; i < this->blob_top_->count(); ++i) {
-    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-4);
-  }
-}
-
-TYPED_TEST(oclConvolutionLayerTest, TestConv2) {
-  Caffe::set_mode(Caffe::OCL);
-  typedef typename TypeParam::Dtype Dtype;
-  this->blob_bottom_vec_.clear();
-  this->blob_top_vec_.clear();
-  this->blob_bottom_vec_.push_back(this->blob_bottom_3_);
-  this->blob_top_vec_.push_back(this->blob_top_3_);
-  LayerParameter layer_param;
-  layer_param.set_xcl_name("conv2_layer.xclbin");
-  layer_param.set_kernel_name("conv2_layer");
-  ConvolutionParameter* convolution_param =
-      layer_param.mutable_convolution_param();
-  convolution_param->add_kernel_size(5);
-  convolution_param->add_stride(1);
-  convolution_param->set_num_output(256);
-  convolution_param->add_pad(2);
-  convolution_param->set_group(2);
-  convolution_param->mutable_weight_filler()->set_type("constant");
-  convolution_param->mutable_weight_filler()->set_value(1);
-  convolution_param->mutable_bias_filler()->set_type("constant");
-  convolution_param->mutable_bias_filler()->set_value(1);
-  shared_ptr<Layer<Dtype> > layer(
-      new ConvolutionLayer<Dtype>(layer_param));
-  layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
-  layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
-  // Check against reference convolution.
-  const Dtype* top_data;
-  const Dtype* ref_top_data;
-  caffe_conv(this->blob_bottom_3_, convolution_param, layer->blobs(),
-      this->MakeReferenceTop(this->blob_top_3_));
-  top_data = this->blob_top_3_->cpu_data();
-  ref_top_data = this->ref_blob_top_->cpu_data();
-  for (int i = 0; i < this->blob_top_3_->count(); ++i) {
-    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-4);
-  }
-}
-
 TYPED_TEST(oclConvolutionLayerTest, TestConv3) {
   Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
@@ -1147,20 +1073,25 @@ TYPED_TEST(oclConvolutionLayerTest, TestConv3) {
   this->blob_bottom_vec_.push_back(this->blob_bottom_4_);
   this->blob_top_vec_.push_back(this->blob_top_4_);
   LayerParameter layer_param;
-  layer_param.set_xcl_name("conv3_layer.xclbin");
-  layer_param.set_kernel_name("conv3_layer");
+  layer_param.set_xcl_name("winograd_pe.xclbin");
+  layer_param.set_kernel_name("winograd_pe");
+  shared_ptr<Layer<Dtype> > programLayer(
+      new XCLProgramLayer<Dtype>(layer_param));
+  programLayer->SetUp(this->prog_bot_, this->prog_top_);
+  programLayer->Forward(this->prog_bot_, this->prog_top_);
+  layer_param.set_ocl_enable(true);
   ConvolutionParameter* convolution_param =
       layer_param.mutable_convolution_param();
   convolution_param->add_kernel_size(3);
   convolution_param->add_stride(1);
   convolution_param->set_num_output(384);
   convolution_param->add_pad(1);
-  convolution_param->mutable_weight_filler()->set_type("constant");
-  convolution_param->mutable_weight_filler()->set_value(1);
-  convolution_param->mutable_bias_filler()->set_type("constant");
-  convolution_param->mutable_bias_filler()->set_value(1);
+  convolution_param->mutable_weight_filler()->set_type("gaussian");
+  convolution_param->mutable_bias_filler()->set_type("gaussian");
+  convolution_param->set_engine(ConvolutionParameter_Engine_OCL);
+  convolution_param->set_subengine(ConvolutionParameter_SubEngine_WINOGRAD);
   shared_ptr<Layer<Dtype> > layer(
-      new ConvolutionLayer<Dtype>(layer_param));
+      new OCLConvolutionLayer<Dtype>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
   // Check against reference convolution.
@@ -1171,10 +1102,50 @@ TYPED_TEST(oclConvolutionLayerTest, TestConv3) {
   top_data = this->blob_top_4_->cpu_data();
   ref_top_data = this->ref_blob_top_->cpu_data();
   for (int i = 0; i < this->blob_top_4_->count(); ++i) {
-    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-4);
+    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-3);
   }
 }
 
+TYPED_TEST(oclConvolutionLayerTest, TestConv3Direct) {
+  Caffe::set_mode(Caffe::OCL);
+  typedef typename TypeParam::Dtype Dtype;
+  this->blob_bottom_vec_.clear();
+  this->blob_top_vec_.clear();
+  this->blob_bottom_vec_.push_back(this->blob_bottom_4_);
+  this->blob_top_vec_.push_back(this->blob_top_4_);
+  LayerParameter layer_param;
+  layer_param.set_xcl_name("direct_conv.xclbin");
+  layer_param.set_kernel_name("conv5_layer");
+  shared_ptr<Layer<Dtype> > programLayer(
+      new XCLProgramLayer<Dtype>(layer_param));
+  programLayer->SetUp(this->prog_bot_, this->prog_top_);
+  programLayer->Forward(this->prog_bot_, this->prog_top_);
+  layer_param.set_ocl_enable(true);
+  ConvolutionParameter* convolution_param =
+      layer_param.mutable_convolution_param();
+  convolution_param->add_kernel_size(3);
+  convolution_param->add_stride(1);
+  convolution_param->set_num_output(384);
+  convolution_param->add_pad(1);
+  convolution_param->mutable_weight_filler()->set_type("gaussian");
+  convolution_param->mutable_bias_filler()->set_type("gaussian");
+  convolution_param->set_engine(ConvolutionParameter_Engine_OCL);
+  convolution_param->set_subengine(ConvolutionParameter_SubEngine_DIRECT);
+  shared_ptr<Layer<Dtype> > layer(
+      new OCLConvolutionLayer<Dtype>(layer_param));
+  layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
+  layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
+  // Check against reference convolution.
+  const Dtype* top_data;
+  const Dtype* ref_top_data;
+  caffe_conv(this->blob_bottom_4_, convolution_param, layer->blobs(),
+      this->MakeReferenceTop(this->blob_top_4_));
+  top_data = this->blob_top_4_->cpu_data();
+  ref_top_data = this->ref_blob_top_->cpu_data();
+  for (int i = 0; i < this->blob_top_4_->count(); ++i) {
+    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-3);
+  }
+}
 
 #endif // USE_OCL
 

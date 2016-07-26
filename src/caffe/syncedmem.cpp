@@ -96,7 +96,7 @@ inline void SyncedMemory::to_gpu() {
 #endif
 }
 
-inline void SyncedMemory::to_ocl() {
+inline void SyncedMemory::to_ocl(int RW) {
 #ifdef USE_OCL
   switch(head_) {
   case UNINITIALIZED:
@@ -105,20 +105,23 @@ inline void SyncedMemory::to_ocl() {
     own_cpu_data_ = true;
     ocl_ptr_ = (void *)clCreateBuffer(oclContext, 
         CL_MEM_READ_WRITE, size_, NULL, NULL); 
-    clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
-        size_, cpu_ptr_, 0, NULL, NULL);
+    if (RW)
+      clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
+          size_, cpu_ptr_, 0, NULL, NULL);
     head_ = HEAD_AT_OCL;
     break;
   case HEAD_AT_CPU:
     if(ocl_ptr_ == NULL) {
       ocl_ptr_ = (void *)clCreateBuffer(oclContext,
           CL_MEM_READ_WRITE, size_, NULL, NULL);
-      clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
-          size_, cpu_ptr_, 0, NULL, NULL);
+      if (RW)
+        clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
+            size_, cpu_ptr_, 0, NULL, NULL);
     }
     else
-      clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0, 
-          size_, cpu_ptr_, 0, NULL, NULL);
+      if (RW)
+        clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0, 
+            size_, cpu_ptr_, 0, NULL, NULL);
     head_ = SYNCED;
     break;
   case HEAD_AT_GPU:
@@ -158,7 +161,7 @@ const void* SyncedMemory::gpu_data() {
 
 const void* SyncedMemory::ocl_data() {
 #ifdef USE_OCL
-  to_ocl();
+  to_ocl(1);
   return (const void*)ocl_ptr_;
 #else
   NO_OCL;
@@ -202,10 +205,19 @@ void* SyncedMemory::mutable_gpu_data() {
 #endif
 }
 
-
 void* SyncedMemory::mutable_ocl_data() {
 #ifdef USE_OCL
-  to_ocl();
+  to_ocl(1);
+  head_ = HEAD_AT_OCL;
+  return ocl_ptr_;
+#else
+  NO_OCL;
+#endif
+}
+
+void* SyncedMemory::mutable_ocl_data(int RW) {
+#ifdef USE_OCL
+  to_ocl(RW);
   head_ = HEAD_AT_OCL;
   return ocl_ptr_;
 #else

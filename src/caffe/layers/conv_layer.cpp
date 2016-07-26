@@ -4,12 +4,6 @@
 
 namespace caffe {
 
-#ifdef USE_OCL
-template <typename Dtype>
-ConvolutionLayer<Dtype>::~ConvolutionLayer() {
-}
-#endif
-
 template <typename Dtype>
 void ConvolutionLayer<Dtype>::compute_output_shape() {
   const int* kernel_shape_data = this->kernel_shape_.cpu_data();
@@ -82,79 +76,6 @@ void ConvolutionLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     }
   }
 }
-
-#ifdef USE_OCL
-template <>
-void ConvolutionLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
-    const vector<Blob<float>*>& top) {  
-  const vector<shared_ptr<Blob<float> > > weight = this->blobs_;
-  const float* weight_data = weight[0]->ocl_data();
-  cl_event event;
-  cl_int error;
-
-  size_t global[3] = {top[0]->channels() / group_, 1, 1};
-  size_t local[3] = {1, 1, 1};
-
-  for (int i = 0; i < bottom.size(); i++) { 
-    const float *bottom_data = bottom[i]->ocl_data();
-    float *top_data = top[i]->mutable_ocl_data();
-    clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
-        (const void *)&bottom_data);
-    clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
-        (const void *)&weight_data);
-    clSetKernelArg(this->ocl_float_kernel, 2, sizeof(cl_mem), 
-        (const void *)&top_data);
-    clEnqueueNDRangeKernel(oclCommandQueue, this->ocl_float_kernel, 3, NULL,
-       (size_t *)&global, (size_t *)&local, 0, NULL, &event);
-    clWaitForEvents(1, &event); 
-  }
-  for (int i = 0; i < bottom.size(); i++) {
-    float *top_data = top[i]->mutable_cpu_data();
-    //bias
-    if (this->bias_term_) {
-      const float* bias_data = weight[1]->cpu_data();
-      for (int n = 0; n < top[i]->num(); n++) {
-        for (int o = 0; o < top[i]->channels(); o++) {
-          for (int y = 0; y < top[i]->height(); y++) {
-            for (int x = 0; x < top[i]->width(); x++) {
-              top_data[top[i]->offset(n, o, y, x)] += bias_data[o];
-            }
-          }
-        }
-      }
-    }
-  }  
-}
-
-template <>
-void ConvolutionLayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
-    const vector<Blob<double>*>& top) { 
-  Forward_cpu(bottom, top);
-}
-
-template <typename Dtype>
-void ConvolutionLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top) {
-  cl_int error;
-  std::string path(".build_release/opencl/src/caffe/layers/");
-
-  const char *filename = (path + this->layer_param_.xcl_name()).c_str();
-
-  char *sourceStr;
-  size_t sourceSize = caffe::convertToString(filename, &sourceStr);
-  this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1,
-      &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL,
-      &error);
-  clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, &error);
-  delete sourceStr;
-  this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program,
-      this->layer_param_.kernel_name().c_str(), &error);
-  Call_ocl(bottom, top);
-  clReleaseKernel(this->ocl_float_kernel);
-  clReleaseProgram(this->ocl_layer_program);
-}
-
-#endif
 
 #ifdef CPU_ONLY
 STUB_GPU(ConvolutionLayer);

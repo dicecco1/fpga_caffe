@@ -125,7 +125,7 @@ void LRNLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
   for (int i = 0; i < scale_.count(); ++i) {
     scale_data[i] = k_;
   } 
-  cl_int error;
+  /*cl_int error;
   std::string path(".build_release/opencl/src/caffe/layers/");
   
   const char *filename = (path + this->layer_param_.xcl_name()).c_str();
@@ -140,9 +140,11 @@ void LRNLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
   delete sourceStr;
   this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program,
       this->layer_param_.kernel_name().c_str(), &error);
-  Call_ocl(bottom, top);
-  clReleaseKernel(this->ocl_float_kernel);
-  clReleaseProgram(this->ocl_layer_program);
+  */
+  if (this->layer_param_.ocl_enable())
+    Call_ocl(bottom, top);
+  else
+    Forward_cpu(bottom, top); 
 }
 
 #endif
