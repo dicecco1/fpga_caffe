@@ -164,7 +164,6 @@ void OCLConvolutionLayer<float>::winograd_conv(
     
   std::vector<cl_event> events(this->num_ * this->group_);
 
-
   int offshape;
   int ydim = top[0]->shape(2);
   int xdim = top[0]->shape(3);
@@ -173,13 +172,12 @@ void OCLConvolutionLayer<float>::winograd_conv(
 
   if (top[0]->shape(3) % 16 != 0) {
     offshape = (top[0]->shape(3) / 16 + 1) * 16;
-    if (offshape * ytile / 8 < 14) {
+    if (offshape * ytile / 8 < 12) {
       offshape = offshape * 2;
     }
   }
   else
     offshape = top[0]->shape(3);
-
 
   int idx_off;
   int idx;
@@ -202,7 +200,7 @@ void OCLConvolutionLayer<float>::winograd_conv(
   int xtile_pad = offshape / 2;
   int rburst = ydim * burstchannels; 
   int numgroups = this->group_; 
-
+ 
   vector<int> outshape(4);
 
   for (int i = 0; i < bottom.size(); i++) {
@@ -214,7 +212,7 @@ void OCLConvolutionLayer<float>::winograd_conv(
       top[i]->Reshape(outshape);
     }
     const float *bottom_data = bottom[i]->ocl_data();
-    float *top_data = top[i]->mutable_ocl_data();
+    float *top_data = top[i]->mutable_ocl_data(0);
 
     clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
       (const void *)&bottom_data);
@@ -263,6 +261,7 @@ void OCLConvolutionLayer<float>::winograd_conv(
 
     clWaitForEvents(this->num_ * numgroups, &(events[0]));
     top_data = top[i]->mutable_cpu_data();
+    if (top[i]->shape(3) != top[i]->shape(2)){
     for (int n = 0; n < this->num_; ++n) {
       for (int j = 0; j < top[0]->shape(1); ++j) {
         for (int y = 0; y < ydim; ++y) {
@@ -276,7 +275,7 @@ void OCLConvolutionLayer<float>::winograd_conv(
         }
       }
     }
-    if (top[i]->shape(3) != top[i]->shape(2)) {
+    //if (top[i]->shape(3) != top[i]->shape(2)) {
       outshape[0] = top[i]->shape(0);
       outshape[1] = top[i]->shape(1);
       outshape[2] = top[i]->shape(2);

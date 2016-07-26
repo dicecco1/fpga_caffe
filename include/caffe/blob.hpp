@@ -227,6 +227,7 @@ class Blob {
   Dtype* mutable_cpu_data();
   Dtype* mutable_gpu_data();
   Dtype* mutable_ocl_data();
+  Dtype* mutable_ocl_data(int RW);
   Dtype* mutable_cpu_diff();
   Dtype* mutable_gpu_diff();
   Dtype* mutable_ocl_diff();

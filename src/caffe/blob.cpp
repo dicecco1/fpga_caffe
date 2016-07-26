@@ -139,6 +139,12 @@ Dtype* Blob<Dtype>::mutable_ocl_data() {
 }
 
 template <typename Dtype>
+Dtype* Blob<Dtype>::mutable_ocl_data(int RW) {
+  CHECK(data_);
+  return static_cast<Dtype*>(data_->mutable_ocl_data(RW));
+}
+
+template <typename Dtype>
 Dtype* Blob<Dtype>::mutable_cpu_diff() {
   CHECK(diff_);
   return static_cast<Dtype*>(diff_->mutable_cpu_data());
