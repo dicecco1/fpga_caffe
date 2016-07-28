@@ -89,66 +89,6 @@ void LRNLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   }
 }
 
-#ifdef USE_OCL
-
-template <>
-void LRNLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
-    const vector<Blob<float>*>& top) { 
-  cl_event event;
-
-  const float *bottom_data = bottom[0]->ocl_data();
-  float *top_data = top[0]->mutable_ocl_data();
-  clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
-      (const void *)&bottom_data);
-  clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
-      (const void *)&top_data);
-  size_t global[3] = {channels_, 1, 1};
-  size_t local[3] = {1, 1, 1};
-
-  clEnqueueNDRangeKernel(oclCommandQueue, this->ocl_float_kernel, 3, NULL, 
-      (size_t *)&global, (size_t *)&local, 0, NULL, &event);
-
-  clWaitForEvents(1, &event);
-}  
-
-template <>
-void LRNLayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
-    const vector<Blob<double>*>& top) {
-  Forward_cpu(bottom, top);
-}
-
-template <typename Dtype>
-void LRNLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
-    const vector<Blob<Dtype>*>& top) { 
-  Dtype* scale_data = scale_.mutable_cpu_data();
-  // start with the constant value
-  for (int i = 0; i < scale_.count(); ++i) {
-    scale_data[i] = k_;
-  } 
-  /*cl_int error;
-  std::string path(".build_release/opencl/src/caffe/layers/");
-  
-  const char *filename = (path + this->layer_param_.xcl_name()).c_str();
-
-  char *sourceStr;
-  size_t sourceSize = caffe::convertToString(filename, &sourceStr);
-
-  this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1, 
-      &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL,
-      &error);
-  clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, &error);
-  delete sourceStr;
-  this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program,
-      this->layer_param_.kernel_name().c_str(), &error);
-  */
-  if (this->layer_param_.ocl_enable())
-    Call_ocl(bottom, top);
-  else
-    Forward_cpu(bottom, top); 
-}
-
-#endif
-
 template <typename Dtype>
 void LRNLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top) {

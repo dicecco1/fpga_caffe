@@ -869,6 +869,8 @@ class OCLNeuronLayerTest : public MultiDeviceTest<TypeParam> {
   Blob<Dtype>* const blob_top_;
   vector<Blob<Dtype>*> blob_bottom_vec_;
   vector<Blob<Dtype>*> blob_top_vec_;
+  vector<Blob<Dtype>*> prog_bot_;
+  vector<Blob<Dtype>*> prog_top_;
 };
 
 TYPED_TEST_CASE(OCLNeuronLayerTest, TestDtypesAndDevices);
@@ -879,7 +881,12 @@ TYPED_TEST(OCLNeuronLayerTest, TestReLUOCL) {
   LayerParameter layer_param;
   layer_param.set_xcl_name("relu_layer.xclbin");
   layer_param.set_kernel_name("relu_layer");
-  ReLULayer<Dtype> layer(layer_param);
+  shared_ptr<Layer<Dtype> > programLayer(
+      new XCLProgramLayer<Dtype>(layer_param));
+  programLayer->SetUp(this->prog_bot_, this->prog_top_);
+  programLayer->Forward(this->prog_bot_, this->prog_top_);
+  layer_param.set_ocl_enable(true);
+  OCLReLULayer<Dtype> layer(layer_param);
   layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
   // Now, check values

@@ -63,6 +63,15 @@ shared_ptr<Layer<Dtype> > GetPoolingLayer(const LayerParameter& param) {
     }
     return shared_ptr<Layer<Dtype> >(new CuDNNPoolingLayer<Dtype>(param));
 #endif
+#ifdef USE_OCL
+   } else if (engine == PoolingParameter_Engine_OCL) {
+    if (param.top_size() > 1) {
+      LOG(INFO) << "OCL does not support multiple tops. "
+                << "Using Caffe's own pooling layer.";
+      return shared_ptr<Layer<Dtype> >(new PoolingLayer<Dtype>(param));
+    }
+    return shared_ptr<Layer<Dtype> >(new OCLPoolingLayer<Dtype>(param));
+#endif
   } else {
     LOG(FATAL) << "Layer " << param.name() << " has unknown engine.";
   }

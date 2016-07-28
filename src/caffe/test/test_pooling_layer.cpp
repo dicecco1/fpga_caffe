@@ -1220,11 +1220,15 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
     Blob<Dtype>* const blob_top_mask_;
     vector<Blob<Dtype>*> blob_bottom_vec_;
     vector<Blob<Dtype>*> blob_top_vec_;
+    vector<Blob<Dtype>*> prog_bot_;
+    vector<Blob<Dtype>*> prog_top_;
 
     void TestForwardPool (int layer_num) {
       LayerParameter layer_param;
+      layer_param.set_ocl_enable(true);
       PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
       int in_height, in_width, out_height, out_width, channels;
+      
       if(layer_num == 1) {
         layer_param.set_xcl_name("pool1_max_layer.xclbin");
         layer_param.set_kernel_name("pool1_max_layer");
@@ -1250,6 +1254,12 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
         out_height = 6;
         out_width = 6;
       }
+      shared_ptr<Layer<Dtype> > programLayer(
+          new XCLProgramLayer<Dtype>(layer_param));
+      programLayer->SetUp(this->prog_bot_, this->prog_top_);
+      programLayer->Forward(this->prog_bot_, this->prog_top_);
+
+      pooling_param->set_engine(PoolingParameter_Engine_OCL); 
       pooling_param->set_stride(2);
       pooling_param->set_kernel_size(3);
       pooling_param->set_pool(PoolingParameter_PoolMethod_MAX);
@@ -1270,7 +1280,7 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
           }
         }
       }
-      PoolingLayer<Dtype> layer(layer_param);
+      OCLPoolingLayer<Dtype> layer(layer_param);
       layer.SetUp(blob_bottom_vec_, blob_top_vec_);
       EXPECT_EQ(blob_top_->num(), num);
       EXPECT_EQ(blob_top_->channels(), channels);

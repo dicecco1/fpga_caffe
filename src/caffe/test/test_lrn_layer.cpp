@@ -472,6 +472,8 @@ class OCLLRNLayerTest : public MultiDeviceTest<TypeParam> {
     Blob<Dtype>* const blob_top_;
     vector<Blob<Dtype>*> blob_bottom_vec_;
     vector<Blob<Dtype>*> blob_top_vec_;
+    vector<Blob<Dtype>*> prog_bot_;
+    vector<Blob<Dtype>*> prog_top_;
 };
 
 template <typename TypeParam>
@@ -559,7 +561,12 @@ TYPED_TEST(OCLLRNLayerTest, TestForwardAcrossChannelsLRN1) {
   layer_param.mutable_lrn_param()->set_local_size(5);
   layer_param.mutable_lrn_param()->set_alpha((Dtype)0.0001);
   layer_param.mutable_lrn_param()->set_beta((Dtype)0.75);
-  LRNLayer<Dtype> layer(layer_param);
+  shared_ptr<Layer<Dtype> > programLayer(
+      new XCLProgramLayer<Dtype>(layer_param));
+  programLayer->SetUp(this->prog_bot_, this->prog_top_);
+  programLayer->Forward(this->prog_bot_, this->prog_top_);
+  layer_param.set_ocl_enable(true);
+  OCLLRNLayer<Dtype> layer(layer_param);
   layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
   Blob<Dtype> top_reference;
@@ -581,7 +588,12 @@ TYPED_TEST(OCLLRNLayerTest, TestForwardAcrossChannelsLRN2) {
   layer_param.mutable_lrn_param()->set_alpha((Dtype)0.0001);
   layer_param.mutable_lrn_param()->set_beta((Dtype)0.75);
   this->blob_bottom_->Reshape(1, 256, 27, 27);
-  LRNLayer<Dtype> layer(layer_param);
+  shared_ptr<Layer<Dtype> > programLayer(
+      new XCLProgramLayer<Dtype>(layer_param));
+  programLayer->SetUp(this->prog_bot_, this->prog_top_);
+  programLayer->Forward(this->prog_bot_, this->prog_top_);
+  layer_param.set_ocl_enable(true); 
+  OCLLRNLayer<Dtype> layer(layer_param);
   Blob<Dtype> top_reference;
   this->ReferenceLRNForward(*(this->blob_bottom_), layer_param,
             &top_reference);

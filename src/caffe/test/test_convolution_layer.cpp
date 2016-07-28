@@ -1105,7 +1105,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestConv3) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-3);
   }
 }
-
+/*
 TYPED_TEST(oclConvolutionLayerTest, TestConv3Direct) {
   Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
@@ -1146,7 +1146,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestConv3Direct) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-3);
   }
 }
-
+*/
 #endif // USE_OCL
 
 }  // namespace caffe

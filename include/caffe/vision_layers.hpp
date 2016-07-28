@@ -343,7 +343,7 @@ class CuDNNConvolutionLayer : public ConvolutionLayer<Dtype> {
  *   the output channel N' columns of the output matrix.
  */
 template <typename Dtype>
-class OCLConvolutionLayer : public BaseConvolutionLayer<Dtype> {
+class OCLConvolutionLayer : public ConvolutionLayer<Dtype> {
  public:
   /**
    * @param param provides ConvolutionParameter convolution_param,
@@ -374,7 +374,7 @@ class OCLConvolutionLayer : public BaseConvolutionLayer<Dtype> {
    *    kernels + stream parallelism) engines.
    */
   explicit OCLConvolutionLayer(const LayerParameter& param)
-      : BaseConvolutionLayer<Dtype>(param) {}
+      : ConvolutionLayer<Dtype>(param) {}
   virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
   virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
@@ -383,14 +383,6 @@ class OCLConvolutionLayer : public BaseConvolutionLayer<Dtype> {
   virtual inline const char* type() const { return "Convolution"; }
 
  protected:
-  virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
-  virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
-  virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
-      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
-  virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
-      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   virtual inline bool reverse_dimensions() { return false; }
   virtual void compute_output_shape();
   virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
@@ -487,12 +479,6 @@ class LRNLayer : public Layer<Dtype> {
       const vector<Blob<Dtype>*>& top);
   virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
-#ifdef USE_OCL
-  virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
-  virtual void Call_ocl(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
-#endif
   virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
@@ -604,6 +590,31 @@ class CuDNNLCNLayer : public LRNLayer<Dtype> {
 
 #endif
 
+#ifdef USE_OCL
+/**
+ * @brief Normalize the input in a local region across or within feature maps.
+ *
+ * TODO(dox): thorough documentation for Forward, Backward, and proto params.
+ */
+template <typename Dtype>
+class OCLLRNLayer : public LRNLayer<Dtype> {
+ public:
+  explicit OCLLRNLayer(const LayerParameter& param)
+      : LRNLayer<Dtype>(param) {}
+
+  virtual inline const char* type() const { return "LRN"; }
+  virtual inline int ExactNumBottomBlobs() const { return 1; }
+  virtual inline int ExactNumTopBlobs() const { return 1; }
+
+ protected:
+  virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+  virtual void Call_ocl(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+  
+};
+#endif
+
 /**
  * @brief Pools the input image by taking the max, average, etc. within regions.
  *
@@ -638,13 +649,6 @@ class PoolingLayer : public Layer<Dtype> {
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
-  
-#ifdef USE_OCL
-  virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
-  virtual void Call_ocl(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
-#endif
 
   int kernel_h_, kernel_w_;
   int stride_h_, stride_w_;
@@ -688,6 +692,37 @@ class CuDNNPoolingLayer : public PoolingLayer<Dtype> {
   cudnnPoolingDescriptor_t  pooling_desc_;
   cudnnPoolingMode_t        mode_;
 };
+#endif
+
+#ifdef USE_OCL
+
+/**
+ * @brief Pools the input image by taking the max, average, etc. within regions.
+ *
+ * TODO(dox): thorough documentation for Forward, Backward, and proto params.
+ */
+template <typename Dtype>
+class OCLPoolingLayer : public PoolingLayer<Dtype> {
+ public:
+  explicit OCLPoolingLayer(const LayerParameter& param)
+      : PoolingLayer<Dtype>(param) {}
+  virtual inline const char* type() const { return "Pooling"; }
+  virtual inline int ExactNumBottomBlobs() const { return 1; }
+  virtual inline int MinTopBlobs() const { return 1; }
+  // MAX POOL layers can output an extra top blob for the mask;
+  // others can only output the pooled inputs.
+  virtual inline int MaxTopBlobs() const {
+    return (this->layer_param_.pooling_param().pool() ==
+            PoolingParameter_PoolMethod_MAX) ? 2 : 1;
+  }
+
+ protected:
+  virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+  virtual void Call_ocl(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+};
+
 #endif
 
 /**

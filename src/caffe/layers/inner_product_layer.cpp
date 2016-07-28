@@ -74,69 +74,6 @@ void InnerProductLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   }
 }
 
-#ifdef USE_OCL
-template <>
-void InnerProductLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
-    const vector<Blob<float>*>& top) {
-  cl_event event;
-  const float* bottom_data = bottom[0]->ocl_data();
-  float* top_data = top[0]->mutable_ocl_data();
-  const float* weight = this->blobs_[0]->ocl_data();
-  clSetKernelArg(this->ocl_float_kernel, 0, sizeof(cl_mem),
-      (const void *)&bottom_data);
-  clSetKernelArg(this->ocl_float_kernel, 1, sizeof(cl_mem),
-      (const void *)&weight);
-  clSetKernelArg(this->ocl_float_kernel, 2, sizeof(cl_mem),
-      (const void *)&top_data);
-  size_t global[3] = {8, 1, 1};
-  size_t local[3] = {1, 1, 1};
-  if(this->layer_param_.kernel_name() == "fc8_layer")
-    global[0] = 5;
-  clEnqueueNDRangeKernel(oclCommandQueue, this->ocl_float_kernel, 3, NULL,
-      (size_t *)&global, (size_t *)&local, 0, NULL, &event);
-  clWaitForEvents(1, &event);
-  top_data = top[0]->mutable_cpu_data();
-  if (bias_term_) {
-    const float *bmult = bias_multiplier_.cpu_data();
-    const float *bias_vals = this->blobs_[1]->cpu_data();
-    caffe_cpu_gemm(CblasNoTrans, CblasNoTrans, M_, N_, 1, (float)1.0,
-        bmult, bias_vals, (float)1.0, top_data);
-  }
-}
-
-template <>
-void InnerProductLayer<double>::Call_ocl(const vector<Blob<double>*>& bottom,
-    const vector<Blob<double>*>& top) {
-  Forward_cpu(bottom, top);
-}
-
-template <typename Dtype>
-void InnerProductLayer<Dtype>::Forward_ocl(const vector <Blob<Dtype>*>& bottom,
-    const vector<Blob<Dtype>*>& top) {
-  /*cl_int error;
-  
-  std::string path(".build_release/opencl/src/caffe/layers/");
-
-  const char *filename = (path + this->layer_param_.xcl_name()).c_str();
-
-  char *sourceStr;
-  size_t sourceSize = caffe::convertToString(filename, &sourceStr);
-
-  this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1, 
-      &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL,
-      &error);
-  clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, &error);
-  delete sourceStr;
-  this->ocl_float_kernel = clCreateKernel(this->ocl_layer_program,
-      this->layer_param_.kernel_name().c_str(), &error);
-  */
-  if (this->layer_param_.ocl_enable())
-    Call_ocl(bottom, top);
-  else
-    Forward_cpu(bottom, top); 
-}
-#endif
-
 template <typename Dtype>
 void InnerProductLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top) {
