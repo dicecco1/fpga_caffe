@@ -1,7 +1,7 @@
 #include <vector>
 
 #include "caffe/util/math_functions.hpp"
-#include "caffe/vision_layers.hpp"
+#include "caffe/layers/ocl_lrn_layer.hpp"
 
 namespace caffe {
 
