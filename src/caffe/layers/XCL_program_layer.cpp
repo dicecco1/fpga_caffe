@@ -36,10 +36,6 @@ void XCLProgramLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
 }
 
-#ifdef CPU_ONLY
-STUB_GPU(XCLProgramLayer);
-#endif
-
 INSTANTIATE_CLASS(XCLProgramLayer);
 REGISTER_LAYER_CLASS(XCLProgram);
 
