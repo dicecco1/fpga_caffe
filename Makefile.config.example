@@ -8,9 +8,6 @@
 # USE_OCL := 1
 # DSA := xilinx:adm-pcie-7v3:1ddr:1.0
 
-# OPENCL FPGA switch (uncomment to build with FPGA)
-# USE_FPGA := 1
-
 # CPU-only switch (uncomment to build without GPU support).
 # CPU_ONLY := 1
 
