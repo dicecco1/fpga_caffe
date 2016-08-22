@@ -2,21 +2,9 @@
 #include <string.h>
 #include <assert.h>
 
-#include <stdbool.h>
+/* Partial transform for the input tile */
 
-void transform_incol(float input[4], float output[4]) {
-#pragma HLS INLINE off
-  float A0 = input[0] - input[2];
-  float A1 = input[1] + input[2];
-  float A2 = input[2] - input[1];
-  float A3 = input[1] - input[3];
-  output[0] = A0;
-  output[1] = A1;
-  output[2] = A2;
-  output[3] = A3;
-}
-
-void transform_intilerow(float input[4], float output[4]) {
+void p_transform(float input[4], float output[4]) {
 #pragma HLS INLINE off
   float A0 = input[0];
   float A1 = input[1];
@@ -26,8 +14,10 @@ void transform_intilerow(float input[4], float output[4]) {
   output[0] = A0 - A2;
   output[1] = A1 + A2;
   output[2] = A2 - A1;
-  output[3] = A1 - A3; 
+  output[3] = A1 - A3;
 }
+
+/* First stage of the output tile transform */
 
 void transform_outtile_s1(float output_t[16], float output[8]) {
 #pragma HLS INLINE off
@@ -40,6 +30,8 @@ void transform_outtile_s1(float output_t[16], float output[8]) {
   output[6] = output_t[12] + output_t[13] + output_t[14];
   output[7] = output_t[13] - output_t[14] - output_t[15];
 }
+
+/* Second stage of the output tile transform */
 
 void transform_outtile_s2(float input[8], float output[4]) {
 #pragma HLS INLINE off
@@ -68,7 +60,12 @@ typedef struct {
   float val15;
 } floatv16;
 
-void acc_out(floatv16 *outbuf, floatv16 *tempout, float ot[4][4], int bank_off, int offset, int offset2) {
+/* Output accumulation function, accumulates the output tiles into the 
+ * appropriate output buffer based off of the bank. Note this function needs
+ * inlining to be disabled or it is synthesized incorrectly */
+
+void acc_out(floatv16 *outbuf, floatv16 *tempout, float ot[4][4], int bank_off, 
+    int offset, int offset2) {
 #pragma HLS INLINE off
   if (bank_off == 0) {
     outbuf[offset].val0 += ot[0][0];
@@ -107,10 +104,36 @@ void acc_out(floatv16 *outbuf, floatv16 *tempout, float ot[4][4], int bank_off, 
   }
 }
 
+/* Kernel used for computing Winograd (F(3x3, 2x2)) based convolution. This 
+ * kernel assumes that the weights have been pre-transformed. 
+ * input:         flattened input array containing image data
+ * weights:       pre-transformed 3x3 filters
+ * bias:          flattened bias array
+ * output:        output of the convolution, padded to be divisible by 16 on 
+ *                the x dimension
+ * group:         group index, leave as 0 if not using group convolution
+ * inchannels:    number of input channels
+ * outchannels:   number of output channels
+ * burstchannels: number of input channels to be handled at once
+ * rpo:           number of reads required to cover all input channels
+ * ydim:          size in the  y dimension
+ * xdim:          size in the x dimension
+ * ytile:         number of rows of tiles
+ * xtile:         number of columns of tiles
+ * ytile_pad:     padded number of rows of tiles (not used)
+ * xtile_pad:     padded number of columns of tiles
+ * rburst:        number of input rows to read
+ * dataoff:       image offset
+ * numgroups:     number of groups
+ */ 
+
 void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output, 
       int group, int inchannels, int outchannels, int burstchannels, int rpo,
       int ydim, int xdim, int ytile, int xtile, int ytile_pad, int xtile_pad, 
       int rburst, int dataoff, int numgroups) {
+
+/* Ports */
+
 #pragma HLS data_pack variable=weights
 #pragma HLS data_pack variable=output
 #pragma HLS INTERFACE m_axi port=input offset=slave bundle=gmem1
@@ -140,56 +163,71 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
 #pragma HLS INTERFACE s_axilite port=rburst bundle=control
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
-  float inbuf[128 * 128][4][2];
+  // Input tile buffer
+  float inbuf[128 * 128][4][2]; 
 #pragma HLS ARRAY_PARTITION variable=inbuf cyclic factor=2 dim=3
 #pragma HLS ARRAY_PARTITION variable=inbuf cyclic factor=4 dim=2
 #pragma HLS ARRAY_PARTITION variable=inbuf cyclic factor=4 dim=1
 
+  // Buffer for holding extra data in an edge case where xtile==xtile_pad
   float sidebuf[2048][4][2];
 #pragma HLS ARRAY_PARTITION variable=sidebuf cyclic factor=2 dim=3
 #pragma HLS ARRAY_PARTITION variable=sidebuf cyclic factor=4 dim=2
 
+  // Registers used for loading data from sidebuf
   float sidebuf_val[4][2];
 #pragma HLS ARRAY_PARTITION variable=sidebuf_val cyclic factor=2 dim=2
 #pragma HLS ARRAY_PARTITION variable=sidebuf_val cyclic factor=4 dim=1
 
+  // Output buffer used for writing
   floatv16 outbuf[256 * 16];
+  // Temporary output buffer to improve throughput during mult-acc stage
   floatv16 tempout[128 * 16];
 
+  // Buffer used for reading lines from the input
   float line[260] = {0};
 #pragma HLS ARRAY_PARTITION variable=line cyclic factor=2
 
+  // Weight buffer
   floatv16 wbuf[256];
 
+  // Bias buffer
   float biasbuf[1024];
+
 
   float inrow[2];
 #pragma HLS ARRAY_PARTITION variable=inrow complete
 
+  // Input tile column register
   float itcol[4];
 #pragma HLS ARRAY_PARTITION variable=itcol complete
+  // Column register post p_transform
   float otcol[4];
 #pragma HLS ARRAY_PARTITION variable=otcol complete
 
+  // Temporary input tile registers
   float itt[4][4][4];
 #pragma HLS ARRAY_PARTITION variable=itt complete dim=1
 #pragma HLS ARRAY_PARTITION variable=itt complete dim=2
 #pragma HLS ARRAY_PARTITION variable=itt complete dim=3
 
-  float ott[4][4][4];
-#pragma HLS ARRAY_PARTITION variable=ott complete dim=1
-#pragma HLS ARRAY_PARTITION variable=ott complete dim=2
-#pragma HLS ARRAY_PARTITION variable=ott complete dim=3
-
-  float it[4][4 * 4];
+  // Input tile registers post transform
+  float it[4][4][4];
 #pragma HLS ARRAY_PARTITION variable=it complete dim=1
 #pragma HLS ARRAY_PARTITION variable=it complete dim=2
+#pragma HLS ARRAY_PARTITION variable=it complete dim=3
 
+  // Temporary output tile registers
+  float ott[4][4 * 4];
+#pragma HLS ARRAY_PARTITION variable=ott complete dim=1
+#pragma HLS ARRAY_PARTITION variable=ott complete dim=2
+
+  // Ouput tile transform stage 1 output
   float ot_s1[4][8];
 #pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=2
 
-
+  // Output tile transform stage 2 output
   float ot[4][4];
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=2 
@@ -250,17 +288,19 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
   unsigned int offtemp1 = 0;
   unsigned int offtemp2 = 0;
 
-  //unsigned int id_in, id_inx, idx, start_x;
   unsigned int off;
 
   fact = ((xtile_pad) >> 3);
 
+  /* Read bias data into buffer */
   memcpy(biasbuf, bias + outchannels * group, sizeof(float) * outchannels);
 
   for (n = 0; n < rpo; ++n) {
     y_off = 0;
     p_off = 1;
     i_off = 0;
+
+    /* Clear tile buffers that have been modified after column transform */
     RESETLOOP:for (i = 0; i < burstchannels; ++i) {
       for (x = 0; x < xtile_pad; ++x) {
 #pragma HLS pipeline
@@ -278,6 +318,7 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
       }
     }
 
+    /* Read the input line by line and tile it into the tile buffer */
     IREADLOOP: for (i = 0; i < rburst; ++i) {
       memcpy(line + 1, input + dataoff * numgroups * inchannels * ydim * xdim + 
           i * xdim + group * inchannels * ydim * xdim + 
@@ -298,7 +339,6 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
 
       XTILELOOP: for (x = 0; x < xtile_pad; ++x) {
 #pragma HLS DEPENDENCE variable=inbuf inter false
-//#pragma HLS DEPENDENCE variable=inbuf intra false
 #pragma HLS pipeline
         int start_x = x * 2;
 
@@ -331,14 +371,15 @@ void winograd_pe(float *input, floatv16 *weights, float *bias, floatv16 *output,
       p_off++;
     }
 
-ITRANSLOOP: for (i = 0; i < (burstchannels * ytile * xtile_pad) >> 2; ++i) {
+    /* Apply a partial transform to all of the columns of the tile buffer */
+    ITRANSLOOP: for (i = 0; i < (burstchannels * ytile * xtile_pad) >> 2; ++i) {
 #pragma HLS pipeline
       for (off = 0; off < 4; ++off) {
         for (q = 0; q < 2; ++q) {
           for (p = 0; p < 4; ++p) {
             itcol[p] = inbuf[i * 4 + off][p][q];
           }
-          transform_incol(itcol, otcol);
+          p_transform(itcol, otcol);
           for (p = 0; p < 4; ++p) {
             inbuf[i * 4 + off][p][q] = otcol[p];
           }
@@ -353,7 +394,7 @@ ITRANSLOOP: for (i = 0; i < (burstchannels * ytile * xtile_pad) >> 2; ++i) {
           for (p = 0; p < 4; ++p) {
             itcol[p] = sidebuf[i][p][q];
           }
-          transform_incol(itcol, otcol);
+          p_transform(itcol, otcol);
           for (p = 0; p < 4; ++p) {
             sidebuf[i][p][q] = otcol[p];
           }
@@ -362,11 +403,13 @@ ITRANSLOOP: for (i = 0; i < (burstchannels * ytile * xtile_pad) >> 2; ++i) {
     }
     
     for (o = 0; o < outchannels; ++o) {
-      memcpy(wbuf, weights + (o + outchannels * group) * inchannels + n * burstchannels, sizeof(floatv16) * burstchannels);
+      memcpy(wbuf, weights + (o + outchannels * group) * inchannels + 
+          n * burstchannels, sizeof(floatv16) * burstchannels);
       out_offset = dataoff * numgroups * outchannels * ydim * fact + 
                     ((o + outchannels * group) * ydim) * fact;
 
       if (n == 0) {
+        /* Set the output buffers to contain the biases */
         for (y = 0; y < ytile; ++y) {
           for (x = 0; x < fact; ++x) {
 #pragma HLS pipeline
@@ -424,7 +467,8 @@ ITRANSLOOP: for (i = 0; i < (burstchannels * ytile * xtile_pad) >> 2; ++i) {
       yt_off = 0;
       bank_off = 0;
       sb_off = 0;
-      MULTACCSTAGE: for (i = 0; i < (burstchannels * ytile * xtile_pad) >> 2; ++i, ++tile_cnt, ++xt_off) {
+      MULTACCSTAGE: for (i = 0; i < (burstchannels * ytile * xtile_pad) >> 2; 
+                        ++i, ++tile_cnt, ++xt_off) {
 #pragma HLS DEPENDENCE variable=outbuf inter distance=14 true
 #pragma HLS DEPENDENCE variable=tempout inter distance=14 true
 #pragma HLS DEPENDENCE variable=ot inter false
@@ -480,32 +524,38 @@ ITRANSLOOP: for (i = 0; i < (burstchannels * ytile * xtile_pad) >> 2; ++i) {
             itt[j][3][3] = inbuf[i * 4 + j + 1][3][1]; 
           }
 
-          transform_intilerow(itt[j][0], ott[j][0]);
-          transform_intilerow(itt[j][1], ott[j][1]);
-          transform_intilerow(itt[j][2], ott[j][2]);
-          transform_intilerow(itt[j][3], ott[j][3]);
+          /* Complete the remaining transform steps */
 
-          it[j][0] = ott[j][0][0] * wbuf[w_off].val0;
-          it[j][1] = ott[j][0][1] * wbuf[w_off].val1;
-          it[j][2] = ott[j][0][2] * wbuf[w_off].val2;
-          it[j][3] = ott[j][0][3] * wbuf[w_off].val3;
+          p_transform(itt[j][0], it[j][0]);
+          p_transform(itt[j][1], it[j][1]);
+          p_transform(itt[j][2], it[j][2]);
+          p_transform(itt[j][3], it[j][3]);
 
-          it[j][4] = ott[j][1][0] * wbuf[w_off].val4;
-          it[j][5] = ott[j][1][1] * wbuf[w_off].val5;
-          it[j][6] = ott[j][1][2] * wbuf[w_off].val6;
-          it[j][7] = ott[j][1][3] * wbuf[w_off].val7;
+          /* Compute the element-wise multiplication between weight and input
+           * tile */
 
-          it[j][8] = ott[j][2][0] * wbuf[w_off].val8;
-          it[j][9] = ott[j][2][1] * wbuf[w_off].val9;
-          it[j][10] = ott[j][2][2] * wbuf[w_off].val10;
-          it[j][11] = ott[j][2][3] * wbuf[w_off].val11;
+          ott[j][0] = it[j][0][0] * wbuf[w_off].val0;
+          ott[j][1] = it[j][0][1] * wbuf[w_off].val1;
+          ott[j][2] = it[j][0][2] * wbuf[w_off].val2;
+          ott[j][3] = it[j][0][3] * wbuf[w_off].val3;
 
-          it[j][12] = ott[j][3][0] * wbuf[w_off].val12;
-          it[j][13] = ott[j][3][1] * wbuf[w_off].val13;
-          it[j][14] = ott[j][3][2] * wbuf[w_off].val14;
-          it[j][15] = ott[j][3][3] * wbuf[w_off].val15;
+          ott[j][4] = it[j][1][0] * wbuf[w_off].val4;
+          ott[j][5] = it[j][1][1] * wbuf[w_off].val5;
+          ott[j][6] = it[j][1][2] * wbuf[w_off].val6;
+          ott[j][7] = it[j][1][3] * wbuf[w_off].val7;
 
-          transform_outtile_s1(it[j], ot_s1[j]);
+          ott[j][8] = it[j][2][0] * wbuf[w_off].val8;
+          ott[j][9] = it[j][2][1] * wbuf[w_off].val9;
+          ott[j][10] = it[j][2][2] * wbuf[w_off].val10;
+          ott[j][11] = it[j][2][3] * wbuf[w_off].val11;
+
+          ott[j][12] = it[j][3][0] * wbuf[w_off].val12;
+          ott[j][13] = it[j][3][1] * wbuf[w_off].val13;
+          ott[j][14] = it[j][3][2] * wbuf[w_off].val14;
+          ott[j][15] = it[j][3][3] * wbuf[w_off].val15;
+
+          /* Transform the output */
+          transform_outtile_s1(ott[j], ot_s1[j]);
           transform_outtile_s2(ot_s1[j], ot[j]);
         }
         

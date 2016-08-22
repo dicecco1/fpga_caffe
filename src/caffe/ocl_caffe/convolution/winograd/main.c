@@ -13,14 +13,16 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define TOP_NUM 1
 #define NUM_MASK_ROWS 3
 #define NUM_MASK_COLS 3
 #define STRIDE 1
 #define PAD 1
 
-void ref_conv(float *input, float *weights, float *bias, float *ocl_output, int groups, int inchannel, int outchannel,
-    int xsize, int ysize, int numimages) {
+/* Reference convolution implementation */
+
+void ref_conv(float *input, float *weights, float *bias, float *ocl_output, 
+    int groups, int inchannel, int outchannel, int xsize, int ysize, 
+    int numimages) {
   int o_head, k_head;
   int out_idx, in_idx, k_idx;
   // Convolution
@@ -42,9 +44,12 @@ void ref_conv(float *input, float *weights, float *bias, float *ocl_output, int 
                   int in_x = x * STRIDE - PAD + q;
                   if (in_y >= 0 && in_y < ysize
                     && in_x >= 0 && in_x < xsize) {
-                    out_idx = (((n * outchannel) + o + o_head) * ysize + y) * xsize + x;
-                    in_idx = (((n * inchannel) + k + k_head) * ysize + in_y) * xsize + in_x;
-                    k_idx = (((o + o_head) * (k_g) + k) * NUM_MASK_ROWS + p) * NUM_MASK_COLS + q;
+                    out_idx = (((n * outchannel) + o + o_head) * ysize + y) 
+                      * xsize + x;
+                    in_idx = (((n * inchannel) + k + k_head) * ysize + in_y) 
+                      * xsize + in_x;
+                    k_idx = (((o + o_head) * (k_g) + k) * NUM_MASK_ROWS + p) 
+                      * NUM_MASK_COLS + q;
                     ocl_output[out_idx] += input[in_idx] * weights[k_idx];
                   }
                 }
@@ -91,6 +96,8 @@ load_file_to_memory(const char *filename, char **result)
   return size;
 }
 
+/* Function for transforming the weights into winograd domain */
+
 void transform_weights_test(float *weights_in, float *weights_out) {
     float x0 = weights_in[1];
     float x1 = weights_in[0] + weights_in[2];
@@ -130,7 +137,8 @@ void transform_weights_test(float *weights_in, float *weights_out) {
 int main(int argc, char** argv)
 {
   if (argc != 11){
-    printf("%s <inputfile> numgroups inchannels outchannels burstchannels rpo dim tilesize padtsize\n", argv[0]);
+    printf("%s <inputfile> numgroups inchannels outchannels burstchannels rpo" 
+        "dim tilesize padtsize\n", argv[0]);
     return EXIT_FAILURE;
   }
 
@@ -182,28 +190,31 @@ int main(int argc, char** argv)
   char cl_platform_vendor[1001];
   char cl_platform_name[1001];
    
-  cl_mem ocl_input;                   // device memory used for the input array
-  cl_mem ocl_weights;                 // device memory used for the input array
-  cl_mem ocl_output;                  // device memory used for the ocl_output array   
-  cl_mem ocl_bias;                    // device memory used for the bias array
+  cl_mem ocl_input;                   // device memory for the input array
+  cl_mem ocl_weights;                 // device memory for the weight array
+  cl_mem ocl_output;                  // device memory for the output array   
+  cl_mem ocl_bias;                    // device memory  for the bias array
 
 
   // Fill inputs, weights, and biases
   int i = 0;
   int j = 0;
   int y, x, idx_pad, idx;
+  /* Fill the data */
   for(i = 0; i < insize; i++) {
     input[i] = (float)(rand() % 100 + 1) / 100;
   }
  
+  /* Fill the weights */
   for(i = 0; i < wsize; i++) {
     weights[i] = (float)(rand() % 100 + 1) / 100;
   }
 
+  /* Fill the bias */
   for(i = 0; i < outchannels; ++i) {
     bias[i] = (float)(rand() % 100 + 1) / 100;
   }
-
+/*
   for(i = 0; i < numimages * outchannels * numgroups; i++) {
     for (y = 0; y < ydim; ++y) {
       for (x = 0; x < xtile_pad * 2; ++x) {
@@ -212,12 +223,14 @@ int main(int argc, char** argv)
         hw_results[idx_pad] = 0;
       }
     }
-  }
+  }*/
 
   // Transform weights
   for (i = 0; i < outchannels * numgroups; ++i) {
     for (j = 0; j < inchannels * numgroups; ++j) {
-      transform_weights_test(weights + (i * inchannels * numgroups + j) * NUM_MASK_ROWS * NUM_MASK_COLS, trans_weights + (i * inchannels * numgroups + j) * 4 * 4);
+      transform_weights_test(weights + (i * inchannels * numgroups + j) 
+          * NUM_MASK_ROWS * NUM_MASK_COLS, trans_weights 
+          + (i * inchannels * numgroups + j) * 4 * 4);
     }
   } 
 
@@ -229,7 +242,8 @@ int main(int argc, char** argv)
     printf("Test failed\n");
     return EXIT_FAILURE;
   }
-  err = clGetPlatformInfo(platform_id,CL_PLATFORM_VENDOR,1000,(void *)cl_platform_vendor,NULL);
+  err = clGetPlatformInfo(platform_id, CL_PLATFORM_VENDOR, 1000, 
+      (void *)cl_platform_vendor, NULL);
   if (err != CL_SUCCESS)
   {
     printf("Error: clGetPlatformInfo(CL_PLATFORM_VENDOR) failed!\n");
@@ -237,7 +251,8 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
   printf("CL_PLATFORM_VENDOR %s\n",cl_platform_vendor);
-  err = clGetPlatformInfo(platform_id,CL_PLATFORM_NAME,1000,(void *)cl_platform_name,NULL);
+  err = clGetPlatformInfo(platform_id, CL_PLATFORM_NAME, 1000, 
+      (void *)cl_platform_name, NULL);
   if (err != CL_SUCCESS)
   {
     printf("Error: clGetPlatformInfo(CL_PLATFORM_NAME) failed!\n");
@@ -251,8 +266,8 @@ int main(int argc, char** argv)
 #if defined (FPGA_DEVICE)
   fpga = 1;
 #endif
-  err = clGetDeviceIDs(platform_id, fpga ? CL_DEVICE_TYPE_ACCELERATOR : CL_DEVICE_TYPE_CPU,
-                       1, &device_id, NULL);
+  err = clGetDeviceIDs(platform_id, fpga ? CL_DEVICE_TYPE_ACCELERATOR : 
+      CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
   if (err != CL_SUCCESS)
   {
     printf("Error: Failed to create a device group!\n");
@@ -295,8 +310,8 @@ int main(int argc, char** argv)
   size_t n = n_i;
 
   // Create the compute program from offline
-  program = clCreateProgramWithBinary(context, 1, &device_id, &n,
-                                      (const unsigned char **) &kernelbinary, &status, &err);
+  program = clCreateProgramWithBinary(context, 1, &device_id, &n, 
+      (const unsigned char **) &kernelbinary, &status, &err);
   if ((!program) || (err!=CL_SUCCESS)) {
     printf("Error: Failed to create compute program from binary %d!\n", err);
     printf("Test failed\n");
@@ -311,7 +326,8 @@ int main(int argc, char** argv)
     char buffer[2048];
 
     printf("Error: Failed to build program executable!\n");
-    clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);
+    clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 
+        sizeof(buffer), buffer, &len);
     printf("%s\n", buffer);
     printf("Test failed\n");
     return EXIT_FAILURE;
@@ -327,10 +343,14 @@ int main(int argc, char** argv)
   }
 
   // Create the input and ocl_output arrays in device memory for our calculation
-  ocl_input = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) * insize, NULL, NULL);
-  ocl_weights = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) * wtsize, NULL, NULL);//wsize, NULL, NULL);
-  ocl_output = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float) * outsize_pad, NULL, NULL);
-  ocl_bias = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * outsize_pad, NULL, NULL); 
+  ocl_input = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) 
+      * insize, NULL, NULL);
+  ocl_weights = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) 
+      * wtsize, NULL, NULL);//wsize, NULL, NULL);
+  ocl_output = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float) 
+      * outsize_pad, NULL, NULL);
+  ocl_bias = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) 
+      * outsize_pad, NULL, NULL); 
   
   if (!ocl_input || !ocl_weights || !ocl_output || !ocl_bias)
   {
@@ -340,7 +360,8 @@ int main(int argc, char** argv)
   }    
     
   // Write our data set into the input array in device memory 
-  err = clEnqueueWriteBuffer(commands, ocl_input, CL_TRUE, 0, sizeof(float) * insize, input, 0, NULL, NULL);
+  err = clEnqueueWriteBuffer(commands, ocl_input, CL_TRUE, 0, sizeof(float) 
+      * insize, input, 0, NULL, NULL);
   if (err != CL_SUCCESS)
   {
     printf("Error: Failed to write to source array a!\n");
@@ -349,7 +370,8 @@ int main(int argc, char** argv)
   }
 
   // Write our data set into the input array in device memory 
-  err = clEnqueueWriteBuffer(commands, ocl_weights, CL_TRUE, 0, sizeof(float) * wtsize, trans_weights, 0, NULL, NULL);
+  err = clEnqueueWriteBuffer(commands, ocl_weights, CL_TRUE, 0, sizeof(float) 
+      * wtsize, trans_weights, 0, NULL, NULL);
   if (err != CL_SUCCESS)
   {
     printf("Error: Failed to write to source array b!\n");
@@ -357,7 +379,8 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
 
-  err = clEnqueueWriteBuffer(commands, ocl_bias, CL_TRUE, 0, sizeof(float) * outchannels, bias, 0, NULL, NULL);
+  err = clEnqueueWriteBuffer(commands, ocl_bias, CL_TRUE, 0, sizeof(float) 
+      * outchannels, bias, 0, NULL, NULL);
   if (err != CL_SUCCESS)
   {
     printf("Error: Failed to write to source array b!\n");
@@ -365,7 +388,8 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
 
-  err = clEnqueueWriteBuffer(commands, ocl_output, CL_TRUE, 0, sizeof(float) * outsize_pad, hw_results, 0, NULL, NULL);
+  err = clEnqueueWriteBuffer(commands, ocl_output, CL_TRUE, 0, sizeof(float) 
+      * outsize_pad, hw_results, 0, NULL, NULL);
   
   // Set the arguments to our compute kernel
   for (int n = 0; n < numimages; ++n) {
@@ -437,7 +461,8 @@ int main(int argc, char** argv)
           idx = n * outchannels * numgroups * ydim * xdim + 
                 ((i * ydim) + y) * xdim + x;
           if (x < xdim) {
-            if (fabs(hw_results[idx_pad] - sw_results[idx]) / sw_results[idx] < 1e-5)
+            if (fabs(hw_results[idx_pad] - sw_results[idx]) / sw_results[idx] 
+                < 1e-5)
               correct++;
             else 
               printf("%d %d %d hw_results %f sw_results %f\n", i, y, x, 
@@ -453,7 +478,8 @@ int main(int argc, char** argv)
       printf("FPGA OUTPUT Channel %d\n", i);
       for (int y = 0; y < ydim; ++y) {
         for (int x = 0; x < xtile_pad * 2; ++x) {
-          printf("%f\t", hw_results[i * ydim * xtile_pad * 2 + y * xtile_pad * 2 + x]);
+          printf("%f\t", hw_results[i * ydim * xtile_pad * 2 + y * xtile_pad * 
+              2 + x]);
         }
         printf("\n");
       }
@@ -471,11 +497,9 @@ int main(int argc, char** argv)
   }
 
   // Print a brief summary detailing the results
-  //
   printf("Computed '%d/%d' correct values!\n", correct, outsize);
     
   // Shutdown and cleanup
-  //
   clReleaseMemObject(ocl_input);
   clReleaseMemObject(ocl_weights);
   clReleaseMemObject(ocl_output);
