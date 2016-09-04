@@ -146,19 +146,19 @@ int main(int argc, char** argv)
   
   // Get Parameters for kernel execution
   int group = 0;
-  int numgroups = atoi(argv[2]);
-  int inchannels = atoi(argv[3]);
-  int outchannels = atoi(argv[4]);
-  int burstchannels = atoi(argv[5]);
-  int rpo = atoi(argv[6]);
-  int ydim = atoi(argv[7]);
-  int xdim = atoi(argv[7]);
-  int ytile = atoi(argv[8]);
-  int xtile = atoi(argv[8]);
-  int ytile_pad = atoi(argv[9]);
-  int xtile_pad = atoi(argv[9]);
+  int numgroups = (int)atoi(argv[2]);
+  int inchannels = (int)atoi(argv[3]);
+  int outchannels = (int)atoi(argv[4]);
+  int burstchannels = (int)atoi(argv[5]);
+  int rpo = (int)atoi(argv[6]);
+  int ydim = (int)atoi(argv[7]);
+  int xdim = (int)atoi(argv[7]);
+  int ytile = (int)atoi(argv[8]);
+  int xtile = (int)atoi(argv[8]);
+  int ytile_pad = (int)atoi(argv[9]);
+  int xtile_pad = (int)atoi(argv[9]);
   int rburst = burstchannels * ydim;
-  int numimages = atoi(argv[10]);
+  int numimages = (int)atoi(argv[10]);
 
   int insize = numimages * inchannels * ydim * xdim * numgroups;
   int outsize = numimages * outchannels * ydim * xdim * numgroups;

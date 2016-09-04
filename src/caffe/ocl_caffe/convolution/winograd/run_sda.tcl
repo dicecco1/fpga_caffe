@@ -30,7 +30,7 @@ run_emulation -flow cpu -args "winograd_pe.xclbin 1 512 2 256 2 14 7 8 2"
 report_estimate
 
 # Compile the application to run on the accelerator card
-#build_system
+build_system
 
 # Package the application binaries
-#package_system
+package_system
