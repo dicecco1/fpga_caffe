@@ -591,7 +591,6 @@ message ConvolutionParameter {
   enum SubEngine {
     DIRECT = 0;
     WINOGRAD = 1;
-    MATMUL = 2;
   }
   optional Engine engine = 15 [default = DEFAULT];
   optional SubEngine subengine = 19 [default = DIRECT];

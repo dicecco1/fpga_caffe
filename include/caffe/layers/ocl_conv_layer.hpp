@@ -73,12 +73,9 @@ class OCLConvolutionLayer : public ConvolutionLayer<Dtype> {
   virtual void compute_output_shape();
   virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
-  virtual void Call_ocl(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
-  void transform_weights(void);
+  void transform_winograd_weights(void);
+  void transform_direct_weights(void);
   void winograd_conv(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
-  void matmul_conv(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
   void direct_conv(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);

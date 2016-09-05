@@ -1095,13 +1095,7 @@ class oclConvolutionLayerTest : public MultiDeviceTest<TypeParam> {
 
  protected:
   oclConvolutionLayerTest()
-      : blob_bottom_(new Blob<Dtype>(1, 3, 227, 227)),
-        blob_bottom_2_(new Blob<Dtype>(1, 3, 227, 227)),
-        blob_bottom_3_(new Blob<Dtype>(1, 96, 27, 27)),
-        blob_bottom_4_(new Blob<Dtype>(1, 256, 13, 13)),
-        blob_top_(new Blob<Dtype>()),
-        blob_top_2_(new Blob<Dtype>()),
-        blob_top_3_(new Blob<Dtype>()),
+      : blob_bottom_4_(new Blob<Dtype>(2, 256, 13, 13)),
         blob_top_4_(new Blob<Dtype>()) {}
   virtual void SetUp() {
     // fill the values
@@ -1109,22 +1103,13 @@ class oclConvolutionLayerTest : public MultiDeviceTest<TypeParam> {
     filler_param.set_value(1.);
     //ConstantFiller<Dtype> filler(filler_param);
     GaussianFiller<Dtype> filler(filler_param);
-    filler.Fill(this->blob_bottom_);
-    filler.Fill(this->blob_bottom_2_);
-    filler.Fill(this->blob_bottom_3_);
     filler.Fill(this->blob_bottom_4_);
-    blob_bottom_vec_.push_back(blob_bottom_);
-    blob_top_vec_.push_back(blob_top_);
+    blob_bottom_vec_.push_back(blob_bottom_4_);
+    blob_top_vec_.push_back(blob_top_4_);
   }
 
   virtual ~oclConvolutionLayerTest() {
-    delete blob_bottom_;
-    delete blob_bottom_2_;
-    delete blob_bottom_3_;
     delete blob_bottom_4_;
-    delete blob_top_;
-    delete blob_top_2_;
-    delete blob_top_3_;
     delete blob_top_4_;
   }
 
@@ -1134,13 +1119,7 @@ class oclConvolutionLayerTest : public MultiDeviceTest<TypeParam> {
     return this->ref_blob_top_.get();
   }
 
-  Blob<Dtype>* const blob_bottom_;
-  Blob<Dtype>* const blob_bottom_2_;
-  Blob<Dtype>* const blob_bottom_3_;
   Blob<Dtype>* const blob_bottom_4_;
-  Blob<Dtype>* const blob_top_;
-  Blob<Dtype>* const blob_top_2_;
-  Blob<Dtype>* const blob_top_3_;
   Blob<Dtype>* const blob_top_4_;
   shared_ptr<Blob<Dtype> > ref_blob_top_;
   vector<Blob<Dtype>*> blob_bottom_vec_;
@@ -1151,44 +1130,7 @@ class oclConvolutionLayerTest : public MultiDeviceTest<TypeParam> {
 
 TYPED_TEST_CASE(oclConvolutionLayerTest, TestDtypesAndDevices);
 
-TYPED_TEST(oclConvolutionLayerTest, TestSetup) {
-  Caffe::set_mode(Caffe::OCL);
-  typedef typename TypeParam::Dtype Dtype;
-  LayerParameter layer_param;
-  ConvolutionParameter* convolution_param =
-      layer_param.mutable_convolution_param();
-  convolution_param->add_kernel_size(11);
-  convolution_param->add_stride(4);
-  convolution_param->set_num_output(96);
-  this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
-  this->blob_top_vec_.push_back(this->blob_top_2_);
-  shared_ptr<Layer<Dtype> > layer(
-      new OCLConvolutionLayer<Dtype>(layer_param));
-  layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
-  EXPECT_EQ(this->blob_top_->num(), 1);
-  EXPECT_EQ(this->blob_top_->channels(), 96);
-  EXPECT_EQ(this->blob_top_->height(), 55);
-  EXPECT_EQ(this->blob_top_->width(), 55);
-  EXPECT_EQ(this->blob_top_2_->num(), 1);
-  EXPECT_EQ(this->blob_top_2_->channels(), 96);
-  EXPECT_EQ(this->blob_top_2_->height(), 55);
-  EXPECT_EQ(this->blob_top_2_->width(), 55);
-  // setting group should not change the shape
-  convolution_param->set_num_output(96);
-  convolution_param->set_group(1);
-  layer.reset(new ConvolutionLayer<Dtype>(layer_param));
-  layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
-  EXPECT_EQ(this->blob_top_->num(), 1);
-  EXPECT_EQ(this->blob_top_->channels(), 96);
-  EXPECT_EQ(this->blob_top_->height(), 55);
-  EXPECT_EQ(this->blob_top_->width(), 55);
-  EXPECT_EQ(this->blob_top_2_->num(), 1);
-  EXPECT_EQ(this->blob_top_2_->channels(), 96);
-  EXPECT_EQ(this->blob_top_2_->height(), 55);
-  EXPECT_EQ(this->blob_top_2_->width(), 55);
-}
-
-TYPED_TEST(oclConvolutionLayerTest, TestConv3) {
+TYPED_TEST(oclConvolutionLayerTest, TestWinogradConv) {
   Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
   this->blob_bottom_vec_.clear();
@@ -1228,8 +1170,8 @@ TYPED_TEST(oclConvolutionLayerTest, TestConv3) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-3);
   }
 }
-/*
-TYPED_TEST(oclConvolutionLayerTest, TestConv3Direct) {
+
+TYPED_TEST(oclConvolutionLayerTest, TestDirectConv) {
   Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
   this->blob_bottom_vec_.clear();
@@ -1238,7 +1180,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestConv3Direct) {
   this->blob_top_vec_.push_back(this->blob_top_4_);
   LayerParameter layer_param;
   layer_param.set_xcl_name("direct_conv.xclbin");
-  layer_param.set_kernel_name("conv5_layer");
+  layer_param.set_kernel_name("direct_conv");
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
@@ -1268,8 +1210,9 @@ TYPED_TEST(oclConvolutionLayerTest, TestConv3Direct) {
   for (int i = 0; i < this->blob_top_4_->count(); ++i) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-3);
   }
+
 }
-*/
+
 #endif // USE_OCL
 
 }  // namespace caffe
