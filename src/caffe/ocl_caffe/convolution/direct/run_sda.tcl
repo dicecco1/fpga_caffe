@@ -33,7 +33,7 @@ run_emulation -flow cpu -args "direct_conv.xclbin 1 256 1 256 1 16 16 16 1"
 report_estimate
 
 # Compile the application to run on the accelerator card
-#build_system
+build_system
 
 # Package the application binaries
-#package_system
+package_system
