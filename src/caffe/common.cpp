@@ -73,6 +73,7 @@ int convertToString(const char *filename, char **str)
 		if(!str)
 		{
 			fclose(f);
+      LOG(FATAL) << "Could not reserve memory for string";
 			return -1;
 		}
 
@@ -82,14 +83,14 @@ int convertToString(const char *filename, char **str)
 		
 		return size;
 	}
-  std::cout<<"Error: failed to open file\n:"<<filename<<std::endl;
-	return -1;
+ 	LOG(FATAL) << "Could not open opencl binary file.";
+  return -1;
 }
 
 #ifdef USE_OCL
 
 void Caffe::SetOCLDevice() { 
-  cl_int status, bstatus;
+  cl_int status;
   oclPlatform.resize(1); 
   status = clGetPlatformIDs(0, NULL, &oclNumPlatforms); 
   status = clGetPlatformIDs(1, &(oclPlatform[0]), NULL); 
