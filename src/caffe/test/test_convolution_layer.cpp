@@ -1095,22 +1095,22 @@ class oclConvolutionLayerTest : public MultiDeviceTest<TypeParam> {
 
  protected:
   oclConvolutionLayerTest()
-      : blob_bottom_4_(new Blob<Dtype>(2, 256, 13, 13)),
-        blob_top_4_(new Blob<Dtype>()) {}
+      : blob_bottom_(new Blob<Dtype>(1, 2, 13, 13)),
+        blob_top_(new Blob<Dtype>()) {}
   virtual void SetUp() {
     // fill the values
     FillerParameter filler_param;
     filler_param.set_value(1.);
     //ConstantFiller<Dtype> filler(filler_param);
     GaussianFiller<Dtype> filler(filler_param);
-    filler.Fill(this->blob_bottom_4_);
-    blob_bottom_vec_.push_back(blob_bottom_4_);
-    blob_top_vec_.push_back(blob_top_4_);
+    filler.Fill(this->blob_bottom_);
+    blob_bottom_vec_.push_back(blob_bottom_);
+    blob_top_vec_.push_back(blob_top_);
   }
 
   virtual ~oclConvolutionLayerTest() {
-    delete blob_bottom_4_;
-    delete blob_top_4_;
+    delete blob_bottom_;
+    delete blob_top_;
   }
 
   virtual Blob<Dtype>* MakeReferenceTop(Blob<Dtype>* top) {
@@ -1119,8 +1119,8 @@ class oclConvolutionLayerTest : public MultiDeviceTest<TypeParam> {
     return this->ref_blob_top_.get();
   }
 
-  Blob<Dtype>* const blob_bottom_4_;
-  Blob<Dtype>* const blob_top_4_;
+  Blob<Dtype>* const blob_bottom_;
+  Blob<Dtype>* const blob_top_;
   shared_ptr<Blob<Dtype> > ref_blob_top_;
   vector<Blob<Dtype>*> blob_bottom_vec_;
   vector<Blob<Dtype>*> blob_top_vec_;
@@ -1135,8 +1135,8 @@ TYPED_TEST(oclConvolutionLayerTest, TestWinogradConv) {
   typedef typename TypeParam::Dtype Dtype;
   this->blob_bottom_vec_.clear();
   this->blob_top_vec_.clear();
-  this->blob_bottom_vec_.push_back(this->blob_bottom_4_);
-  this->blob_top_vec_.push_back(this->blob_top_4_);
+  this->blob_bottom_vec_.push_back(this->blob_bottom_);
+  this->blob_top_vec_.push_back(this->blob_top_);
   LayerParameter layer_param;
   layer_param.set_xcl_name("winograd_pe.xclbin");
   layer_param.set_kernel_name("winograd_pe");
@@ -1149,7 +1149,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestWinogradConv) {
       layer_param.mutable_convolution_param();
   convolution_param->add_kernel_size(3);
   convolution_param->add_stride(1);
-  convolution_param->set_num_output(384);
+  convolution_param->set_num_output(2);
   convolution_param->add_pad(1);
   convolution_param->mutable_weight_filler()->set_type("gaussian");
   convolution_param->mutable_bias_filler()->set_type("gaussian");
@@ -1162,11 +1162,11 @@ TYPED_TEST(oclConvolutionLayerTest, TestWinogradConv) {
   // Check against reference convolution.
   const Dtype* top_data;
   const Dtype* ref_top_data;
-  caffe_conv(this->blob_bottom_4_, convolution_param, layer->blobs(),
-      this->MakeReferenceTop(this->blob_top_4_));
-  top_data = this->blob_top_4_->cpu_data();
+  caffe_conv(this->blob_bottom_, convolution_param, layer->blobs(),
+      this->MakeReferenceTop(this->blob_top_));
+  top_data = this->blob_top_->cpu_data();
   ref_top_data = this->ref_blob_top_->cpu_data();
-  for (int i = 0; i < this->blob_top_4_->count(); ++i) {
+  for (int i = 0; i < this->blob_top_->count(); ++i) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-3);
   }
 }
@@ -1176,8 +1176,8 @@ TYPED_TEST(oclConvolutionLayerTest, TestDirectConv) {
   typedef typename TypeParam::Dtype Dtype;
   this->blob_bottom_vec_.clear();
   this->blob_top_vec_.clear();
-  this->blob_bottom_vec_.push_back(this->blob_bottom_4_);
-  this->blob_top_vec_.push_back(this->blob_top_4_);
+  this->blob_bottom_vec_.push_back(this->blob_bottom_);
+  this->blob_top_vec_.push_back(this->blob_top_);
   LayerParameter layer_param;
   layer_param.set_xcl_name("direct_conv.xclbin");
   layer_param.set_kernel_name("direct_conv");
@@ -1190,7 +1190,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestDirectConv) {
       layer_param.mutable_convolution_param();
   convolution_param->add_kernel_size(3);
   convolution_param->add_stride(1);
-  convolution_param->set_num_output(384);
+  convolution_param->set_num_output(2);
   convolution_param->add_pad(1);
   convolution_param->mutable_weight_filler()->set_type("gaussian");
   convolution_param->mutable_bias_filler()->set_type("gaussian");
@@ -1203,14 +1203,45 @@ TYPED_TEST(oclConvolutionLayerTest, TestDirectConv) {
   // Check against reference convolution.
   const Dtype* top_data;
   const Dtype* ref_top_data;
-  caffe_conv(this->blob_bottom_4_, convolution_param, layer->blobs(),
-      this->MakeReferenceTop(this->blob_top_4_));
-  top_data = this->blob_top_4_->cpu_data();
+  caffe_conv(this->blob_bottom_, convolution_param, layer->blobs(),
+      this->MakeReferenceTop(this->blob_top_));
+  top_data = this->blob_top_->cpu_data();
   ref_top_data = this->ref_blob_top_->cpu_data();
-  for (int i = 0; i < this->blob_top_4_->count(); ++i) {
+  for (int i = 0; i < this->blob_top_->count(); ++i) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-3);
   }
 
+}
+
+TYPED_TEST(oclConvolutionLayerTest, TestGradient) {
+  Caffe::set_mode(Caffe::OCL);
+  typedef typename TypeParam::Dtype Dtype;
+  this->blob_bottom_vec_.clear();
+  this->blob_top_vec_.clear();
+  this->blob_bottom_vec_.push_back(this->blob_bottom_);
+  this->blob_top_vec_.push_back(this->blob_top_);
+  LayerParameter layer_param;
+  layer_param.set_xcl_name("winograd_pe.xclbin");
+  layer_param.set_kernel_name("winograd_pe");
+  shared_ptr<Layer<Dtype> > programLayer(
+      new XCLProgramLayer<Dtype>(layer_param));
+  programLayer->SetUp(this->prog_bot_, this->prog_top_);
+  programLayer->Forward(this->prog_bot_, this->prog_top_);
+  layer_param.set_ocl_enable(true);
+  ConvolutionParameter* convolution_param =
+      layer_param.mutable_convolution_param();
+  convolution_param->add_kernel_size(3);
+  convolution_param->add_pad(1);
+  convolution_param->add_stride(1);
+  convolution_param->set_num_output(2);
+  convolution_param->mutable_weight_filler()->set_type("gaussian");
+  convolution_param->mutable_bias_filler()->set_type("gaussian");
+  convolution_param->set_engine(ConvolutionParameter_Engine_OCL);
+  convolution_param->set_subengine(ConvolutionParameter_SubEngine_WINOGRAD);
+  OCLConvolutionLayer<Dtype> layer(layer_param);
+  GradientChecker<Dtype> checker(1e-2, 1e-3);
+  checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
+      this->blob_top_vec_);
 }
 
 #endif // USE_OCL

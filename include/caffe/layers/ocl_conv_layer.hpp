@@ -73,15 +73,32 @@ class OCLConvolutionLayer : public ConvolutionLayer<Dtype> {
   virtual void compute_output_shape();
   virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
+  virtual void Backward_ocl(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+  virtual void backward_winograd(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   void transform_winograd_weights(void);
+  void transform_winograd_weights_rotated(void); 
   void transform_direct_weights(void);
-  void winograd_conv(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
-  void direct_conv(const vector<Blob<Dtype>*>& bottom,
+  void ocl_conv(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
  private:
-  int trans_flag_; 
+  int trans_flag_;
+  int offshape_;
+  int dim_;
+  int tile_;
+  int inchannels_;
+  int outchannels_;
+  int burstchannels_;
+  int burstchannels_train_;
+  int rpo_;
+  int rpo_train_;
+  int tile_pad_;
+  int rburst_;
+  int rburst_train_;
+  int numgroups_; 
   Blob<Dtype> trans_weights;
+  Blob<Dtype> trans_weights_R;
 };
 #endif
 
