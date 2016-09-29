@@ -375,9 +375,9 @@ void OCLConvolutionLayer<float>::backward_winograd(
   int idx;
   vector<int> outshape(4);
 
-  vector<int> bias_shape(bias_term_, outchannels * this->group_);
+  vector<int> bias_shape(bias_term_, outchannels_ * this->group_);
   Blob<float>* bias = new Blob<float>(bias_shape);
-  caffe_set(outchannels * this->group_, float(0),
+  caffe_set(outchannels_ * this->group_, float(0),
         bias->mutable_cpu_data());
   float *bias_data = bias->mutable_ocl_data();
    
@@ -387,7 +387,7 @@ void OCLConvolutionLayer<float>::backward_winograd(
         outshape[0] = bottom[i]->shape(0);
         outshape[1] = bottom[i]->shape(1);
         outshape[2] = bottom[i]->shape(2);
-        outshape[3] = offshape;
+        outshape[3] = offshape_;
         bottom[i]->Reshape(outshape);
       }
       const float* top_diff = top[i]->ocl_diff();

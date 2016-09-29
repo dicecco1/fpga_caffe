@@ -11,7 +11,6 @@ void OCLReLULayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
     const vector<Blob<float>*>& top) {
   const float* bottom_data = bottom[0]->ocl_data();
   float* top_data = top[0]->mutable_ocl_data();
-  std::cout<<"Here"<<std::endl;
   cl_int error; 
   cl_event event;
 
