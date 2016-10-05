@@ -23,7 +23,7 @@ void OCLConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       }
     }
     else
-      offshape_ = top[0]->shape(3);
+      offshape_ = bottom[0]->shape(3);
 
     inchannels_ = bottom[0]->shape(1) / this->group_;
     outchannels_ = this->num_output_ / this->group_;
