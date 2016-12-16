@@ -13,18 +13,23 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define NUM_MASK_ROWS 3
-#define NUM_MASK_COLS 3
-#define STRIDE 1
-#define PAD 1
-
 /* Reference convolution implementation */
 
 void ref_conv(float *input, float *weights, float *bias, float *ocl_output, 
     int groups, int inchannel, int outchannel, int xsize, int ysize, 
-    int numimages) {
+    int numimages, int ksize) {
   int o_head, k_head;
   int out_idx, in_idx, k_idx;
+
+  int pad;
+  int stride = 1;
+  if (ksize == 5) 
+    pad = 2;
+  else if(ksize == 3)
+    pad = 1;
+  else if (ksize == 1)
+    pad = 0;
+
   // Convolution
   for (int i = 0; i < numimages * outchannel * ysize * xsize; ++i)
     ocl_output[i] = 0;
@@ -38,18 +43,18 @@ void ref_conv(float *input, float *weights, float *bias, float *ocl_output,
         for (int k = 0; k < k_g; k++) {
           for (int y = 0; y < ysize; y++) {
             for (int x = 0; x < xsize; x++) {
-              for (int p = 0; p < NUM_MASK_ROWS; p++) {
-                for (int q = 0; q < NUM_MASK_COLS; q++) {
-                  int in_y = y * STRIDE - PAD + p;
-                  int in_x = x * STRIDE - PAD + q;
+              for (int p = 0; p < ksize; p++) {
+                for (int q = 0; q < ksize; q++) {
+                  int in_y = y * stride - pad + p;
+                  int in_x = x * stride - pad + q;
                   if (in_y >= 0 && in_y < ysize
                     && in_x >= 0 && in_x < xsize) {
                     out_idx = (((n * outchannel) + o + o_head) * ysize + y) 
                       * xsize + x;
                     in_idx = (((n * inchannel) + k + k_head) * ysize + in_y) 
                       * xsize + in_x;
-                    k_idx = (((o + o_head) * (k_g) + k) * NUM_MASK_ROWS + p) 
-                      * NUM_MASK_COLS + q;
+                    k_idx = (((o + o_head) * (k_g) + k) * ksize + p) 
+                      * ksize + q;
                     ocl_output[out_idx] += input[in_idx] * weights[k_idx];
                   }
                 }
@@ -98,45 +103,14 @@ load_file_to_memory(const char *filename, char **result)
 
 /* Function for transforming the weights into winograd domain */
 
-void transform_weights_test(float *weights_in, float *weights_out) {
-    float x0 = weights_in[1];
-    float x1 = weights_in[0] + weights_in[2];
-    float x2 = weights_in[6] + weights_in[8];
-    float x3 = weights_in[3];
-    float x4 = weights_in[5];
-    float x5 = weights_in[1] + weights_in[7];
-    float x6 = weights_in[0] + weights_in[6];
-    float x7 = weights_in[3] + weights_in[5];
-    float x8 = weights_in[7];
-    float x9 = weights_in[4];
-    float x10 = x1 + x2;
-    float x11 = x10 + x5;
-    float x12 = weights_in[2] + weights_in[8];
-    float x13 = (x7 + x9);
-    float x14 = x10 - x5;
-    float x15 = (x7 - x9);
-
-    weights_out[0] = weights_in[0];
-    weights_out[3] = weights_in[2];
-    weights_out[12] = weights_in[6];
-    weights_out[15] = weights_in[8];
-    weights_out[1] = 0.5 * (x1 + x0);
-    weights_out[2] = 0.5 * (x1 - x0);
-    weights_out[4] = 0.5 * (x6 + x3);
-    weights_out[5] = 0.25 * (x11 + x13);
-    weights_out[6] = 0.25 * (x14 + x15);
-    weights_out[7] = 0.5 * (x12 + x4);
-    weights_out[8] = 0.5 * (x6 - x3);
-    weights_out[9] = 0.25 * (x11 - x13);
-    weights_out[10] = 0.25 * (x14 - x15);
-    weights_out[11] = 0.5 * (x12 - x4);
-    weights_out[13] = 0.5 * (x2 + x8);
-    weights_out[14] = 0.5 * (x2 - x8);
+void transform_weights(float *weights_in, float *weights_out) {
+  for (int i = 0; i < 9; ++i) 
+    weights_out[i] = weights_in[i];
 }
 
 int main(int argc, char** argv)
 {
-  if (argc != 11){
+  if (argc != 12){
     printf("%s <inputfile> numgroups inchannels outchannels burstchannels rpo" 
         "dim tilesize padtsize\n", argv[0]);
     return EXIT_FAILURE;
@@ -157,17 +131,30 @@ int main(int argc, char** argv)
   int xtile = (int)atoi(argv[8]);
   int ytile_pad = (int)atoi(argv[9]);
   int xtile_pad = (int)atoi(argv[9]);
-  int rburst = burstchannels * ydim;
+  int rburst = burstchannels * ydim * xdim / 256;
   int numimages = (int)atoi(argv[10]);
+  int ksize = (int)atoi(argv[11]);
+
+  int ksize_pad;
+
+  if (ksize == 5)
+    ksize_pad = 32;
+  else if (ksize == 3)
+    ksize_pad = 16;
+  else
+    ksize_pad = 16;
 
   int insize = numimages * inchannels * ydim * xdim * numgroups;
+  int insize_pad = numimages * inchannels * ydim * xtile_pad * 2 * numgroups;
   int outsize = numimages * outchannels * ydim * xdim * numgroups;
-  int wsize = outchannels * inchannels * numgroups * numgroups * 3 * 3;
-  int wtsize = outchannels * inchannels * numgroups * numgroups * 4 * 4;
+  int wsize = outchannels * numgroups * inchannels * ksize * ksize;
+  int wtsize = outchannels * numgroups * inchannels * ksize_pad;
   int outsize_pad = numimages * outchannels * ydim * xtile_pad * 2 * numgroups;
 
   // Data to be sent to the device
   float *input = (float *)malloc(sizeof(float) * insize);
+
+  float *input_pad = (float *)malloc(sizeof(float) * insize_pad);
   // Original Weights
   float *weights = (float *)malloc(sizeof(float) * wsize);
   // Bias data
@@ -195,42 +182,60 @@ int main(int argc, char** argv)
   cl_mem ocl_output;                  // device memory for the output array   
   cl_mem ocl_bias;                    // device memory  for the bias array
 
-
   // Fill inputs, weights, and biases
   int i = 0;
   int j = 0;
   int y, x, idx_pad, idx;
   /* Fill the data */
-  for(i = 0; i < insize; i++) {
-    input[i] = (float)(rand() % 100 + 1) / 100;
+  for (i = 0; i < numimages * inchannels * numgroups * ydim; i++) {
+    for (x = 0; x < xtile_pad * 2; ++x) {
+      float temp = (float)(rand() % 100 + 1) / 100;
+      if (x < xdim) {
+        input_pad[i * xtile_pad * 2 + x] = temp;
+        input[i * xdim + x] = temp;
+      } else {
+        input_pad[i * xtile_pad * 2 + x] = 0;
+      }
+    }
   }
- 
   /* Fill the weights */
-  for(i = 0; i < wsize; i++) {
+  for (i = 0; i < wsize; i++) {
     weights[i] = (float)(rand() % 100 + 1) / 100;
   }
 
   /* Fill the bias */
-  for(i = 0; i < outchannels; ++i) {
+  for (i = 0; i < outchannels; ++i) {
     bias[i] = (float)(rand() % 100 + 1) / 100;
   }
-/*
-  for(i = 0; i < numimages * outchannels * numgroups; i++) {
-    for (y = 0; y < ydim; ++y) {
-      for (x = 0; x < xtile_pad * 2; ++x) {
-        idx_pad = ((i * ydim) + y) * xtile_pad * 2 + x;
-        idx = ((i * ydim) + y) * xdim + x;
-        hw_results[idx_pad] = 0;
-      }
-    }
-  }*/
 
   // Transform weights
   for (i = 0; i < outchannels * numgroups; ++i) {
-    for (j = 0; j < inchannels * numgroups; ++j) {
-      transform_weights_test(weights + (i * inchannels * numgroups + j) 
-          * NUM_MASK_ROWS * NUM_MASK_COLS, trans_weights 
-          + (i * inchannels * numgroups + j) * 4 * 4);
+    for (j = 0; j < inchannels; ++j) {
+      int wtoff, woff;
+      if (ksize == 3) {
+        transform_weights(weights + (i * inchannels + j) 
+            * ksize * ksize, trans_weights 
+            + (i * inchannels + j) * ksize_pad);
+      } else if (ksize == 1) {
+        wtoff = (i * inchannels + j) * 16;
+        woff = (i * inchannels + j);
+        trans_weights[wtoff] = weights[woff];
+      } else if (ksize == 5) {
+        wtoff = (i * inchannels + j) * ksize_pad;
+        woff = (i * inchannels + j) * ksize * ksize;
+
+        for (y = 0; y < 5; ++y)
+          for (x = 0; x < 3; ++x)
+            trans_weights[wtoff + y * 3 + x] = weights[woff + y * 5 + x];
+
+        for (y = 0; y < 5; ++y)
+          for (x = 0; x < 3; ++x) 
+            if (x < 2)
+              trans_weights[wtoff + 16 + y * 3 + x] = 
+                weights[woff + y * 5 + 3 + x];
+            else
+              trans_weights[wtoff + 16 + y * 3 + x] = 0;
+      }
     }
   } 
 
@@ -344,7 +349,7 @@ int main(int argc, char** argv)
 
   // Create the input and ocl_output arrays in device memory for our calculation
   ocl_input = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) 
-      * insize, NULL, NULL);
+      * insize_pad, NULL, NULL);
   ocl_weights = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) 
       * wtsize, NULL, NULL);//wsize, NULL, NULL);
   ocl_output = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float) 
@@ -361,7 +366,7 @@ int main(int argc, char** argv)
     
   // Write our data set into the input array in device memory 
   err = clEnqueueWriteBuffer(commands, ocl_input, CL_TRUE, 0, sizeof(float) 
-      * insize, input, 0, NULL, NULL);
+      * insize_pad, input_pad, 0, NULL, NULL);
   if (err != CL_SUCCESS)
   {
     printf("Error: Failed to write to source array a!\n");
@@ -406,13 +411,11 @@ int main(int argc, char** argv)
       err |= clSetKernelArg(kernel, 8, sizeof(cl_int), &rpo);
       err |= clSetKernelArg(kernel, 9, sizeof(cl_int), &ydim);
       err |= clSetKernelArg(kernel, 10, sizeof(cl_int), &xdim);
-      err |= clSetKernelArg(kernel, 11, sizeof(cl_int), &ytile);
-      err |= clSetKernelArg(kernel, 12, sizeof(cl_int), &xtile);
-      err |= clSetKernelArg(kernel, 13, sizeof(cl_int), &ytile_pad);
-      err |= clSetKernelArg(kernel, 14, sizeof(cl_int), &xtile_pad);
-      err |= clSetKernelArg(kernel, 15, sizeof(cl_int), &rburst);
-      err |= clSetKernelArg(kernel, 16, sizeof(cl_int), &n);
-      err |= clSetKernelArg(kernel, 17, sizeof(cl_int), &numgroups);
+      err |= clSetKernelArg(kernel, 11, sizeof(cl_int), &xtile);
+      err |= clSetKernelArg(kernel, 12, sizeof(cl_int), &xtile_pad);
+      err |= clSetKernelArg(kernel, 13, sizeof(cl_int), &ksize);
+      err |= clSetKernelArg(kernel, 14, sizeof(cl_int), &n);
+      err |= clSetKernelArg(kernel, 15, sizeof(cl_int), &numgroups);
       if (err != CL_SUCCESS)
       {
         printf("Error: Failed to set kernel arguments! %d\n", err);
@@ -448,7 +451,7 @@ int main(int argc, char** argv)
 
   clWaitForEvents(1, &readevent);
   ref_conv(input, weights, bias, sw_results, numgroups, inchannels * numgroups, 
-      outchannels * numgroups, xdim, ydim, numimages);
+      outchannels * numgroups, xdim, ydim, numimages, ksize);
    
   // Validate our results
   correct = 0;
