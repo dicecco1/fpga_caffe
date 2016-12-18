@@ -77,13 +77,11 @@ class OCLConvolutionLayer : public ConvolutionLayer<Dtype> {
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   virtual void backward_winograd(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
-  void transform_winograd_weights(void);
-  void transform_winograd_weights_rotated(void); 
-  void transform_direct_weights(void);
+  void transform_weights_rotated(void); 
+  void transform_weights(void);
   void ocl_conv(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
  private:
-  int trans_flag_;
   int offshape_;
   int dim_;
   int tile_;
@@ -94,9 +92,8 @@ class OCLConvolutionLayer : public ConvolutionLayer<Dtype> {
   int rpo_;
   int rpo_train_;
   int tile_pad_;
-  int rburst_;
-  int rburst_train_;
-  int numgroups_; 
+  int numgroups_;
+  Blob<Dtype> pad_input;
   Blob<Dtype> trans_weights;
   Blob<Dtype> trans_weights_R;
 };
