@@ -3,6 +3,9 @@
 #include <string.h>
 #define OCFACT 4 
 #define OCDIV 2
+#define EXP_MASK 0x7f800000
+#define MANT_MASK 0x007fffff
+#define SIGN_MASK 0x80000000
 /* float16 data type definition */
 
 typedef struct {
@@ -24,11 +27,28 @@ typedef struct {
   float sf;
 } float16;
 
+float mult_half(float number) {
+#pragma HLS INLINE
+  int *temp = (int *)&number;
+  int e = (*temp & EXP_MASK) >> 23;
+  int mant = (*temp & MANT_MASK);
+  int s = (*temp & SIGN_MASK);
+  int e_new;
+  int mant_new;
+
+  e_new = (e != 0) ? e - 1 : e;
+  mant_new = (e != 0) ? mant : mant >> 1;
+  *temp = s | (e_new << 23) | mant_new;
+
+  return *(float *)temp;
+}
+
 void w_transform(float input[3], float output[4]) {
 #pragma HLS INLINE off
+  float preadd = input[0] + input[2];
   output[0] = input[0];
-  output[1] = 0.5 * (input[0] + input[1] + input[2]);
-  output[2] = 0.5 * (input[0] - input[1] + input[2]);
+  output[1] = mult_half(preadd + input[1]);
+  output[2] = mult_half(preadd - input[1]);
   output[3] = input[2];
 }
 
@@ -63,7 +83,7 @@ void winograd_input_stage(float16 inbuf[256 * 32], unsigned short ksize,
   float itt[8][4];
 #pragma HLS ARRAY_PARTITION variable=itt complete dim=1
 #pragma HLS ARRAY_PARTITION variable=itt complete dim=2
-  float tempbuf[21];
+  float tempbuf[20];
 #pragma HLS ARRAY_PARTITION variable=tempbuf complete 
 
   short crow_off;
@@ -111,7 +131,6 @@ void winograd_input_stage(float16 inbuf[256 * 32], unsigned short ksize,
     for (p = 0; p < 20; ++p) 
       tempbuf[p] = 0;
   }
-  tempbuf[20] = 0;
 
   if (ksize != 5)
     toff = 1;
@@ -120,44 +139,41 @@ void winograd_input_stage(float16 inbuf[256 * 32], unsigned short ksize,
   else
     toff = 3;
 
-  for (j = 0; j < 2; ++j) {
-    for (p = 0; p < 8; ++p) {
+  for (p = 0; p < 8; ++p) {
+    for (j = 0; j < 2; ++j) {
       for (q = 0; q < 2; ++q) {
         itt[p][j * 2 + q] = tempbuf[(p + j) * 2 + q + toff];
       }
     }
-  }
-  for (p = 0; p < 8; ++p) {
     p_transform(itt[p], it[p], ksize);
   }
 }
 
-void winograd_wt_set(float16 wbuf[2][OCFACT][512], 
-    float wt[OCFACT][8][4], unsigned short wsel, unsigned short w_off, 
-    unsigned short row_off, unsigned short ksize) {
-  
+void winograd_wt_set(float16 wbuf[OCFACT][512], float wt[OCFACT][8][4], 
+    unsigned short w_off, unsigned short row_off, unsigned short ksize) { 
   float wvals[16]; 
 #pragma HLS ARRAY_PARTITION variable=wvals complete
+
   float it[3];
   float ot[4];
 
   for (int k = 0; k < OCFACT; ++k) {
-    wvals[0] = wbuf[wsel][k][w_off].s0;
-    wvals[1] = wbuf[wsel][k][w_off].s1;
-    wvals[2] = wbuf[wsel][k][w_off].s2;
-    wvals[3] = wbuf[wsel][k][w_off].s3;
-    wvals[4] = wbuf[wsel][k][w_off].s4;
-    wvals[5] = wbuf[wsel][k][w_off].s5;
-    wvals[6] = wbuf[wsel][k][w_off].s6;
-    wvals[7] = wbuf[wsel][k][w_off].s7;
-    wvals[8] = wbuf[wsel][k][w_off].s8;
-    wvals[9] = wbuf[wsel][k][w_off].s9;
-    wvals[10] = wbuf[wsel][k][w_off].sa;
-    wvals[11] = wbuf[wsel][k][w_off].sb;
-    wvals[12] = wbuf[wsel][k][w_off].sc;
-    wvals[13] = wbuf[wsel][k][w_off].sd;
-    wvals[14] = wbuf[wsel][k][w_off].se;
-    wvals[15] = wbuf[wsel][k][w_off].sf;
+    wvals[0] = wbuf[k][w_off].s0;
+    wvals[1] = wbuf[k][w_off].s1;
+    wvals[2] = wbuf[k][w_off].s2;
+    wvals[3] = wbuf[k][w_off].s3;
+    wvals[4] = wbuf[k][w_off].s4;
+    wvals[5] = wbuf[k][w_off].s5;
+    wvals[6] = wbuf[k][w_off].s6;
+    wvals[7] = wbuf[k][w_off].s7;
+    wvals[8] = wbuf[k][w_off].s8;
+    wvals[9] = wbuf[k][w_off].s9;
+    wvals[10] = wbuf[k][w_off].sa;
+    wvals[11] = wbuf[k][w_off].sb;
+    wvals[12] = wbuf[k][w_off].sc;
+    wvals[13] = wbuf[k][w_off].sd;
+    wvals[14] = wbuf[k][w_off].se;
+    wvals[15] = wbuf[k][w_off].sf;
 
     if (ksize != 1) {
       it[0] = wvals[row_off * 3 + 0];
@@ -253,9 +269,8 @@ void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,
 #pragma HLS ARRAY_PARTITION variable=outbuf complete dim=1
 
   // Weight buffer
-  float16 wbuf[2][OCFACT][512];
+  float16 wbuf[OCFACT][512];
 #pragma HLS ARRAY_PARTITION variable=wbuf complete dim=1
-#pragma HLS ARRAY_PARTITION variable=wbuf complete dim=2
 
   // Bias buffer
   float biasbuf[1024];
@@ -325,19 +340,17 @@ void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,
 
   float lineval;
   int in_off;
-  int id_iny, id_in, id_inx;
-  unsigned short wsel;
   /* Read bias data into buffer */
   memcpy(biasbuf, bias + (outchannels * group), sizeof(float) * outchannels);
 
   int mac_iterations;
   
   if (ksize == 3)
-    mac_iterations = (burstchannels * ydim * 3) * (xtile_pad >> 3);
+    mac_iterations = (burstchannels * ydim * 3) * fact;
   else if (ksize == 5) 
-    mac_iterations = (burstchannels * ydim * 5 * 2) * (xtile_pad >> 3);
+    mac_iterations = (burstchannels * ydim * 5 * 2) * fact;
   else 
-    mac_iterations = (burstchannels * ydim) * (xtile_pad >> 3);
+    mac_iterations = (burstchannels * ydim) * fact;
   
   for (n = 0; n < rpo; ++n) {
     /* Read the input line by line and tile it into the tile buffer */
@@ -347,20 +360,6 @@ void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,
     memcpy(inbuf, input + in_off, sizeof(float16) * ((burstchannels * ydim * 
             xtile_pad * 2) >> 4)); 
 
-    wsel = 0;
-    for (k = 0; k < OCFACT; ++k) {
-      if (ksize == 3 || ksize == 1) {
-        weight_offset = (k + outchannels * group) * inchannels + 
-          n * burstchannels;
-        weight_size = burstchannels;
-      } else if (ksize == 5) {
-        weight_offset = ((k + outchannels * group) * inchannels + 
-            n * burstchannels) << 1;
-        weight_size = burstchannels << 1; 
-      }
-      memcpy(wbuf[wsel][k], weights + weight_offset, 
-          sizeof(float16) * weight_size);
-    }
     unsigned short ofm_iters = (outchannels & 0x3) ? 
       (outchannels >> OCDIV) + 1 : (outchannels >> OCDIV);
     for (o = 0; o < ofm_iters; ++o) {
@@ -396,6 +395,20 @@ void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,
         }
       }
 
+      for (k = 0; k < OCFACT; ++k) {
+        weight_offset = (o * OCFACT + k + outchannels * group) * inchannels 
+          + n * burstchannels;
+        weight_size = burstchannels;
+
+        if (ksize == 5) {
+          weight_offset = weight_offset << 1;
+          weight_size = weight_size << 1;
+        }
+
+        memcpy(wbuf[k], weights + weight_offset, 
+            sizeof(float16) * weight_size);
+      }
+
       w_off = 0;
       xt_off = 0;
       yt_off = 0;
@@ -418,18 +431,19 @@ void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,
           xt_off = 0;
         }
 
-        offset = yt_off * (xtile_pad >> 3) + xt_off;        
+        offset = yt_off * fact + xt_off;        
         winograd_input_stage(inbuf, ksize, xt_off, xtile_pad, yt_off, 
             row_off, ydim, w_off, it);
         // Compute the element-wise multiplication between weight and input
         // tile 
-        winograd_wt_set(wbuf, wt, wsel, w_off, row_off, ksize); 
+        winograd_wt_set(wbuf, wt, w_off, row_off, ksize); 
         for (k = 0; k < OCFACT; ++k) {
           for (p = 0; p < 8; ++p) {
             for (q = 0; q < 4; ++q) {
               ot[k][p][q] = it[p][q] * wt[k][p][q];
             }
           }
+         
           for (p = 0; p < 8; ++p) {
             ot_s1[p][0] = out_trans_p(ot[k][p][0], ot[k][p][1], ot[k][p][2], 
                 ksize);
@@ -461,24 +475,7 @@ void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,
           memcpy(output + out_offset, outbuf[k], sizeof(float16) * fact * 
               ydim);
         }
-      }
-      
-      wsel = (wsel == 0)? 1: 0;
-      if (o + 1 < (ofm_iters)) {
-        for (k = 0; k < OCFACT; ++k) {
-          if (ksize == 3 || ksize == 1) {
-            weight_offset = ((o + 1) * OCFACT + k + outchannels * group) * 
-              inchannels + n * burstchannels;
-            weight_size = burstchannels; 
-          } else if (ksize == 5) {
-            weight_offset = (((o + 1) * OCFACT + k + outchannels * group) * 
-                inchannels + n * burstchannels) << 1;
-            weight_size = burstchannels << 1; 
-          }
-          memcpy(wbuf[wsel][k], weights + weight_offset, 
-              sizeof(float16) * weight_size);
-        }
-      }
+      }      
     }
   }
 }
