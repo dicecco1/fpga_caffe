@@ -348,7 +348,7 @@ void OCLConvolutionLayer<double>::ocl_conv(
 }
 
 template <>
-void OCLConvolutionLayer<float>::backward_winograd(
+void OCLConvolutionLayer<float>::ocl_backward_conv(
     const vector<Blob<float>*>& top, const vector<bool>& propagate_down, 
     const vector<Blob<float>*>& bottom) {
   transform_weights_rotated();
@@ -512,7 +512,7 @@ void OCLConvolutionLayer<float>::backward_winograd(
 }
 
 template <>
-void OCLConvolutionLayer<double>::backward_winograd(
+void OCLConvolutionLayer<double>::ocl_backward_conv(
     const vector<Blob<double>*>& top, const vector<bool>& propagate_down, 
     const vector<Blob<double>*>& bottom) {
   Backward_cpu(top, propagate_down, bottom);
@@ -541,10 +541,9 @@ void OCLConvolutionLayer<Dtype>::Backward_ocl(const vector<Blob<Dtype>*>& top,
    ConvolutionParameter_SubEngine subengine = 
       this->layer_param_.convolution_param().subengine();
   if (this->layer_param_.ocl_enable()) {
-    if (subengine == ConvolutionParameter_SubEngine_WINOGRAD) 
-      backward_winograd(top, propagate_down, bottom);
-    else if (subengine == ConvolutionParameter_SubEngine_DIRECT)
-      Backward_cpu(top, propagate_down, bottom);
+    if (subengine == ConvolutionParameter_SubEngine_WINOGRAD ||
+        subengine == ConvolutionParameter_SubEngine_DIRECT) 
+      ocl_backward_conv(top, propagate_down, bottom);
     else
       LOG(FATAL) << "Layer " << this->layer_param_.name() << 
         " has unknown subengine.";

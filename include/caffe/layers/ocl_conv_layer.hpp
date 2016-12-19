@@ -75,7 +75,7 @@ class OCLConvolutionLayer : public ConvolutionLayer<Dtype> {
       const vector<Blob<Dtype>*>& top);
   virtual void Backward_ocl(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
-  virtual void backward_winograd(const vector<Blob<Dtype>*>& top,
+  virtual void ocl_backward_conv(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   void transform_weights_rotated(void); 
   void transform_weights(void);
