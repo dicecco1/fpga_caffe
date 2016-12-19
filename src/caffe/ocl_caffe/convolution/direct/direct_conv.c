@@ -1,7 +1,8 @@
 #include <stdio.h>
-#include <string.h>
 #include <assert.h>
-
+#include <string.h>
+#define OCFACT 4 
+#define OCDIV 2
 /* float16 data type definition */
 
 typedef struct {
@@ -23,6 +24,120 @@ typedef struct {
   float sf;
 } float16;
 
+void input_stage(float16 inbuf[256 * 32], unsigned short ksize,
+    unsigned short xt_off, unsigned short xtile_pad, unsigned short yt_off, 
+    unsigned short row_off, unsigned short ydim, unsigned short w_off,
+    float it[16][3]) {
+
+  unsigned short p, q, j, toff;
+  float itt[8][4];
+#pragma HLS ARRAY_PARTITION variable=itt complete dim=1
+#pragma HLS ARRAY_PARTITION variable=itt complete dim=2
+  float tempbuf[20];
+#pragma HLS ARRAY_PARTITION variable=tempbuf complete 
+
+  short crow_off;
+  unsigned short c_off = (ksize == 5) ? w_off >> 1 : w_off;
+  unsigned short flag = w_off & 0x1;
+ 
+  crow_off = (ksize >> 1) - row_off;
+ 
+  int in_idx = (((c_off * ydim + (yt_off - crow_off)) * xtile_pad * 2) >> 4)
+      + xt_off;
+  if (yt_off - crow_off >= 0 && yt_off - crow_off < ydim) {
+    tempbuf[2] = inbuf[in_idx].s0;
+    tempbuf[3] = inbuf[in_idx].s1;
+    tempbuf[4] = inbuf[in_idx].s2;
+    tempbuf[5] = inbuf[in_idx].s3;
+    tempbuf[6] = inbuf[in_idx].s4;
+    tempbuf[7] = inbuf[in_idx].s5;
+    tempbuf[8] = inbuf[in_idx].s6;
+    tempbuf[9] = inbuf[in_idx].s7;
+    tempbuf[10] = inbuf[in_idx].s8;
+    tempbuf[11] = inbuf[in_idx].s9;
+    tempbuf[12] = inbuf[in_idx].sa;
+    tempbuf[13] = inbuf[in_idx].sb;
+    tempbuf[14] = inbuf[in_idx].sc;
+    tempbuf[15] = inbuf[in_idx].sd;
+    tempbuf[16] = inbuf[in_idx].se;
+    tempbuf[17] = inbuf[in_idx].sf; 
+
+    if (xt_off == 0) {
+      tempbuf[0] = 0;
+      tempbuf[1] = 0;
+    } else {
+      tempbuf[0] = inbuf[in_idx - 1].se;
+      tempbuf[1] = inbuf[in_idx - 1].sf;
+    }
+
+    if (xt_off * 8 + 8 == xtile_pad) {
+      tempbuf[18] = 0;
+      tempbuf[19] = 0;
+    } else {
+      tempbuf[18] = inbuf[in_idx + 1].s0;
+      tempbuf[19] = inbuf[in_idx + 1].s1;
+    }    
+  } else {
+    for (p = 0; p < 20; ++p) 
+      tempbuf[p] = 0;
+  }
+
+  if (ksize != 5)
+    toff = 1;
+  else if (flag == 0)
+    toff = 0;
+  else
+    toff = 3;
+
+  for (p = 0; p < 3; ++p) {
+    for (q = 0; q < 16; ++q) {
+      it[q][p] = tempbuf[p + q + toff];
+    }
+  }
+}
+
+void wt_set(float16 wbuf[OCFACT][512], float wt[OCFACT][16][3], 
+    unsigned short w_off, unsigned short row_off, unsigned short ksize) { 
+  float wvals[16]; 
+#pragma HLS ARRAY_PARTITION variable=wvals complete
+
+  float it[3];
+  float ot[3];
+
+  for (int k = 0; k < OCFACT; ++k) {
+    wvals[0] = wbuf[k][w_off].s0;
+    wvals[1] = wbuf[k][w_off].s1;
+    wvals[2] = wbuf[k][w_off].s2;
+    wvals[3] = wbuf[k][w_off].s3;
+    wvals[4] = wbuf[k][w_off].s4;
+    wvals[5] = wbuf[k][w_off].s5;
+    wvals[6] = wbuf[k][w_off].s6;
+    wvals[7] = wbuf[k][w_off].s7;
+    wvals[8] = wbuf[k][w_off].s8;
+    wvals[9] = wbuf[k][w_off].s9;
+    wvals[10] = wbuf[k][w_off].sa;
+    wvals[11] = wbuf[k][w_off].sb;
+    wvals[12] = wbuf[k][w_off].sc;
+    wvals[13] = wbuf[k][w_off].sd;
+    wvals[14] = wbuf[k][w_off].se;
+    wvals[15] = wbuf[k][w_off].sf;
+
+    if (ksize != 1) {
+      it[0] = wvals[row_off * 3 + 0];
+      it[1] = wvals[row_off * 3 + 1];
+      it[2] = wvals[row_off * 3 + 2];
+    } else {
+      for (int q = 0; q < 3; ++q) 
+        it[q] = wvals[0];
+    }
+    for (int p = 0; p < 16; ++p) {
+      for (int q = 0; q < 3; ++q) {
+        wt[k][p][q] = it[q];
+      }
+    }  
+  }
+}
+
 /* Kernel used for computing Winograd (F(3x3, 2x2)) based convolution. This 
  * kernel assumes that the weights have been pre-transformed. 
  * input:         flattened input array containing image data
@@ -37,24 +152,21 @@ typedef struct {
  * rpo:           number of reads required to cover all input channels
  * ydim:          size in the  y dimension
  * xdim:          size in the x dimension
- * ytile:         number of rows of tiles
  * xtile:         number of columns of tiles
- * ytile_pad:     padded number of rows of tiles (not used)
  * xtile_pad:     padded number of columns of tiles
- * rburst:        number of input rows to read
  * dataoff:       image offset
  * numgroups:     number of groups
  */ 
 
-void direct_conv(float *input, float16 *weights, float *bias, float16 *output, 
+void direct_conv(float16 *input, float16 *weights, float *bias, float16 *output,  
       int group, int inchannels, int outchannels, int burstchannels, int rpo,
-      int ydim, int xdim, int ytile, int xtile, int ytile_pad, int xtile_pad, 
-      int rburst, int dataoff, int numgroups) {
+      int ydim, int xdim, int xtile, int xtile_pad, int ksize, int dataoff, 
+      int numgroups) {
 
 /* Ports */
-
 #pragma HLS data_pack variable=weights
 #pragma HLS data_pack variable=output
+#pragma HLS data_pack variable=input
 #pragma HLS INTERFACE m_axi port=input offset=slave bundle=gmem1
 #pragma HLS INTERFACE m_axi port=output offset=slave bundle=gmem2
 #pragma HLS INTERFACE m_axi port=weights offset=slave bundle=gmem3
@@ -69,61 +181,80 @@ void direct_conv(float *input, float16 *weights, float *bias, float16 *output,
 #pragma HLS INTERFACE s_axilite port=outchannels bundle=control
 #pragma HLS INTERFACE s_axilite port=burstchannels bundle=control
 #pragma HLS INTERFACE s_axilite port=rpo bundle=control
-#pragma HLS INTERFACE s_axilite port=rburst bundle=control
 #pragma HLS INTERFACE s_axilite port=dataoff bundle=control
 #pragma HLS INTERFACE s_axilite port=numgroups bundle=control
 
 #pragma HLS INTERFACE s_axilite port=ydim bundle=control
 #pragma HLS INTERFACE s_axilite port=xdim bundle=control
 #pragma HLS INTERFACE s_axilite port=xtile bundle=control
-#pragma HLS INTERFACE s_axilite port=ytile bundle=control
 #pragma HLS INTERFACE s_axilite port=xtile_pad bundle=control
-#pragma HLS INTERFACE s_axilite port=ytile_pad bundle=control
-#pragma HLS INTERFACE s_axilite port=rburst bundle=control
+#pragma HLS INTERFACE s_axilite port=ksize bundle=control
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
   // Input tile buffer
-  float inbuf[256 * 256][3]; 
-//#pragma HLS ARRAY_PARTITION variable=inbuf complete dim=3
-#pragma HLS ARRAY_PARTITION variable=inbuf complete dim=2
-#pragma HLS ARRAY_PARTITION variable=inbuf cyclic factor=16 dim=1
-
-  float sidebuf[4096][3];
-#pragma HLS ARRAY_PARTITION variable=sidebuf complete dim=2
- 
+  float16 inbuf[256 * 16]; 
 
   // Output buffer used for writing
-  float16 outbuf[256 * 16];
-
-  // Buffer used for reading lines from the input
-  float line[260] = {0};
-#pragma HLS ARRAY_PARTITION variable=line cyclic factor=2
+  float16 outbuf[OCFACT][256 * 16];
+#pragma HLS ARRAY_PARTITION variable=outbuf complete dim=1
 
   // Weight buffer
-  float16 wbuf[256];
+  float16 wbuf[OCFACT][512];
+#pragma HLS ARRAY_PARTITION variable=wbuf complete dim=1
 
   // Bias buffer
   float biasbuf[1024];
+#pragma HLS ARRAY_PARTITION variable=biasbuf cyclic factor=4
 
-  float inrow[3];
-#pragma HLS ARRAY_PARTITION variable=inrow complete
-
-  float it[16][3 * 3];
+  // Input tile registers post transform
+  float it[16][3];
 #pragma HLS ARRAY_PARTITION variable=it complete dim=1
 #pragma HLS ARRAY_PARTITION variable=it complete dim=2
 
   // Temporary output tile registers
-  float ott[16][10];
-#pragma HLS ARRAY_PARTITION variable=ott complete dim=1
-#pragma HLS ARRAY_PARTITION variable=ott complete dim=2
-
-  float ot[16];
+  float ot[OCFACT][16][3];
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=1
+#pragma HLS ARRAY_PARTITION variable=ot complete dim=2
+#pragma HLS ARRAY_PARTITION variable=ot complete dim=3
 
-  int bank_off;
+  float wt[OCFACT][16][3];
+#pragma HLS ARRAY_PARTITION variable=wt complete dim=1
+#pragma HLS ARRAY_PARTITION variable=wt complete dim=2
+#pragma HLS ARRAY_PARTITION variable=wt complete dim=3
 
-  assert(rburst >= 1);
-  assert(rburst <= 4096);
+  // Ouput tile transform stage 1 output
+  float ot_s1[16];
+#pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
+/*
+  assert(inchannels >= 256);
+  assert(inchannels <= 256);
+  assert(outchannels >= 384);
+  assert(outchannels <= 384);
+
+  assert(burstchannels >= 256);
+  assert(burstchannels <= 256);
+
+  assert(xdim >= 13);
+  assert(xdim <= 13);
+  assert(ydim >= 13);
+  assert(ydim <= 13);
+  assert(xtile >= 7);
+  assert(xtile <= 7);
+
+  assert(group >= 0);
+  assert(group <= 0);
+
+  assert(numgroups <= 1);
+  assert(numgroups >= 1);
+
+  assert(xtile_pad >= 8);
+  assert(xtile_pad <= 8);
+
+  assert(rpo >= 1);
+  assert(rpo <= 1);
+
+  assert(ksize == 3);
+*/
   assert(inchannels >= 1);
   assert(inchannels <= 1024);
   assert(outchannels >= 1);
@@ -132,14 +263,12 @@ void direct_conv(float *input, float16 *weights, float *bias, float16 *output,
   assert(burstchannels >= 1);
   assert(burstchannels <= 256);
 
-  assert(xdim >= 12);
+  assert(xdim >= 7);
   assert(xdim <= 256);
-  assert(ydim >= 12);
+  assert(ydim >= 7);
   assert(ydim <= 256);
-  assert(xtile >= 12);
-  assert(xtile <= 256);
-  assert(ytile >= 12);
-  assert(ytile <= 256);
+  assert(xtile >= 4);
+  assert(xtile <= 128);
 
   assert(group >= 0);
   assert(group <= 1);
@@ -147,218 +276,165 @@ void direct_conv(float *input, float16 *weights, float *bias, float16 *output,
   assert(numgroups <= 2);
   assert(numgroups >= 1);
 
-  assert(xtile_pad >= 16);
-  assert(xtile_pad <= 256);
-  assert(ytile_pad >= 16);
-  assert(ytile_pad <= 256);
+  assert(xtile_pad >= 8);
+  assert(xtile_pad <= 128);
 
   assert(rpo >= 1);
   assert(rpo <= 64);
 
-  int i;
+  assert(ksize == 1 || ksize == 3 || ksize == 5);
 
-  unsigned int n, y, x, p, q, j, o;
+  int i, n, y, x, p, q, j, o, k;
 
-  unsigned int sb_off = 0;
-  unsigned int w_off = 0;
-  unsigned int tile_cnt = 0;
-  unsigned int xt_off = 0;
-  unsigned int yt_off = 0;
-  unsigned int fact = 0;
+  unsigned short w_off = 0;
+  unsigned short row_off = 0;
+  unsigned short xt_off = 0;
+  unsigned short yt_off = 0;
+  int fact = xtile_pad >> 3;
   int out_offset = 0;  
-  unsigned int y_off = 0;
-  unsigned int p_off = 1;
-  unsigned int i_off = 0;
+  int weight_offset = 0;
+  int weight_size = 0;
+  int offset = 0;
 
-  unsigned int offset = 0;
-  unsigned int offset2 = 0;
-
-  unsigned int offtemp1 = 0;
-  unsigned int offtemp2 = 0;
-
-  unsigned int off;
-
-  fact = ((xtile_pad) >> 4);
-
+  float lineval;
+  int in_off;
   /* Read bias data into buffer */
-  memcpy(biasbuf, bias + outchannels * group, sizeof(float) * outchannels);
+  memcpy(biasbuf, bias + (outchannels * group), sizeof(float) * outchannels);
 
+  int mac_iterations;
+  
+  if (ksize == 3)
+    mac_iterations = (burstchannels * ydim * 3) * fact;
+  else if (ksize == 5) 
+    mac_iterations = (burstchannels * ydim * 5 * 2) * fact;
+  else 
+    mac_iterations = (burstchannels * ydim) * fact;
+  
   for (n = 0; n < rpo; ++n) {
-    y_off = 0;
-    p_off = 1;
-    i_off = 0;
-
     /* Read the input line by line and tile it into the tile buffer */
-    IREADLOOP: for (i = 0; i < rburst; ++i) {
-      memcpy(line + 1, input + dataoff * numgroups * inchannels * ydim * xdim + 
-          i * xdim + group * inchannels * ydim * xdim + 
-          n * burstchannels * ydim * xdim, sizeof(float) * xdim);
+    in_off = (((dataoff * numgroups + group) * inchannels) * ydim * xtile_pad 
+        * 2 + n * burstchannels * ydim * xtile_pad * 2) >> 4;
 
-      if (y_off == ydim - 2) {
-        i_off++;
-        y_off = 0;
-        p_off = 1;
-      }
+    memcpy(inbuf, input + in_off, sizeof(float16) * ((burstchannels * ydim * 
+            xtile_pad * 2) >> 4)); 
 
-      if (p_off == 3) {
-        p_off = 2;
-        y_off++;
-      }
-
-      int id_in = (i_off * ytile + y_off) * xtile_pad;
-
-      XTILELOOP: for (x = 0; x < xtile_pad; ++x) {
-#pragma HLS pipeline
-
-        for (p = 0; p < 1; ++p) {
-          inrow[p] = line[x + p];
-        }
-
-        for (p = 0; p < 1; ++p) {
-          float temp = inrow[p];
-          int id_inx = id_in + x;
-
-          inbuf[id_inx][p_off] = temp;
-          if (y_off == ydim - 2) {
-            inbuf[id_inx + xtile_pad][2] = 0;
-          }
-
-          if (p_off >= 1) {
-            id_inx = id_inx + xtile_pad;
-            inbuf[id_inx][p_off - 1] = temp;
-          }
-          if (p_off >= 2 && y_off != ydim - 2) {
-            id_inx = id_inx + xtile_pad;
-            inbuf[id_inx][p_off - 2] = temp;
-          } 
-        }
-      }
-      sidebuf[i_off * ytile + y_off][p_off] = line[xtile_pad];
-      if (p_off >= 1) {
-        sidebuf[i_off * ytile + y_off + 1][p_off - 1] = line[xtile_pad];
-      }
-      if (p_off >= 2 && y_off != ydim - 2)
-        sidebuf[i_off * ytile + y_off + 2][p_off - 2] = line[xtile_pad];
-      if (y_off == ydim - 2) {
-        sidebuf[i_off * ytile + y_off + 1][2] = 0;
-      }
-      p_off++;
-    }
-
-    for (o = 0; o < outchannels; ++o) {
-      memcpy(wbuf, weights + (o + outchannels * group) * inchannels + 
-          n * burstchannels, sizeof(float16) * burstchannels);
-      out_offset = dataoff * numgroups * outchannels * ydim * fact + 
-                    ((o + outchannels * group) * ydim) * fact;
-
+    unsigned short ofm_iters = (outchannels & 0x3) ? 
+      (outchannels >> OCDIV) + 1 : (outchannels >> OCDIV);
+    for (o = 0; o < ofm_iters; ++o) {
       if (n == 0) {
-//      Set the output buffers to contain the biases 
-        for (y = 0; y < ydim; ++y) {
-          for (x = 0; x < fact; ++x) {
+        // Set the output buffers to contain the biases 
+        for (i = 0; i < ydim * fact; ++i) {
 #pragma HLS pipeline
-            offtemp1 = y * fact + x;
-            outbuf[offtemp1].s0 = biasbuf[o];
-            outbuf[offtemp1].s1 = biasbuf[o];
-            outbuf[offtemp1].s2 = biasbuf[o];
-            outbuf[offtemp1].s3 = biasbuf[o];
-            outbuf[offtemp1].s4 = biasbuf[o];
-            outbuf[offtemp1].s5 = biasbuf[o];
-            outbuf[offtemp1].s6 = biasbuf[o];
-            outbuf[offtemp1].s7 = biasbuf[o];
-            outbuf[offtemp1].s8 = biasbuf[o];
-            outbuf[offtemp1].s9 = biasbuf[o];
-            outbuf[offtemp1].sa = biasbuf[o];
-            outbuf[offtemp1].sb = biasbuf[o];
-            outbuf[offtemp1].sc = biasbuf[o];
-            outbuf[offtemp1].sd = biasbuf[o];
-            outbuf[offtemp1].se = biasbuf[o];
-            outbuf[offtemp1].sf = biasbuf[o];
+          for (k = 0; k < OCFACT; ++k) {
+            outbuf[k][i].s0 = biasbuf[o * OCFACT + k];
+            outbuf[k][i].s1 = biasbuf[o * OCFACT + k];
+            outbuf[k][i].s2 = biasbuf[o * OCFACT + k];
+            outbuf[k][i].s3 = biasbuf[o * OCFACT + k];
+            outbuf[k][i].s4 = biasbuf[o * OCFACT + k];
+            outbuf[k][i].s5 = biasbuf[o * OCFACT + k];
+            outbuf[k][i].s6 = biasbuf[o * OCFACT + k];
+            outbuf[k][i].s7 = biasbuf[o * OCFACT + k];
+            outbuf[k][i].s8 = biasbuf[o * OCFACT + k];
+            outbuf[k][i].s9 = biasbuf[o * OCFACT + k];
+            outbuf[k][i].sa = biasbuf[o * OCFACT + k];
+            outbuf[k][i].sb = biasbuf[o * OCFACT + k];
+            outbuf[k][i].sc = biasbuf[o * OCFACT + k];
+            outbuf[k][i].sd = biasbuf[o * OCFACT + k];
+            outbuf[k][i].se = biasbuf[o * OCFACT + k];
+            outbuf[k][i].sf = biasbuf[o * OCFACT + k];
           }
         } 
       } else {
-        memcpy(outbuf, output + out_offset, sizeof(float16) * fact * ydim);
+        for (k = 0; k < OCFACT; ++k) {
+          out_offset = dataoff * numgroups * outchannels * ydim * fact + 
+          ((o * OCFACT + k + outchannels * group) * ydim) * fact;
+          memcpy(outbuf[k], output + out_offset, sizeof(float16) * fact * 
+              ydim);
+        }
+      }
+
+      for (k = 0; k < OCFACT; ++k) {
+        weight_offset = (o * OCFACT + k + outchannels * group) * inchannels 
+          + n * burstchannels;
+        weight_size = burstchannels;
+
+        if (ksize == 5) {
+          weight_offset = weight_offset << 1;
+          weight_size = weight_size << 1;
+        }
+
+        memcpy(wbuf[k], weights + weight_offset, 
+            sizeof(float16) * weight_size);
       }
 
       w_off = 0;
-      tile_cnt = 0;
       xt_off = 0;
       yt_off = 0;
-      sb_off = 0;
-      MULTACCSTAGE: for (i = 0; i < (burstchannels * ydim * xtile_pad) >> 4; 
-                        ++i, ++tile_cnt, ++xt_off) {
-#pragma HLS DEPENDENCE variable=outbuf inter true distance=12
-#pragma HLS DEPENDENCE variable=inbuf intra false
-#pragma HLS pipeline 
-        if (tile_cnt * 16 == ydim * xtile_pad) {
-          tile_cnt = 0;
-          yt_off = 0;
+      row_off = 0;
+      MULTACCSTAGE: for (i = 0; i < mac_iterations; ++i, ++xt_off) {
+#pragma HLS DEPENDENCE variable=outbuf inter distance=12 true
+#pragma HLS pipeline        
+        if (xt_off * 8 == xtile_pad) {
+          if (yt_off + 1 == ydim) {
+            yt_off = 0;
+            if ((row_off + 1 == ksize) || ksize == 1) {
+              row_off = 0;
+              w_off++;
+            } else {
+              row_off++;
+            }
+          } else {
+            yt_off++;
+          }
           xt_off = 0;
-          w_off++;
-          sb_off++;
-        } else if (xt_off * 16 == xtile_pad) {
-          yt_off++;
-          xt_off = 0;
-          sb_off++;
         }
 
-        for (j = 0; j < 16; ++j) {
-          for (p = 0; p < 3; ++p) {
-            it[j][p * 3 + 0] = inbuf[i * 16 + j][p];
-            it[j][p * 3 + 1] = inbuf[i * 16 + j + 1][p];
-            it[j][p * 3 + 2] = inbuf[i * 16 + j + 2][p];
-
-            if (j == 14 && (xt_off * 16 + j + 1 == xtile_pad - 1)) {
-              it[j][p * 3 + 2] = sidebuf[sb_off][p];
-            }
-
-            if (j == 15 && (xt_off * 16 + j == xtile_pad - 1)) {
-              it[j][p * 3 + 1] = sidebuf[sb_off][p];
-              it[j][p * 3 + 2] = 0;
+        offset = yt_off * fact + xt_off;        
+        input_stage(inbuf, ksize, xt_off, xtile_pad, yt_off, 
+            row_off, ydim, w_off, it);
+        // Compute the element-wise multiplication between weight and input
+        // tile 
+        wt_set(wbuf, wt, w_off, row_off, ksize); 
+        for (k = 0; k < OCFACT; ++k) {
+          for (p = 0; p < 16; ++p) {
+            for (q = 0; q < 3; ++q) {
+              ot[k][p][q] = it[p][q] * wt[k][p][q];
             }
           }
-        }
-
-        for (j = 0; j < 16; ++j) {
-          ott[j][0] = it[j][0] * wbuf[w_off].s0;
-          ott[j][1] = it[j][1] * wbuf[w_off].s1;
-          ott[j][2] = it[j][2] * wbuf[w_off].s2;
-
-          ott[j][3] = it[j][3] * wbuf[w_off].s3;
-          ott[j][4] = it[j][4] * wbuf[w_off].s4;
-          ott[j][5] = it[j][5] * wbuf[w_off].s5;
-      
-          ott[j][6] = it[j][6] * wbuf[w_off].s6;
-          ott[j][7] = it[j][7] * wbuf[w_off].s7;
-          ott[j][8] = it[j][8] * wbuf[w_off].s8;
-        }
-
-        offset = yt_off * fact + xt_off;
-
-        for (j = 0; j < 16; ++j) {
-          ot[j] = ott[j][0];
-          for (p = 1; p < 9; ++p) {
-            ot[j] += ott[j][p];
+         
+          for (p = 0; p < 16; ++p) {
+            if (ksize != 1)
+              ot_s1[p] = ot[k][p][0] + ot[k][p][1] + ot[k][p][2];
+            else
+              ot_s1[p] = ot[k][p][1];
           }
+           
+          outbuf[k][offset].s0 += ot_s1[0];
+          outbuf[k][offset].s1 += ot_s1[1];
+          outbuf[k][offset].s2 += ot_s1[2];
+          outbuf[k][offset].s3 += ot_s1[3];
+          outbuf[k][offset].s4 += ot_s1[4];
+          outbuf[k][offset].s5 += ot_s1[5];
+          outbuf[k][offset].s6 += ot_s1[6];
+          outbuf[k][offset].s7 += ot_s1[7];
+          outbuf[k][offset].s8 += ot_s1[8];
+          outbuf[k][offset].s9 += ot_s1[9];
+          outbuf[k][offset].sa += ot_s1[10];
+          outbuf[k][offset].sb += ot_s1[11];
+          outbuf[k][offset].sc += ot_s1[12];
+          outbuf[k][offset].sd += ot_s1[13];
+          outbuf[k][offset].se += ot_s1[14];
+          outbuf[k][offset].sf += ot_s1[15];
         }
-        outbuf[offset].s0 += ot[0];
-        outbuf[offset].s1 += ot[1];
-        outbuf[offset].s2 += ot[2];
-        outbuf[offset].s3 += ot[3];
-        outbuf[offset].s4 += ot[4];
-        outbuf[offset].s5 += ot[5];
-        outbuf[offset].s6 += ot[6];
-        outbuf[offset].s7 += ot[7];
-        outbuf[offset].s8 += ot[8];
-        outbuf[offset].s9 += ot[9];
-        outbuf[offset].sa += ot[10];
-        outbuf[offset].sb += ot[11];
-        outbuf[offset].sc += ot[12];
-        outbuf[offset].sd += ot[13];
-        outbuf[offset].se += ot[14];
-        outbuf[offset].sf += ot[15]; 
-      }
-
-      memcpy(output + out_offset, outbuf, sizeof(float16) * fact * ydim);
+      }     
+      for (k = 0; k < OCFACT; ++k) {
+        if (o * OCFACT + k < outchannels) {
+          out_offset = dataoff * numgroups * outchannels * ydim * fact + 
+                        ((o * OCFACT + k + outchannels * group) * ydim) * fact;
+          memcpy(output + out_offset, outbuf[k], sizeof(float16) * fact * 
+              ydim);
+        }
+      }      
     }
   }
 }

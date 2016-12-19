@@ -1,5 +1,5 @@
 # Define the project for SDAccel
-create_solution -name prj_direct -dir . -force
+create_solution -name prj_direct_conv -dir . -force
 #set_property platform vc690-admpcie7v3-1ddr-gen2 [current_project]
 add_device -vbnv xilinx:adm-pcie-7v3:1ddr:1.0
 
@@ -23,12 +23,20 @@ create_compute_unit -opencl_binary [get_opencl_binary direct_conv] -kernel [get_
 compile_emulation -flow cpu -opencl_binary [get_opencl_binary direct_conv]
 
 # Run the compiled application in CPU based emulation mode
-run_emulation -flow cpu -args "direct_conv.xclbin 1 64 2 1 64 224 224 224 2"
-run_emulation -flow cpu -args "direct_conv.xclbin 1 64 2 4 16 112 112 128 2"
-run_emulation -flow cpu -args "direct_conv.xclbin 1 512 2 256 2 14 14 16 2"
-run_emulation -flow cpu -args "direct_conv.xclbin 1 256 1 256 1 16 16 16 1"
-
-#run_emulation -flow cpu -args "direct_conv.xclbin 1 2 2 2 1 4 4 4 1"
+run_emulation -flow cpu -args "direct_conv.xclbin 1 64 8 1 64 224 112 112 2 3"
+run_emulation -flow cpu -args "direct_conv.xclbin 1 64 8 4 16 112 56 56 2 3"
+run_emulation -flow cpu -args "direct_conv.xclbin 1 512 8 256 2 14 7 8 2 3"
+run_emulation -flow cpu -args "direct_conv.xclbin 1 256 384 256 1 13 7 8 1 3"
+run_emulation -flow cpu -args "direct_conv.xclbin 1 8 8 8 1 16 8 8 1 3"
+run_emulation -flow cpu -args "direct_conv.xclbin 1 16 8 16 1 16 8 8 1 1"
+run_emulation -flow cpu -args "direct_conv.xclbin 1 256 256 256 1 13 7 8 1 1"
+run_emulation -flow cpu -args "direct_conv.xclbin 1 8 8 8 1 16 8 8 1 5"
+run_emulation -flow cpu -args "direct_conv.xclbin 1 8 8 8 1 27 14 16 1 5"
+run_emulation -flow cpu -args "direct_conv.xclbin 2 48 128 48 1 27 14 16 1 5"
+run_emulation -flow cpu -args "direct_conv.xclbin 1 1 1 1 1 13 7 8 1 3"
+run_emulation -flow cpu -args "direct_conv.xclbin 1 1 7 1 1 13 7 8 1 3"
+run_emulation -flow cpu -args "direct_conv.xclbin 1 1 1 1 1 13 7 8 1 1"
+run_emulation -flow cpu -args "direct_conv.xclbin 1 1 5 1 1 13 7 8 1 1"
 
 report_estimate
 
