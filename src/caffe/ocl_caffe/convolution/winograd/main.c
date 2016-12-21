@@ -77,6 +77,14 @@ void ref_conv(float *input, float *weights, float *bias, float *ocl_output,
   }
 }
 
+void ref_relu(float *input, int outchannels, int xsize, int ysize, 
+    int numimages) {
+  int count = outchannels * xsize * ysize * numimages;
+  for (int i = 0; i < count; ++i) 
+    if (input[i] < 0)
+      input[i] = 0;
+}
+
 int
 load_file_to_memory(const char *filename, char **result)
 { 
@@ -110,9 +118,9 @@ void transform_weights(float *weights_in, float *weights_out) {
 
 int main(int argc, char** argv)
 {
-  if (argc != 12){
+  if (argc != 13){
     printf("%s <inputfile> numgroups inchannels outchannels burstchannels rpo" 
-        "dim tilesize padtsize\n", argv[0]);
+        "dim tilesize padtsize numimages ksize use_relu\n", argv[0]);
     return EXIT_FAILURE;
   }
 
@@ -131,10 +139,9 @@ int main(int argc, char** argv)
   int xtile = (int)atoi(argv[8]);
   int ytile_pad = (int)atoi(argv[9]);
   int xtile_pad = (int)atoi(argv[9]);
-  int rburst = burstchannels * ydim * xdim / 256;
   int numimages = (int)atoi(argv[10]);
   int ksize = (int)atoi(argv[11]);
-
+  int use_relu = (int)atoi(argv[12]);
   int ksize_pad;
 
   if (ksize == 5)
@@ -452,7 +459,9 @@ int main(int argc, char** argv)
   clWaitForEvents(1, &readevent);
   ref_conv(input, weights, bias, sw_results, numgroups, inchannels * numgroups, 
       outchannels * numgroups, xdim, ydim, numimages, ksize);
-   
+  if (use_relu) {
+    ref_relu(input, outchannels * numgroups, xdim, ydim, numimages);
+  }
   // Validate our results
   correct = 0;
   for (n = 0; n < numimages; ++n) { 
