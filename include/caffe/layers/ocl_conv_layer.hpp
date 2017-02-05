@@ -77,10 +77,11 @@ class OCLConvolutionLayer : public ConvolutionLayer<Dtype> {
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   virtual void ocl_backward_conv(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
-  void transform_weights_rotated(void); 
+  void transform_weights_rotated(void);
   void transform_weights(void);
   void ocl_conv(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
+
  private:
   int offshape_;
   int dim_;
@@ -98,7 +99,6 @@ class OCLConvolutionLayer : public ConvolutionLayer<Dtype> {
   Blob<Dtype> trans_weights_R;
 };
 #endif
-
 
 }  // namespace caffe
 

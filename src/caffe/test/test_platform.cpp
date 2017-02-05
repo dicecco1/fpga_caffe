@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
+#include <vector>
 
 #include "glog/logging.h"
 #include "gtest/gtest.h"
@@ -48,7 +49,7 @@ TEST_F(PlatformTest, TestInitialization) {
   printf("Unified virtual addressing:    %s\n",
          (CAFFE_TEST_CUDA_PROP.unifiedAddressing ? "Yes" : "No"));
   EXPECT_TRUE(true);
-#endif // CPU_ONLY
+#endif  // CPU_ONLY
 
 #ifdef USE_OCL
   cl_uint numPlatforms;
@@ -56,18 +57,17 @@ TEST_F(PlatformTest, TestInitialization) {
   clGetPlatformIDs(0, NULL, &numPlatforms);
   all_platforms.resize(1);
   clGetPlatformIDs(1, &(all_platforms[0]), NULL);
-  std::cout<<"Number of platforms is: "<<numPlatforms<<std::endl;
-  EXPECT_TRUE(numPlatforms != 0);
-  
+  std::cout << "Number of platforms is: " << numPlatforms << std::endl;
+  EXPECT_NE(numPlatforms, 0);
+
   cl_device_id all_devices;
   cl_uint numDevices;
   clGetDeviceIDs(all_platforms[0], CL_DEVICE_TYPE_ALL, 0, NULL, &numDevices);
   clGetDeviceIDs(all_platforms[0], CL_DEVICE_TYPE_ALL, 1, &all_devices, NULL);
-  std::cout<<"Number of devices is: "<<numDevices<<std::endl;
-  EXPECT_TRUE(numDevices != 0);
-  
-#endif // USE_OCL
+  std::cout << "Number of devices is: " << numDevices << std::endl;
+  EXPECT_NE(numDevices, 0);
 
+#endif  // USE_OCL
 }
 
-} // namespace caffe
+}  // namespace caffe

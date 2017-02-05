@@ -76,11 +76,11 @@ TEST_F(SyncedMemoryTest, TestOCLWrite) {
   EXPECT_EQ(mem.head(), SyncedMemory::HEAD_AT_OCL);
 
   char *pattern = new char[10];
-  memset(pattern, 1, 10);
+  caffe_memset(10, 1, pattern);
 
-  clEnqueueWriteBuffer(oclCommandQueue, (cl_mem)ocl_data, CL_TRUE, 0, 10, 
-    (void *)pattern, 0, NULL, NULL);
- 
+  clEnqueueWriteBuffer(oclCommandQueue, (cl_mem)ocl_data, CL_TRUE, 0, 10,
+      reinterpret_cast<void *>(pattern), 0, NULL, NULL);
+
   const void* cpu_data = mem.cpu_data();
   for (int i = 0; i < mem.size(); ++i) {
     EXPECT_EQ((static_cast<const char*>(cpu_data))[i], 1);
@@ -89,10 +89,10 @@ TEST_F(SyncedMemoryTest, TestOCLWrite) {
 
   ocl_data = mem.mutable_ocl_data();
   EXPECT_EQ(mem.head(), SyncedMemory::HEAD_AT_OCL);
-  memset(pattern, 2, 10);
+  caffe_memset(10, 2, pattern);
 
-  clEnqueueWriteBuffer(oclCommandQueue, (cl_mem)ocl_data, CL_TRUE, 0, 10, 
-    (void *)pattern, 0, NULL, NULL);
+  clEnqueueWriteBuffer(oclCommandQueue, (cl_mem)ocl_data, CL_TRUE, 0, 10,
+      reinterpret_cast<void *>(pattern), 0, NULL, NULL);
 
   cpu_data = mem.cpu_data();
   for (int i = 0; i < mem.size(); ++i) {

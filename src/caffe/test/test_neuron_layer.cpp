@@ -140,7 +140,7 @@ class NeuronLayerTest : public MultiDeviceTest<TypeParam> {
           + slope_data[c] * std::min(bottom_data[i], (Dtype)(0)));
     }
   }
-  
+
   void LogBottomInit() {
     FillerParameter filler_param;
     GaussianFiller<Dtype> filler(filler_param);
@@ -993,9 +993,9 @@ TYPED_TEST(OCLNeuronLayerTest, TestReLUOCL) {
   // Now, check values
   const Dtype* bottom_data = this->blob_bottom_->cpu_data();
   const Dtype* top_data = this->blob_top_->cpu_data();
-  for (int i = 0; i < this->blob_bottom_->count(); ++i) { 
+  for (int i = 0; i < this->blob_bottom_->count(); ++i) {
     EXPECT_GE(top_data[i], 0.);
-    if(bottom_data[i] < 0.0)
+    if (bottom_data[i] < 0.0)
       EXPECT_TRUE(top_data[i] == 0.0);
     else
       EXPECT_TRUE(top_data[i] == bottom_data[i]);

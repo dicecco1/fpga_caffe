@@ -2,9 +2,9 @@
 #define CAFFE_COMMON_HPP_
 
 #include <boost/shared_ptr.hpp>
+#include <CL/opencl.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
-#include <CL/opencl.h>
 
 #include <climits>
 #include <cmath>
@@ -96,7 +96,7 @@ using std::vector;
 
 #ifdef USE_OCL
   extern cl_uint oclNumPlatforms;
-  extern std::vector<cl_platform_id> oclPlatform;
+  extern vector<cl_platform_id> oclPlatform;
   extern cl_device_id oclDevices;
   extern cl_context oclContext;
   extern cl_command_queue oclCommandQueue;

@@ -3,8 +3,10 @@
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <vector>
 
 #include "caffe/common.hpp"
+#include "caffe/util/math_functions.hpp"
 #include "caffe/util/rng.hpp"
 
 namespace caffe {
@@ -57,48 +59,45 @@ void GlobalInit(int* pargc, char*** pargv) {
   ::google::InstallFailureSignalHandler();
 }
 
-int convertToString(const char *filename, char **str)
-{
-	size_t size;
-  
-  FILE *f = fopen(filename, "rb");  
+int convertToString(const char *filename, char **str) {
+  size_t size;
 
-	if(f != NULL)
-	{
-		fseek(f, 0, SEEK_END);
-		size = ftell(f);
-		fseek(f, 0, SEEK_SET);
-		*str = new char[size+1];
-    memset(*str, 0, size+1);
-		if(!str)
-		{
-			fclose(f);
+  FILE *f = fopen(filename, "rb");
+
+  if (f != NULL) {
+    fseek(f, 0, SEEK_END);
+    size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    *str = new char[size+1];
+    caffe_memset(size + 1, 0, *str);
+    if (!str) {
+      fclose(f);
       LOG(FATAL) << "Could not reserve memory for string";
-			return -1;
-		}
+      return -1;
+    }
 
-		fread(*str, sizeof(char), size, f);
-		fclose(f);
-		(*str)[size] = '\0';
-		
-		return size;
-	}
- 	LOG(FATAL) << "Could not open opencl binary file.";
+    fread(*str, sizeof(char), size, f);
+    fclose(f);
+    (*str)[size] = '\0';
+
+    return size;
+  }
+  LOG(FATAL) << "Could not open opencl binary file.";
   return -1;
 }
 
 #ifdef USE_OCL
 
-void Caffe::SetOCLDevice() { 
+void Caffe::SetOCLDevice() {
   cl_int status;
-  oclPlatform.resize(1); 
-  status = clGetPlatformIDs(0, NULL, &oclNumPlatforms); 
-  status = clGetPlatformIDs(1, &(oclPlatform[0]), NULL); 
-  status = clGetDeviceIDs(oclPlatform[0], CL_DEVICE_TYPE_ACCELERATOR, 1, 
-    &oclDevices, NULL);
+  oclPlatform.resize(1);
+  status = clGetPlatformIDs(0, NULL, &oclNumPlatforms);
+  status = clGetPlatformIDs(1, &(oclPlatform[0]), NULL);
+  status = clGetDeviceIDs(oclPlatform[0], CL_DEVICE_TYPE_ACCELERATOR, 1,
+      &oclDevices, NULL);
   oclContext = clCreateContext(NULL, 1, &oclDevices, NULL, NULL, &status);
-  oclCommandQueue = clCreateCommandQueue(oclContext, oclDevices, 
-    CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, &status);
+  oclCommandQueue = clCreateCommandQueue(oclContext, oclDevices,
+      CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, &status);
 }
 
 #else

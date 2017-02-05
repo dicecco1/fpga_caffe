@@ -29,10 +29,10 @@
 
 #ifdef USE_OCL
 #include "caffe/layers/ocl_conv_layer.hpp"
+#include "caffe/layers/ocl_inner_product_layer.hpp"
+#include "caffe/layers/ocl_lrn_layer.hpp"
 #include "caffe/layers/ocl_pooling_layer.hpp"
 #include "caffe/layers/ocl_relu_layer.hpp"
-#include "caffe/layers/ocl_lrn_layer.hpp"
-#include "caffe/layers/ocl_inner_product_layer.hpp"
 #endif
 
 #ifdef WITH_PYTHON_LAYER
@@ -113,7 +113,7 @@ shared_ptr<Layer<Dtype> > GetPoolingLayer(const LayerParameter& param) {
     }
 #endif
 #ifdef USE_OCL
-   } else if (engine == PoolingParameter_Engine_OCL) {
+  } else if (engine == PoolingParameter_Engine_OCL) {
     if (param.top_size() > 1) {
       LOG(INFO) << "OCL does not support multiple tops. "
                 << "Using Caffe's own pooling layer.";

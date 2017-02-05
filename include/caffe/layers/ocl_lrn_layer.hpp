@@ -32,7 +32,6 @@ class OCLLRNLayer : public LRNLayer<Dtype> {
       const vector<Blob<Dtype>*>& top);
   virtual void Call_ocl(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
-  
 };
 #endif
 

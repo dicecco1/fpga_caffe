@@ -1204,7 +1204,7 @@ template <typename TypeParam>
 class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
   typedef typename TypeParam::Dtype Dtype;
 
-  protected:
+ protected:
     OCLPoolingLayerTest()
       : blob_bottom_(new Blob<Dtype>()),
         blob_top_(new Blob<Dtype>()),
@@ -1232,13 +1232,13 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
     vector<Blob<Dtype>*> prog_bot_;
     vector<Blob<Dtype>*> prog_top_;
 
-    void TestForwardPool (int layer_num) {
+    void TestForwardPool(int layer_num) {
       LayerParameter layer_param;
       layer_param.set_ocl_enable(true);
       PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
       int in_height, in_width, out_height, out_width, channels;
-      
-      if(layer_num == 1) {
+
+      if (layer_num == 1) {
         layer_param.set_xcl_name("pool1_max_layer.xclbin");
         layer_param.set_kernel_name("pool1_max_layer");
         channels = 96;
@@ -1246,7 +1246,7 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
         in_width = 55;
         out_height = 27;
         out_width = 27;
-      } else if(layer_num == 2) {
+      } else if (layer_num == 2) {
         layer_param.set_xcl_name("pool2_max_layer.xclbin");
         layer_param.set_kernel_name("pool2_max_layer");
         channels = 256;
@@ -1268,7 +1268,7 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
       programLayer->SetUp(this->prog_bot_, this->prog_top_);
       programLayer->Forward(this->prog_bot_, this->prog_top_);
 
-      pooling_param->set_engine(PoolingParameter_Engine_OCL); 
+      pooling_param->set_engine(PoolingParameter_Engine_OCL);
       pooling_param->set_stride(2);
       pooling_param->set_kernel_size(3);
       pooling_param->set_pool(PoolingParameter_PoolMethod_MAX);
@@ -1284,7 +1284,7 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
           for (int i = 0; i < in_height; ++i) {
             for (int j = 0; j < in_width; ++j) {
               blob_bottom_->mutable_cpu_data()
-                [blob_bottom_->offset(n, c, i, j)] = (j%3)+1+i; 
+                [blob_bottom_->offset(n, c, i, j)] = (j % 3) + 1 + i;
             }
           }
         }
@@ -1297,24 +1297,24 @@ class OCLPoolingLayerTest : public MultiDeviceTest<TypeParam> {
       EXPECT_EQ(blob_top_->width(), out_width);
       if (blob_top_vec_.size() > 1) {
         EXPECT_EQ(blob_top_mask_->num(), num);
-        EXPECT_EQ(blob_top_mask_->channels(), channels);   
-        EXPECT_EQ(blob_top_mask_->height(), out_height);   
-        EXPECT_EQ(blob_top_mask_->width(), out_width); 
-      }    
-      layer.Forward(blob_bottom_vec_, blob_top_vec_); 
+        EXPECT_EQ(blob_top_mask_->channels(), channels);
+        EXPECT_EQ(blob_top_mask_->height(), out_height);
+        EXPECT_EQ(blob_top_mask_->width(), out_width);
+      }
+      layer.Forward(blob_bottom_vec_, blob_top_vec_);
       // Expect output: 1 x 1 channels of:
       // [5 5 5 5 5 5]
       // [7 7 7 7 7 7]
       // [9 9 9 9 9 9]
       // [11 11 11 11 11 11]
       // [13 13 13 13 13 13]
-      // [15 15 15 15 15 15]  
-      for(int n = 0; n < num; ++n) {
-        for(int c = 0; c < channels; ++c) {
-          for(int i = 0; i < out_height; ++i) {
-            for(int j = 0; j < out_width; ++j) {
+      // [15 15 15 15 15 15]
+      for (int n = 0; n < num; ++n) {
+        for (int c = 0; c < channels; ++c) {
+          for (int i = 0; i < out_height; ++i) {
+            for (int j = 0; j < out_width; ++j) {
               EXPECT_EQ(blob_top_->cpu_data()
-                  [blob_top_->offset(n, c, i, j)], 5 + 2 * i);  
+                  [blob_top_->offset(n, c, i, j)], 5 + 2 * i);
             }
           }
         }

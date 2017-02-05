@@ -22,7 +22,7 @@ SyncedMemory::~SyncedMemory() {
 #endif  // CPU_ONLY
 
 #ifdef USE_OCL
-  if(ocl_ptr_) {
+  if (ocl_ptr_) {
     clReleaseMemObject((cl_mem)ocl_ptr_);
   }
 #endif
@@ -50,11 +50,11 @@ inline void SyncedMemory::to_cpu() {
     break;
   case HEAD_AT_OCL:
 #ifdef USE_OCL
-    if(cpu_ptr_ == NULL) {
+    if (cpu_ptr_ == NULL) {
       CaffeMallocHost(&cpu_ptr_, size_, &cpu_malloc_use_cuda_);
       own_cpu_data_ = true;
     }
-    clEnqueueReadBuffer(oclCommandQueue, (cl_mem)ocl_ptr_, CL_TRUE, 0, 
+    clEnqueueReadBuffer(oclCommandQueue, (cl_mem)ocl_ptr_, CL_TRUE, 0,
         size_, cpu_ptr_, 0, NULL, NULL);
     head_ = SYNCED;
 #else
@@ -98,30 +98,30 @@ inline void SyncedMemory::to_gpu() {
 
 inline void SyncedMemory::to_ocl(int RW) {
 #ifdef USE_OCL
-  switch(head_) {
+  switch (head_) {
   case UNINITIALIZED:
     CaffeMallocHost(&cpu_ptr_, size_, &cpu_malloc_use_cuda_);
     caffe_memset(size_, 0, cpu_ptr_);
     own_cpu_data_ = true;
-    ocl_ptr_ = (void *)clCreateBuffer(oclContext, 
-        CL_MEM_READ_WRITE, size_, NULL, NULL); 
+    ocl_ptr_ = reinterpret_cast<void *>(clCreateBuffer(oclContext,
+        CL_MEM_READ_WRITE, size_, NULL, NULL));
     if (RW)
       clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
           size_, cpu_ptr_, 0, NULL, NULL);
     head_ = HEAD_AT_OCL;
     break;
   case HEAD_AT_CPU:
-    if(ocl_ptr_ == NULL) {
-      ocl_ptr_ = (void *)clCreateBuffer(oclContext,
-          CL_MEM_READ_WRITE, size_, NULL, NULL);
+    if (ocl_ptr_ == NULL) {
+      ocl_ptr_ = reinterpret_cast<void *>(clCreateBuffer(oclContext,
+          CL_MEM_READ_WRITE, size_, NULL, NULL));
+      if (RW)
+        clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
+            size_, cpu_ptr_, 0, NULL, NULL);
+    } else {
       if (RW)
         clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
             size_, cpu_ptr_, 0, NULL, NULL);
     }
-    else
-      if (RW)
-        clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0, 
-            size_, cpu_ptr_, 0, NULL, NULL);
     head_ = SYNCED;
     break;
   case HEAD_AT_GPU:

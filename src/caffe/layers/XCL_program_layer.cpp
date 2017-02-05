@@ -1,3 +1,4 @@
+#include <string>
 #include <vector>
 
 #include "caffe/layers/XCL_program_layer.hpp"
@@ -10,8 +11,8 @@ void XCLProgramLayer<Dtype>::Forward_ocl(const vector <Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top) {
 
   cl_int error;
-  
-  std::string path(".build_release/opencl/src/caffe/layers/");
+
+  string path(".build_release/opencl/src/caffe/layers/");
 
   const char *filename = (path + this->layer_param_.xcl_name()).c_str();
 
@@ -21,7 +22,7 @@ void XCLProgramLayer<Dtype>::Forward_ocl(const vector <Blob<Dtype>*>& bottom,
   clReleaseKernel(this->ocl_float_kernel);
   clReleaseProgram(this->ocl_layer_program);
 
-  this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1, 
+  this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1,
       &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL,
       &error);
   clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, &error);

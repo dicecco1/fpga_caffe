@@ -242,8 +242,9 @@ int main(int argc, char** argv) {
   if (use_ocl == "OCL_enable") {
     Caffe::set_mode(Caffe::OCL);
     caffe::Caffe::SetOCLDevice();
-  } else 
+  } else {
     Caffe::set_mode(Caffe::CPU);
+  }
 
   Classifier classifier(model_file, trained_file, mean_file, label_file);
 

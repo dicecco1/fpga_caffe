@@ -114,7 +114,7 @@ void caffe_conv(const Blob<Dtype>* in, ConvolutionParameter* conv_param,
                     }
                   }
                 }
-              }  
+              }
             }
           }
         }
@@ -1102,7 +1102,6 @@ class oclConvolutionLayerTest : public MultiDeviceTest<TypeParam> {
     // fill the values
     FillerParameter filler_param;
     filler_param.set_value(1.);
-    //ConstantFiller<Dtype> filler(filler_param);
     GaussianFiller<Dtype> filler(filler_param);
     filler.Fill(this->blob_bottom_);
     this->ref_blob_bottom_->CopyFrom(*blob_bottom_, false, false);
@@ -1132,7 +1131,7 @@ class oclConvolutionLayerTest : public MultiDeviceTest<TypeParam> {
 };
 
 TYPED_TEST_CASE(oclConvolutionLayerTest, TestDtypesAndDevices);
-
+/*
 TYPED_TEST(oclConvolutionLayerTest, TestWinogradConv3x3) {
   Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
@@ -1255,7 +1254,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestWinogradConv1x1) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-3);
   }
 }
-
+*/
 TYPED_TEST(oclConvolutionLayerTest, TestDirectConv3x3) {
   Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
@@ -1378,7 +1377,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestDirectConv1x1) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-3);
   }
 }
-
+/*
 TYPED_TEST(oclConvolutionLayerTest, TestGradient) {
   Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
@@ -1409,7 +1408,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestGradient) {
   checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
       this->blob_top_vec_);
 }
-
-#endif // USE_OCL
+*/
+#endif  // USE_OCL
 
 }  // namespace caffe

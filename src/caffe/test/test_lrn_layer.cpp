@@ -458,7 +458,7 @@ template <typename TypeParam>
 class OCLLRNLayerTest : public MultiDeviceTest<TypeParam> {
   typedef typename TypeParam::Dtype Dtype;
 
-  protected:
+ protected:
     OCLLRNLayerTest()
         : epsilon_(Dtype(1e-5)),
           blob_bottom_(new Blob<Dtype>()),
@@ -474,7 +474,7 @@ class OCLLRNLayerTest : public MultiDeviceTest<TypeParam> {
       blob_top_vec_.push_back(blob_top_);
     }
     virtual ~OCLLRNLayerTest() { delete blob_bottom_; delete blob_top_; }
-    void ReferenceLRNForward(const Blob<Dtype>& blob_bottom, 
+    void ReferenceLRNForward(const Blob<Dtype>& blob_bottom,
         const LayerParameter& layer_param, Blob<Dtype>* blob_top);
 
     Dtype epsilon_;
@@ -537,8 +537,8 @@ void OCLLRNLayerTest<TypeParam>::ReferenceLRNForward(
                 scale += value * value * alpha / (size * size);
               }
             }
-            *(top_data + blob_top->offset(n, c, h, w)) = 
-              blob_bottom.data_at(n, c, h, w) / pow(scale,beta);
+            *(top_data + blob_top->offset(n, c, h, w)) =
+              blob_bottom.data_at(n, c, h, w) / pow(scale, beta);
           }
         }
       }
@@ -549,18 +549,18 @@ void OCLLRNLayerTest<TypeParam>::ReferenceLRNForward(
   }
 }
 
-TYPED_TEST_CASE(OCLLRNLayerTest, TestDtypesAndDevices);   
+TYPED_TEST_CASE(OCLLRNLayerTest, TestDtypesAndDevices);
 
-TYPED_TEST(OCLLRNLayerTest, TestSetupAcrossChannels) {                                                                   
-  typedef typename TypeParam::Dtype Dtype;                                                                            
-  LayerParameter layer_param;                                                                                         
-  LRNLayer<Dtype> layer(layer_param);                                                                                 
-  layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);                                                           
+TYPED_TEST(OCLLRNLayerTest, TestSetupAcrossChannels) {
+  typedef typename TypeParam::Dtype Dtype;
+  LayerParameter layer_param;
+  LRNLayer<Dtype> layer(layer_param);
+  layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   EXPECT_EQ(this->blob_top_->num(), 1);
   EXPECT_EQ(this->blob_top_->channels(), 96);
   EXPECT_EQ(this->blob_top_->height(), 55);
   EXPECT_EQ(this->blob_top_->width(), 55);
-}  
+}
 
 TYPED_TEST(OCLLRNLayerTest, TestForwardAcrossChannelsLRN1) {
   Caffe::set_mode(Caffe::OCL);
@@ -602,7 +602,7 @@ TYPED_TEST(OCLLRNLayerTest, TestForwardAcrossChannelsLRN2) {
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
   programLayer->Forward(this->prog_bot_, this->prog_top_);
-  layer_param.set_ocl_enable(true); 
+  layer_param.set_ocl_enable(true);
   OCLLRNLayer<Dtype> layer(layer_param);
   Blob<Dtype> top_reference;
   this->ReferenceLRNForward(*(this->blob_bottom_), layer_param,

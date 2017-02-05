@@ -397,8 +397,7 @@ class Layer {
    *        Fall back to Backward_cpu() if unavailable.
    */
   virtual void Backward_ocl(const vector<Blob<Dtype>*>& top,
-      const vector<bool>& propagate_down, 
-      const vector<Blob<Dtype>*>& bottom) {
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
     Backward_cpu(top, propagate_down, bottom);
   }
 

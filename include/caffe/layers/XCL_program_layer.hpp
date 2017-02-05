@@ -7,7 +7,7 @@
 #include "caffe/layer.hpp"
 #include "caffe/proto/caffe.pb.h"
 
-namespace caffe{
+namespace caffe {
 
 /**
  * @brief Ignores bottom blobs while producing no top blobs. (This is useful
@@ -36,6 +36,6 @@ class XCLProgramLayer : public Layer<Dtype> {
 #endif
 };
 
-} // namespace caffe
+}  // namespace caffe
 
-#endif // CAFFE_XCL_PROGRAM_LAYER_HPP_
+#endif  // CAFFE_XCL_PROGRAM_LAYER_HPP_

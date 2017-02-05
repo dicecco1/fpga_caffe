@@ -275,7 +275,7 @@ ifeq ($(LINUX), 1)
 	LIBRARIES += boost_thread stdc++
 	VERSIONFLAGS += -Wl,-soname,$(DYNAMIC_VERSIONED_NAME_SHORT) -Wl,-rpath,$(ORIGIN)/../lib
 	ifeq ($(USE_OCL), 1)
-		XOCC := $(XILINX_OPENCL)bin/xocc
+		XOCC := $(XILINX_SDX)/bin/xocc
 	endif
 endif
 
@@ -342,7 +342,7 @@ ifeq ($(USE_CUDNN), 1)
 endif
 
 ifeq ($(USE_OCL), 1)
-	LIBRARIES += OpenCL
+	LIBRARIES += xilinxopencl
 	COMMON_FLAGS += -DUSE_OCL
 endif
 # configure IO libraries
@@ -413,8 +413,8 @@ INCLUDE_DIRS += $(BLAS_INCLUDE)
 LIBRARY_DIRS += $(BLAS_LIB)
 
 ifeq ($(USE_OCL), 1)
-INCLUDE_DIRS += $(XILINX_OPENCL)runtime/include/1_2	
-LIBRARY_DIRS += $(XILINX_OPENCL)runtime/lib/x86_64
+INCLUDE_DIRS += $(XILINX_SDX)/runtime/include/1_2	
+LIBRARY_DIRS += $(XILINX_SDX)/runtime/lib/x86_64
 endif
 LIBRARY_DIRS += $(LIB_BUILD_DIR)
 
@@ -669,7 +669,6 @@ clean:
 	@- $(RM) -rf $(DISTRIBUTE_DIR)
 	@- $(RM) $(PY$(PROJECT)_SO)
 	@- $(RM) $(MAT$(PROJECT)_SO)
-	@- $(RM) -rf conv_forward.xclbin xocc* sdaccel*
 
 supercleanfiles:
 	$(eval SUPERCLEAN_FILES := $(strip \

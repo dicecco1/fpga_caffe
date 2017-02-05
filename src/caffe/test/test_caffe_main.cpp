@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
 
 #ifdef USE_OCL
   caffe::Caffe::SetOCLDevice();
-#endif // USE_OCL
+#endif  // USE_OCL
 
   // invoke the test.
   return RUN_ALL_TESTS();

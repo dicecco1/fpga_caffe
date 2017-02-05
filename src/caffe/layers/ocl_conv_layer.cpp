@@ -8,7 +8,7 @@ namespace caffe {
 
 template <typename Dtype>
 void OCLConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top){
+      const vector<Blob<Dtype>*>& top) {
   BaseConvolutionLayer<Dtype>::LayerSetUp(bottom, top);
   ConvolutionParameter_SubEngine subengine =
       this->layer_param_.convolution_param().subengine();
@@ -20,22 +20,22 @@ void OCLConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       if (offshape_ * tile_ / 8 < 12) {
         offshape_ = offshape_ * 2;
       }
-    }
-    else
+    } else {
       offshape_ = bottom[0]->shape(3);
+    }
 
     inchannels_ = bottom[0]->shape(1) / this->group_;
     outchannels_ = this->num_output_ / this->group_;
     burstchannels_ = 128 * 128 / (tile_ * (offshape_ / 2));
-    burstchannels_train_ = burstchannels_; 
+    burstchannels_train_ = burstchannels_;
     if (burstchannels_ > inchannels_) {
       burstchannels_ = inchannels_;
     } else {
       int tchannel = burstchannels_;
-      while (inchannels_ % tchannel != 0) 
+      while (inchannels_ % tchannel != 0)
         tchannel--;
       burstchannels_ = tchannel;
-    } 
+    }
     if (burstchannels_train_ > outchannels_) {
       burstchannels_train_ = outchannels_;
     } else {
@@ -44,11 +44,11 @@ void OCLConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
         tchannel--;
       burstchannels_train_ = tchannel;
     }
- 
+
     rpo_ = inchannels_ / burstchannels_;
     rpo_train_ = outchannels_ / burstchannels_train_;
     tile_pad_ = offshape_ / 2;
-    numgroups_ = this->group_; 
+    numgroups_ = this->group_;
   } else if (subengine == ConvolutionParameter_SubEngine_DIRECT) {
     dim_ = bottom[0]->shape(2);
     tile_ = dim_;
@@ -58,27 +58,27 @@ void OCLConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       if (offshape_ * tile_ / 8 < 12) {
         offshape_ = offshape_ * 2;
       }
-    }
-    else
+    } else {
       offshape_ = bottom[0]->shape(3);
+    }
 
     inchannels_ = bottom[0]->shape(1) / this->group_;
     outchannels_ = this->num_output_ / this->group_;
     burstchannels_ = 256 * 256 / (tile_ * offshape_);
-  
+
     if (burstchannels_ > inchannels_) {
       burstchannels_ = inchannels_;
     } else {
       int tchannel = burstchannels_;
-      while (inchannels_ % tchannel != 0) 
+      while (inchannels_ % tchannel != 0)
         tchannel--;
       burstchannels_ = tchannel;
-    } 
+    }
 
     rpo_ = inchannels_ / burstchannels_;
     tile_pad_ = offshape_;
-  
-    numgroups_ = this->group_; 
+
+    numgroups_ = this->group_;
   }
 }
 
@@ -126,7 +126,7 @@ void OCLConvolutionLayer<Dtype>::transform_weights(void) {
   Dtype* trans_data = trans_weights.mutable_cpu_data();
   int woff;
   int wtoff;
-  int ksize = (this->blobs_[0])->shape(3); 
+  int ksize = (this->blobs_[0])->shape(3);
 
   for (int i = 0; i < weight[0]->shape(0) * weight[0]->shape(1); ++i) {
     if (ksize == 1) {
@@ -144,7 +144,7 @@ void OCLConvolutionLayer<Dtype>::transform_weights(void) {
         for (int x = 0; x < 3; ++x) {
           trans_data[wtoff + y * 3 + x] = weight_data[woff + y * 5 + x];
           if (x < 2) {
-            trans_data[wtoff + 16 + y * 3 + x] = 
+            trans_data[wtoff + 16 + y * 3 + x] =
               weight_data[woff + y * 5 + 3 + x];
           } else {
             trans_data[wtoff + 16 + y * 3 + x] = 0;
@@ -162,46 +162,46 @@ void OCLConvolutionLayer<Dtype>::transform_weights_rotated(void) {
   Dtype* trans_data_R = trans_weights_R.mutable_cpu_data();
   int woff;
   int wtoff;
- 
+
   int ksize = weight[0]->shape(3);
 
   for (int n = 0; n < weight[0]->shape(0); ++n) {
     for (int m = 0; m < weight[0]->shape(1); ++m) {
       if (ksize == 1) {
         woff = n * weight[0]->shape(1) + m;
-        wtoff = (m * weight[0]->shape(0) + n) * 16; 
+        wtoff = (m * weight[0]->shape(0) + n) * 16;
         trans_data_R[wtoff] = weight_data[woff];
       } else if (ksize == 3) {
         woff = (n * weight[0]->shape(1) + m) * 9;
         wtoff = (m * weight[0]->shape(0) + n) * 16;
         for (int j = 0; j < ksize; ++j) {
           for (int k = 0; k < ksize; ++k) {
-            trans_data_R[wtoff + j * ksize + k] = 
+            trans_data_R[wtoff + j * ksize + k] =
               weight_data[woff + j * ksize + (ksize - 1) - k];
           }
         }
         for (int j = 0; j < ksize / 2; ++j) {
           for (int k = 0; k < ksize; ++k) {
             float temp = trans_data_R[wtoff + j * ksize + k];
-            trans_data_R[wtoff + j * ksize + k] = 
+            trans_data_R[wtoff + j * ksize + k] =
               trans_data_R[wtoff + (ksize - 1 - j) * ksize + k];
             trans_data_R[wtoff + (ksize - 1 - j) * ksize + k] = temp;
           }
         }
       } else if (ksize == 5) {
-        woff = (n * weight[0]->shape(1) + m) * 25;    
+        woff = (n * weight[0]->shape(1) + m) * 25;
         wtoff = (m * weight[0]->shape(0) + n) * 32;
         float rotated[32];
         for (int j = 0; j < ksize; ++j) {
           for (int k = 0; k < ksize; ++k) {
-            rotated[wtoff + j * ksize + k] = 
+            rotated[wtoff + j * ksize + k] =
               weight_data[woff + j * ksize + (ksize - 1) - k];
           }
         }
         for (int j = 0; j < (ksize / 2); ++j) {
           for (int k = 0; k < ksize; ++k) {
             float temp = trans_data_R[wtoff + j * ksize + k];
-            rotated[wtoff + j * ksize + k] = 
+            rotated[wtoff + j * ksize + k] =
               rotated[wtoff + (ksize - 1 - j) * ksize + k];
             rotated[wtoff + (ksize - 1 - j) * ksize + k] = temp;
           }
@@ -210,7 +210,7 @@ void OCLConvolutionLayer<Dtype>::transform_weights_rotated(void) {
           for (int x = 0; x < 3; ++x) {
             trans_data_R[wtoff + y * 3 + x] = rotated[y * 5 + x];
             if (x < 2) {
-              trans_data_R[wtoff + 16 + y * 3 + x] = 
+              trans_data_R[wtoff + 16 + y * 3 + x] =
                 rotated[y * 5 + 3 + x];
             } else {
               trans_data_R[wtoff + 16 + y * 3 + x] = 0;
@@ -228,12 +228,12 @@ void OCLConvolutionLayer<float>::ocl_conv(
   transform_weights();
   const float* weight_data = trans_weights.ocl_data();
   const float* bias_data = this->blobs_[1]->ocl_data();
-    
+
   std::vector<cl_event> events(this->num_ * this->group_);
 
   int idx_off;
   int idx;
-  int ksize = (this->blobs_[0])->shape(3); 
+  int ksize = (this->blobs_[0])->shape(3);
   vector<int> outshape(4);
   vector<int> inshape(4);
 
@@ -259,15 +259,15 @@ void OCLConvolutionLayer<float>::ocl_conv(
         for (int j = bottom[0]->shape(1) - 1; j >= 0; j--) {
           for (int y = dim_ - 1; y >= 0; y--) {
             for (int x = offshape_ - 1; x >= 0; x--) {
-              idx_off = n * inchannels_ * numgroups_ * dim_ * offshape_ + 
-                        (j * dim_ + y) * offshape_ + x;
-              idx = n * inchannels_ * numgroups_ * dim_ * dim_ + 
-                    (j * dim_ + y) * dim_ + x;
+              idx_off = n * inchannels_ * numgroups_ * dim_ * offshape_ +
+                (j * dim_ + y) * offshape_ + x;
+              idx = n * inchannels_ * numgroups_ * dim_ * dim_ +
+                (j * dim_ + y) * dim_ + x;
               if (x < dim_) {
                 bottom_data[idx_off] = input_data[idx];
-              }
-              else
+              } else {
                 bottom_data[idx_off] = 0;
+              }
             }
           }
         }
@@ -308,25 +308,25 @@ void OCLConvolutionLayer<float>::ocl_conv(
 
     for (int n = 0; n < this->num_; ++n) {
       for (int g = 0; g < numgroups_; ++g) {
-        clSetKernelArg(this->ocl_float_kernel, 4, sizeof(cl_int), 
-          (const void *)&g);
+        clSetKernelArg(this->ocl_float_kernel, 4, sizeof(cl_int),
+            (const void *)&g);
         clSetKernelArg(this->ocl_float_kernel, 14, sizeof(cl_int),
-          (const void *)&n);
+            (const void *)&n);
         clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0,
-                    NULL, &(events[n * numgroups_ + g]));
+            NULL, &(events[n * numgroups_ + g]));
       }
-    } 
+    }
     clWaitForEvents(this->num_ * numgroups_, &(events[0]));
     top_data = top[i]->mutable_cpu_data();
-    if (top[i]->shape(3) != top[i]->shape(2)){
+    if (top[i]->shape(3) != top[i]->shape(2)) {
       for (int n = 0; n < this->num_; ++n) {
         for (int j = 0; j < top[0]->shape(1); ++j) {
           for (int y = 0; y < dim_; ++y) {
             for (int x = 0; x < dim_; ++x) {
-              idx_off = n * outchannels_ * numgroups_ * dim_ * offshape_ + 
-                        (j * dim_ + y) * offshape_ + x;
-              idx = n * outchannels_ * numgroups_ * dim_ * dim_ + 
-                    (j * dim_ + y) * dim_ + x;
+              idx_off = n * outchannels_ * numgroups_ * dim_ * offshape_ +
+                (j * dim_ + y) * offshape_ + x;
+              idx = n * outchannels_ * numgroups_ * dim_ * dim_ +
+                (j * dim_ + y) * dim_ + x;
               top_data[idx] = top_data[idx_off];
             }
           }
@@ -349,17 +349,17 @@ void OCLConvolutionLayer<double>::ocl_conv(
 
 template <>
 void OCLConvolutionLayer<float>::ocl_backward_conv(
-    const vector<Blob<float>*>& top, const vector<bool>& propagate_down, 
+    const vector<Blob<float>*>& top, const vector<bool>& propagate_down,
     const vector<Blob<float>*>& bottom) {
   transform_weights_rotated();
   const float* weight_data = trans_weights_R.ocl_data();
 
   float* weight_diff = this->blobs_[0]->mutable_cpu_diff();
   if (this->param_propagate_down_[0]) {
-    caffe_set(this->blobs_[0]->count(), float(0), weight_diff);
+    caffe_set(this->blobs_[0]->count(), static_cast<float>(0), weight_diff);
   }
   if (this->bias_term_ && this->param_propagate_down_[1]) {
-    caffe_set(this->blobs_[1]->count(), float(0),
+    caffe_set(this->blobs_[1]->count(), static_cast<float>(0),
         this->blobs_[1]->mutable_cpu_diff());
   }
   for (int i = 0; i < top.size(); ++i) {
@@ -376,15 +376,15 @@ void OCLConvolutionLayer<float>::ocl_backward_conv(
 
   int idx_off;
   int idx;
-  int ksize = (this->blobs_[0])->shape(3);  
+  int ksize = (this->blobs_[0])->shape(3);
   vector<int> outshape(4);
 
   vector<int> bias_shape(bias_term_, outchannels_ * this->group_);
   Blob<float>* bias = new Blob<float>(bias_shape);
-  caffe_set(outchannels_ * this->group_, float(0),
-        bias->mutable_cpu_data());
+  caffe_set(outchannels_ * this->group_, static_cast<float>(0),
+      bias->mutable_cpu_data());
   float *bias_data = bias->mutable_ocl_data();
-  
+
   float *top_diff;
 
   for (int i = 0; i < bottom.size(); i++) {
@@ -402,7 +402,7 @@ void OCLConvolutionLayer<float>::ocl_backward_conv(
         outshape[2] = top[i]->shape(2);
         outshape[3] = offshape_;
         pad_input.Reshape(outshape);
-        
+
         const float *input_diff = top[i]->cpu_diff();
         top_diff = pad_input.mutable_cpu_diff();
 
@@ -410,15 +410,15 @@ void OCLConvolutionLayer<float>::ocl_backward_conv(
           for (int j = 0; j < top[0]->shape(1); ++j) {
             for (int y = 0; y < dim_; ++y) {
               for (int x = 0; x < offshape_; ++x) {
-                idx_off = n * outchannels_ * numgroups_ * dim_ * offshape_ + 
-                          (j * dim_ + y) * offshape_ + x;
-                idx = n * outchannels_ * numgroups_ * dim_ * dim_ + 
-                      (j * dim_ + y) * dim_ + x;
+                idx_off = n * outchannels_ * numgroups_ * dim_ * offshape_ +
+                  (j * dim_ + y) * offshape_ + x;
+                idx = n * outchannels_ * numgroups_ * dim_ * dim_ +
+                  (j * dim_ + y) * dim_ + x;
                 if (x < dim_) {
                   top_diff[idx_off] = input_diff[idx];
-                }
-                else
+                } else {
                   top_diff[idx_off] = 0;
+                }
               }
             }
           }
@@ -426,7 +426,7 @@ void OCLConvolutionLayer<float>::ocl_backward_conv(
       } else {
         pad_input.CopyFrom(*top[i], true, true);
       }
-      
+
       top_diff = pad_input.mutable_ocl_diff();
       float *bottom_diff = bottom[i]->mutable_ocl_diff();
 
@@ -458,31 +458,31 @@ void OCLConvolutionLayer<float>::ocl_backward_conv(
         (const void *)&ksize);
       clSetKernelArg(this->ocl_float_kernel, 15, sizeof(cl_int),
         (const void *)&numgroups_);
- 
+
       for (int n = 0; n < this->num_; ++n) {
         for (int g = 0; g < numgroups_; ++g) {
-          clSetKernelArg(this->ocl_float_kernel, 4, sizeof(cl_int), 
-            (const void *)&g);
+          clSetKernelArg(this->ocl_float_kernel, 4, sizeof(cl_int),
+              (const void *)&g);
           clSetKernelArg(this->ocl_float_kernel, 14, sizeof(cl_int),
-            (const void *)&n);
+              (const void *)&n);
 
           clEnqueueTask(oclCommandQueue, this->ocl_float_kernel, 0,
                       NULL, &(events[n * numgroups_ + g]));
         }
-      } 
+      }
 
       clWaitForEvents(this->num_ * numgroups_, &(events[0]));
       bottom_diff = bottom[i]->mutable_cpu_diff();
-      
-      if (bottom[i]->shape(3) != bottom[i]->shape(2)){
+
+      if (bottom[i]->shape(3) != bottom[i]->shape(2)) {
         for (int n = 0; n < this->num_; ++n) {
           for (int j = 0; j < bottom[0]->shape(1); ++j) {
             for (int y = 0; y < dim_; ++y) {
               for (int x = 0; x < dim_; ++x) {
-                idx_off = n * inchannels_ * numgroups_ * dim_ * offshape_ + 
-                          (j * dim_ + y) * offshape_ + x;
-                idx = n * inchannels_ * numgroups_ * dim_ * dim_ + 
-                      (j * dim_ + y) * dim_ + x;
+                idx_off = n * inchannels_ * numgroups_ * dim_ * offshape_ +
+                  (j * dim_ + y) * offshape_ + x;
+                idx = n * inchannels_ * numgroups_ * dim_ * dim_ +
+                  (j * dim_ + y) * dim_ + x;
                 bottom_diff[idx] = bottom_diff[idx_off];
               }
             }
@@ -513,7 +513,7 @@ void OCLConvolutionLayer<float>::ocl_backward_conv(
 
 template <>
 void OCLConvolutionLayer<double>::ocl_backward_conv(
-    const vector<Blob<double>*>& top, const vector<bool>& propagate_down, 
+    const vector<Blob<double>*>& top, const vector<bool>& propagate_down,
     const vector<Blob<double>*>& bottom) {
   Backward_cpu(top, propagate_down, bottom);
 }
@@ -521,14 +521,14 @@ void OCLConvolutionLayer<double>::ocl_backward_conv(
 template <typename Dtype>
 void OCLConvolutionLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
-  ConvolutionParameter_SubEngine subengine = 
-      this->layer_param_.convolution_param().subengine();
+  ConvolutionParameter_SubEngine subengine =
+    this->layer_param_.convolution_param().subengine();
   if (this->layer_param_.ocl_enable()) {
     if (subengine == ConvolutionParameter_SubEngine_WINOGRAD ||
-        subengine == ConvolutionParameter_SubEngine_DIRECT) 
+        subengine == ConvolutionParameter_SubEngine_DIRECT)
       ocl_conv(bottom, top);
     else
-      LOG(FATAL) << "Layer " << this->layer_param_.name() << 
+      LOG(FATAL) << "Layer " << this->layer_param_.name() <<
         " has unknown subengine.";
   } else {
     Forward_cpu(bottom, top);
@@ -537,15 +537,15 @@ void OCLConvolutionLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
 
 template <typename Dtype>
 void OCLConvolutionLayer<Dtype>::Backward_ocl(const vector<Blob<Dtype>*>& top,
-      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) { 
-   ConvolutionParameter_SubEngine subengine = 
-      this->layer_param_.convolution_param().subengine();
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
+  ConvolutionParameter_SubEngine subengine =
+     this->layer_param_.convolution_param().subengine();
   if (this->layer_param_.ocl_enable()) {
     if (subengine == ConvolutionParameter_SubEngine_WINOGRAD ||
-        subengine == ConvolutionParameter_SubEngine_DIRECT) 
+        subengine == ConvolutionParameter_SubEngine_DIRECT)
       ocl_backward_conv(top, propagate_down, bottom);
     else
-      LOG(FATAL) << "Layer " << this->layer_param_.name() << 
+      LOG(FATAL) << "Layer " << this->layer_param_.name() <<
         " has unknown subengine.";
   } else {
     Backward_cpu(top, propagate_down, bottom);
