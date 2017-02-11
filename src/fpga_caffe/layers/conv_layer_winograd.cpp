@@ -1,8 +1,10 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#define OCFACT 4 
-#define OCDIV 2
+#include "fpga_caffe/layers/conv_layer.hpp"
+
+#define OCFACT 1 
+#define OCDIV 0
 #define EXP_MASK 0x7f800000
 #define MANT_MASK 0x007fffff
 #define SIGN_MASK 0x80000000
@@ -83,7 +85,7 @@ void winograd_input_stage(float16 inbuf[256 * 32], unsigned short ksize,
   float itt[8][4];
 #pragma HLS ARRAY_PARTITION variable=itt complete dim=1
 #pragma HLS ARRAY_PARTITION variable=itt complete dim=2
-  float tempbuf[20];
+  float tempbuf[21];
 #pragma HLS ARRAY_PARTITION variable=tempbuf complete 
 
   short crow_off;
@@ -128,7 +130,7 @@ void winograd_input_stage(float16 inbuf[256 * 32], unsigned short ksize,
       tempbuf[19] = inbuf[in_idx + 1].s1;
     }    
   } else {
-    for (p = 0; p < 20; ++p) 
+    for (p = 0; p < 21; ++p) 
       tempbuf[p] = 0;
   }
 
@@ -215,23 +217,22 @@ float out_trans_m(float in0, float in1, float in2, int ksize) {
  * bias:          flattened bias array
  * output:        output of the convolution, padded to be divisible by 16 on 
  *                the x dimension
- * group:         group index, leave as 0 if not using group convolution
+ * group_idx:         group_idx index, leave as 0 if not using group_idx convolution
  * inchannels:    number of input channels
  * outchannels:   number of output channels
  * burstchannels: number of input channels to be handled at once
  * rpo:           number of reads required to cover all input channels
  * ydim:          size in the  y dimension
  * xdim:          size in the x dimension
- * xtile:         number of columns of tiles
  * xtile_pad:     padded number of columns of tiles
- * dataoff:       image offset
- * numgroups:     number of groups
+ * image_idx:       image offset
+ * numgroups:     number of group_idxs
  */ 
 
-void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,  
-      int group, int inchannels, int outchannels, int burstchannels, int rpo,
-      int ydim, int xdim, int xtile, int xtile_pad, int ksize, int dataoff, 
-      int numgroups) {
+extern "C" {
+
+void conv_layer_winograd(float16 *input, float16 *weights, float *bias,
+    float16 *output, kernel_params *params, int group_idx, int image_idx) {
 
 /* Ports */
 #pragma HLS data_pack variable=weights
@@ -241,24 +242,15 @@ void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,
 #pragma HLS INTERFACE m_axi port=output offset=slave bundle=gmem2
 #pragma HLS INTERFACE m_axi port=weights offset=slave bundle=gmem3
 #pragma HLS INTERFACE m_axi port=bias offset=slave bundle=gmem4
+#pragma HLS INTERFACE m_axi port=params offset=slave bundle=gmem5
 #pragma HLS INTERFACE s_axilite port=input bundle=control
 #pragma HLS INTERFACE s_axilite port=output bundle=control
 #pragma HLS INTERFACE s_axilite port=weights bundle=control
 #pragma HLS INTERFACE s_axilite port=bias bundle=control
+#pragma HLS INTERFACE s_axilite port=params bundle=control
 
-#pragma HLS INTERFACE s_axilite port=group bundle=control
-#pragma HLS INTERFACE s_axilite port=inchannels bundle=control
-#pragma HLS INTERFACE s_axilite port=outchannels bundle=control
-#pragma HLS INTERFACE s_axilite port=burstchannels bundle=control
-#pragma HLS INTERFACE s_axilite port=rpo bundle=control
-#pragma HLS INTERFACE s_axilite port=dataoff bundle=control
-#pragma HLS INTERFACE s_axilite port=numgroups bundle=control
-
-#pragma HLS INTERFACE s_axilite port=ydim bundle=control
-#pragma HLS INTERFACE s_axilite port=xdim bundle=control
-#pragma HLS INTERFACE s_axilite port=xtile bundle=control
-#pragma HLS INTERFACE s_axilite port=xtile_pad bundle=control
-#pragma HLS INTERFACE s_axilite port=ksize bundle=control
+#pragma HLS INTERFACE s_axilite port=group_idx bundle=control
+#pragma HLS INTERFACE s_axilite port=image_idx bundle=control
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
   // Input tile buffer
@@ -297,6 +289,16 @@ void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,
 #pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=2
 
+  int inchannels = params->inchannels;
+  int outchannels = params->outchannels;
+  int burstchannels = params->burstchannels;
+  int xdim = params->xdim;
+  int ydim = params->ydim;
+  int xtile_pad = params->xtile_pad;
+  int ksize = params->ksize;
+  int rpo = params->rpo;
+  int numgroups = params->numgroups;
+
   assert(inchannels >= 1);
   assert(inchannels <= 1024);
   assert(outchannels >= 1);
@@ -309,11 +311,9 @@ void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,
   assert(xdim <= 256);
   assert(ydim >= 7);
   assert(ydim <= 256);
-  assert(xtile >= 4);
-  assert(xtile <= 128);
 
-  assert(group >= 0);
-  assert(group <= 1);
+  assert(group_idx >= 0);
+  assert(group_idx <= 1);
 
   assert(numgroups <= 2);
   assert(numgroups >= 1);
@@ -341,7 +341,8 @@ void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,
   float lineval;
   int in_off;
   /* Read bias data into buffer */
-  memcpy(biasbuf, bias + (outchannels * group), sizeof(float) * outchannels);
+  memcpy(biasbuf, bias + (outchannels * group_idx), sizeof(float) *
+      outchannels);
 
   int mac_iterations;
   
@@ -354,8 +355,8 @@ void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,
   
   for (n = 0; n < rpo; ++n) {
     /* Read the input line by line and tile it into the tile buffer */
-    in_off = (((dataoff * numgroups + group) * inchannels) * ydim * xtile_pad 
-        * 2 + n * burstchannels * ydim * xtile_pad * 2) >> 4;
+    in_off = (((image_idx * numgroups + group_idx) * inchannels) * ydim *
+        xtile_pad * 2 + n * burstchannels * ydim * xtile_pad * 2) >> 4;
 
     memcpy(inbuf, input + in_off, sizeof(float16) * ((burstchannels * ydim * 
             xtile_pad * 2) >> 4)); 
@@ -388,15 +389,15 @@ void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,
         } 
       } else {
         for (k = 0; k < OCFACT; ++k) {
-          out_offset = dataoff * numgroups * outchannels * ydim * fact + 
-          ((o * OCFACT + k + outchannels * group) * ydim) * fact;
+          out_offset = image_idx * numgroups * outchannels * ydim * fact + 
+          ((o * OCFACT + k + outchannels * group_idx) * ydim) * fact;
           memcpy(outbuf[k], output + out_offset, sizeof(float16) * fact * 
               ydim);
         }
       }
 
       for (k = 0; k < OCFACT; ++k) {
-        weight_offset = (o * OCFACT + k + outchannels * group) * inchannels 
+        weight_offset = (o * OCFACT + k + outchannels * group_idx) * inchannels 
           + n * burstchannels;
         weight_size = burstchannels;
 
@@ -469,13 +470,15 @@ void winograd_pe(float16 *input, float16 *weights, float *bias, float16 *output,
         }
       }     
       for (k = 0; k < OCFACT; ++k) {
+        out_offset = image_idx * numgroups * outchannels * ydim * fact +
+          ((o * OCFACT + k + outchannels * group_idx) * ydim) * fact;
         if (o * OCFACT + k < outchannels) {
-          out_offset = dataoff * numgroups * outchannels * ydim * fact + 
-                        ((o * OCFACT + k + outchannels * group) * ydim) * fact;
-          memcpy(output + out_offset, outbuf[k], sizeof(float16) * fact * 
+          memcpy(output + out_offset, outbuf[k], sizeof(float16) * fact *
               ydim);
         }
       }      
     }
   }
+}
+
 }

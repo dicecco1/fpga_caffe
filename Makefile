@@ -1,4 +1,5 @@
 PROJECT := caffe
+OCLPROJECT := fpga_caffe
 
 CONFIG_FILE := Makefile.config
 # Explicitly check for the config file, otherwise make -k will proceed anyway.
@@ -45,17 +46,17 @@ COMMON_FLAGS += -DCAFFE_VERSION=$(DYNAMIC_VERSION_MAJOR).$(DYNAMIC_VERSION_MINOR
 # Get all source files
 ##############################
 # CXX_SRCS are the source files excluding the test ones.
-CXX_SRCS := $(shell find src/$(PROJECT) ! -name "test_*.cpp" -name "*.cpp" ! -name "xcl_top.cpp")
+CXX_SRCS := $(shell find src/$(PROJECT) ! -name "test_*.cpp" -name "*.cpp")
 # CU_SRCS are the cuda source files
 CU_SRCS := $(shell find src/$(PROJECT) ! -name "test_*.cu" -name "*.cu")
-# CL_SRCS are the opencl source files
-CL_SRCS := $(shell find src/$(PROJECT) ! -name "test_*.cl" -name "*.cl")
 # TEST_SRCS are the test source files
 TEST_MAIN_SRC := src/$(PROJECT)/test/test_caffe_main.cpp
 TEST_SRCS := $(shell find src/$(PROJECT) -name "test_*.cpp")
 TEST_SRCS := $(filter-out $(TEST_MAIN_SRC), $(TEST_SRCS))
 TEST_CU_SRCS := $(shell find src/$(PROJECT) -name "test_*.cu")
-TEST_CL_SRCS := $(shell find src/$(PROJECT) -name "test_*.cl")
+TEST_OCL_MAIN_SRC := src/$(OCLPROJECT)/test/test_fpga_caffe_main.cpp
+TEST_OCL_SRCS := $(shell find src/$(OCLPROJECT) -name "test_*.cpp")
+TEST_OCL_SRCS := $(filter-out $(TEST_OCL_MAIN_SRC), $(TEST_OCL_SRCS))
 GTEST_SRC := src/gtest/gtest-all.cpp
 # TOOL_SRCS are the source files for the tool binaries
 TOOL_SRCS := $(shell find tools -name "*.cpp")
@@ -79,6 +80,8 @@ NONGEN_CXX_SRCS := $(shell find \
 	matlab/+$(PROJECT)/private \
 	examples \
 	tools \
+	src/$(OCLPROJECT) \
+	include/$(OCLPROJECT) \
 	-name "*.cpp" -or -name "*.hpp" -or -name "*.cu" -or -name "*.cuh")
 LINT_SCRIPT := scripts/cpp_lint.py
 LINT_OUTPUT_DIR := $(BUILD_DIR)/.lint
@@ -122,8 +125,10 @@ TOOL_OBJS := $(addprefix $(BUILD_DIR)/, ${TOOL_SRCS:.cpp=.o})
 TOOL_BUILD_DIR := $(BUILD_DIR)/tools
 TEST_CXX_BUILD_DIR := $(BUILD_DIR)/src/$(PROJECT)/test
 TEST_CU_BUILD_DIR := $(BUILD_DIR)/cuda/src/$(PROJECT)/test
+TEST_OCL_BUILD_DIR := $(BUILD_DIR)/src/$(OCLPROJECT)/test
 TEST_CXX_OBJS := $(addprefix $(BUILD_DIR)/, ${TEST_SRCS:.cpp=.o})
 TEST_CU_OBJS := $(addprefix $(BUILD_DIR)/cuda/, ${TEST_CU_SRCS:.cu=.o})
+TEST_OCL_OBJS := $(addprefix $(BUILD_DIR)/, ${TEST_OCL_SRCS:.cpp=.o})
 TEST_OBJS := $(TEST_CXX_OBJS) $(TEST_CU_OBJS)
 GTEST_OBJ := $(addprefix $(BUILD_DIR)/, ${GTEST_SRC:.cpp=.o})
 EXAMPLE_OBJS := $(addprefix $(BUILD_DIR)/, ${EXAMPLE_SRCS:.cpp=.o})
@@ -137,15 +142,17 @@ EXAMPLE_BINS := ${EXAMPLE_OBJS:.o=.bin}
 TOOL_BIN_LINKS := ${TOOL_BINS:.bin=}
 # Put the test binaries in build/test for convenience.
 TEST_BIN_DIR := $(BUILD_DIR)/test
+TEST_OCL_BIN_DIR := $(BUILD_DIR)/test_fpga
 TEST_CU_BINS := $(addsuffix .testbin,$(addprefix $(TEST_BIN_DIR)/, \
 		$(foreach obj,$(TEST_CU_OBJS),$(basename $(notdir $(obj))))))
 TEST_CXX_BINS := $(addsuffix .testbin,$(addprefix $(TEST_BIN_DIR)/, \
 		$(foreach obj,$(TEST_CXX_OBJS),$(basename $(notdir $(obj))))))
+TEST_OCL_BINS := $(addsuffix .testbin,$(addprefix $(TEST_OCL_BIN_DIR)/, \
+		$(foreach obj,$(TEST_OCL_OBJS),$(basename $(notdir $(obj))))))
 TEST_BINS := $(TEST_CXX_BINS) $(TEST_CU_BINS)
 # TEST_ALL_BIN is the test binary that links caffe dynamically.
 TEST_ALL_BIN := $(TEST_BIN_DIR)/test_all.testbin
-# OpenCL binaries
-CL_BINS := ${CL_SRCS:.cl=.xclbin} #$(addprefix $(BUILD_DIR)/opencl/, ${CL_SRCS:.cl=.xclbin})    
+TEST_ALL_OCL_BIN := $(TEST_OCL_BIN_DIR)/test_all.bin
 ##############################
 # Derive compiler warning dump locations
 ##############################
@@ -222,7 +229,7 @@ endif
 ALL_BUILD_DIRS := $(sort $(BUILD_DIR) $(addprefix $(BUILD_DIR)/, $(SRC_DIRS)) \
 	$(addprefix $(BUILD_DIR)/cuda/, $(SRC_DIRS)) \
 	$(LIB_BUILD_DIR) $(TEST_BIN_DIR) $(PY_PROTO_BUILD_DIR) $(LINT_OUTPUT_DIR) \
-	$(DISTRIBUTE_SUBDIRS) $(PROTO_BUILD_INCLUDE_DIR)) 
+	$(DISTRIBUTE_SUBDIRS) $(PROTO_BUILD_INCLUDE_DIR) $(TEST_OCL_BIN_DIR)) 
 
 ifeq ($(USE_OCL), 1)
 ALL_BUILD_DIRS += $(addprefix $(BUILD_DIR)/opencl/, $(SRC_DIRS))
@@ -342,7 +349,7 @@ ifeq ($(USE_CUDNN), 1)
 endif
 
 ifeq ($(USE_OCL), 1)
-	LIBRARIES += xilinxopencl
+	LIBRARIES += xilinxopencl lmx6.0
 	COMMON_FLAGS += -DUSE_OCL
 endif
 # configure IO libraries
@@ -460,7 +467,7 @@ endif
 ##############################
 # Define build targets
 ##############################
-.PHONY: all lib test clean docs linecount lint lintclean tools examples $(DIST_ALIASES) \
+.PHONY: all lib test testfpga clean docs linecount lint lintclean tools examples $(DIST_ALIASES) \
 	py mat py$(PROJECT) mat$(PROJECT) proto runtest \
 	superclean supercleanlist supercleanfiles warn everything xclbin
 
@@ -513,6 +520,8 @@ $(LINT_OUTPUTS): $(LINT_OUTPUT_DIR)/%.lint.txt : % $(LINT_SCRIPT) | $(LINT_OUTPU
 		|| true
 
 test: $(TEST_ALL_BIN) $(TEST_ALL_DYNLINK_BIN) $(TEST_BINS)
+
+testfpga: $(TEST_ALL_OCL_BIN) $(TEST_OCL_BINS)
 
 tools: $(TOOL_BINS) $(TOOL_BIN_LINKS)
 
@@ -620,6 +629,12 @@ $(TEST_ALL_BIN): $(TEST_MAIN_SRC) $(TEST_OBJS) $(GTEST_OBJ) \
 	$(Q)$(CXX) $(TEST_MAIN_SRC) $(TEST_OBJS) $(GTEST_OBJ) \
 		-o $@ $(LINKFLAGS) $(LDFLAGS) -l$(LIBRARY_NAME) -Wl,-rpath,$(ORIGIN)/../lib
 
+$(TEST_ALL_OCL_BIN): $(TEST_OCL_MAIN_SRC) $(TEST_OCL_OBJS) $(GTEST_OBJ) \
+		| $(DYNAMIC_NAME) $(TEST_OCL_BIN_DIR)
+	@ echo CXX/LD -o $@ $<
+	$(Q)$(CXX) $(TEST_OCL_MAIN_SRC) $(TEST_OCL_OBJS) $(GTEST_OBJ) \
+		-o $@ $(LINKFLAGS) $(LDFLAGS) -l$(LIBRARY_NAME) -Wl,-rpath,$(ORIGIN)/../lib
+
 $(TEST_CU_BINS): $(TEST_BIN_DIR)/%.testbin: $(TEST_CU_BUILD_DIR)/%.o \
 	$(GTEST_OBJ) | $(DYNAMIC_NAME) $(TEST_BIN_DIR)
 	@ echo LD $<
@@ -630,6 +645,12 @@ $(TEST_CXX_BINS): $(TEST_BIN_DIR)/%.testbin: $(TEST_CXX_BUILD_DIR)/%.o \
 	$(GTEST_OBJ) | $(DYNAMIC_NAME) $(TEST_BIN_DIR)
 	@ echo LD $<
 	$(Q)$(CXX) $(TEST_MAIN_SRC) $< $(GTEST_OBJ) \
+		-o $@ $(LINKFLAGS) $(LDFLAGS) -l$(LIBRARY_NAME) -Wl,-rpath,$(ORIGIN)/../lib
+
+$(TEST_OCL_BINS): $(TEST_OCL_BIN_DIR)/%.testbin: $(TEST_OCL_BUILD_DIR)/%.o \
+	$(GTEST_OBJ) | $(DYNAMIC_NAME) $(TEST_OCL_BIN_DIR)
+	@ echo LD $<
+	$(Q)$(CXX) $(TEST_OCL_MAIN_SRC) $< $(GTEST_OBJ) \
 		-o $@ $(LINKFLAGS) $(LDFLAGS) -l$(LIBRARY_NAME) -Wl,-rpath,$(ORIGIN)/../lib
 
 # Target for extension-less symlinks to tool binaries with extension '*.bin'.
