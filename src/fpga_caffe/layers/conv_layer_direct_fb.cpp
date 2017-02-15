@@ -2,10 +2,11 @@
 #include <assert.h>
 #include <string.h>
 #include <stdbool.h>
+#include "hls_half.h"
 #include "fpga_caffe/layers/conv_layer.hpp"
 
-#define OCFACT 1 
-#define OCDIV 0
+#define OCFACT 4 
+#define OCDIV 2
 /* float16 data type definition */
 
 typedef struct {
@@ -83,9 +84,10 @@ void input_stage(float16 inbuf[256 * 32], unsigned short ksize,
       tempbuf[19] = inbuf[in_idx + 1].s1;
     }    
   } else {
-    for (p = 0; p < 21; ++p) 
+    for (p = 0; p < 20; ++p) 
       tempbuf[p] = 0;
   }
+  tempbuf[20] = 0;
 
   if (ksize != 5)
     toff = 1;
@@ -104,9 +106,34 @@ void input_stage(float16 inbuf[256 * 32], unsigned short ksize,
   }
 }
 
-void wt_set(float16 wbuf[OCFACT][256 * 16], float wt[OCFACT][16][3], 
-    unsigned short w_off, unsigned short row_off, unsigned short ksize,
-    unsigned short xt_off, unsigned short xdim, bool backward_flag) { 
+void wt_set_backward(float16 outbuf[OCFACT][256 * 16], int yt_off, 
+    int xt_off, int fact, float wt[OCFACT][16][3]) { 
+  int off = yt_off * fact + xt_off;
+
+  for (int k = 0; k < OCFACT; ++k) {
+    for (int p = 0; p < 3; ++p) {
+      wt[k][0][p] = outbuf[k][off].s0;
+      wt[k][1][p] = outbuf[k][off].s1;
+      wt[k][2][p] = outbuf[k][off].s2;
+      wt[k][3][p] = outbuf[k][off].s3;
+      wt[k][4][p] = outbuf[k][off].s4;
+      wt[k][5][p] = outbuf[k][off].s5;
+      wt[k][6][p] = outbuf[k][off].s6;
+      wt[k][7][p] = outbuf[k][off].s7;
+      wt[k][8][p] = outbuf[k][off].s8;
+      wt[k][9][p] = outbuf[k][off].s9;
+      wt[k][10][p] = outbuf[k][off].sa;
+      wt[k][11][p] = outbuf[k][off].sb;
+      wt[k][12][p] = outbuf[k][off].sc;
+      wt[k][13][p] = outbuf[k][off].sd;
+      wt[k][14][p] = outbuf[k][off].se;
+      wt[k][15][p] = outbuf[k][off].sf;
+    }
+  }
+}
+
+void wt_set(float16 wbuf[OCFACT][512], float wt[OCFACT][16][3], 
+    unsigned short w_off, unsigned short row_off, unsigned short ksize) { 
   float wvals[16]; 
 #pragma HLS ARRAY_PARTITION variable=wvals complete
 
@@ -143,36 +170,22 @@ void wt_set(float16 wbuf[OCFACT][256 * 16], float wt[OCFACT][16][3],
 
     for (int p = 0; p < 16; ++p) {
       for (int q = 0; q < 3; ++q) {
-        if (backward_flag) {
-          if (p + xt_off * 16 < xdim)
-            wt[k][p][q] = wvals[p];
-          else
-            wt[k][p][q] = 0;
-        } else {
-          wt[k][p][q] = it[q];
-        }
+        wt[k][p][q] = it[q];
       }
     } 
   }
 }
 
-/* Kernel used for computing Winograd (F(3x3, 2x2)) based convolution. This 
- * kernel assumes that the weights have been pre-transformed. 
- * input:         flattened input array containing image data
+/* Kernel used for computing direct convolution forward/backward. 
+ * input:         flattened input array containing image data, padded to be
+ *                divisible by 16 on the x dimension
  * weights:       pre-transformed 3x3 filters
  * bias:          flattened bias array
  * output:        output of the convolution, padded to be divisible by 16 on 
  *                the x dimension
- * group_idx:         group_idx index, leave as 0 if not using group_idx convolution
- * inchannels:    number of input channels
- * outchannels:   number of output channels
- * burstchannels: number of input channels to be handled at once
- * rpo:           number of reads required to cover all input channels
- * ydim:          size in the  y dimension
- * xdim:          size in the x dimension
- * xtile_pad:     padded number of columns of tiles
- * image_idx:       image offset
- * numgroups:     number of group_idxs
+ * group_idx:     group_idx index, leave as 0 if not using group_idx
+ *                convolution
+ * image_idx:     image offset
  */ 
 
 extern "C" {
@@ -206,7 +219,7 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
 #pragma HLS ARRAY_PARTITION variable=outbuf complete dim=1
 
   // Weight buffer
-  float16 wbuf[OCFACT][256 * 16];
+  float16 wbuf[OCFACT][512];
 #pragma HLS ARRAY_PARTITION variable=wbuf complete dim=1
 
   // Bias buffer
@@ -316,24 +329,22 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
   memcpy(biasbuf, bias + (outchannels * group_idx), sizeof(float) *
       outchannels);
 
-  int mac_iterations;
-  
+  int mac_iterations = mod_channel * mod_ydim * fact;
+
   if (ksize == 3)
-    mac_iterations = (mod_channel * mod_ydim * 3) * fact;
+    mac_iterations *= 3;
   else if (ksize == 5) 
-    mac_iterations = (mod_channel * mod_ydim * 5) * fact;
-  else 
-    mac_iterations = (mod_channel * mod_ydim) * fact;
+    mac_iterations *= 5;
   
   for (n = 0; n < rpo; ++n) {
-    /* Read the input line by line and tile it into the tile buffer */
+    // Read the input 
     in_off = (((image_idx * numgroups + group_idx) * inchannels) * ydim *
         xtile_pad * 2 + n * burstchannels * ydim * xtile_pad * 2) >> 4;
 
     memcpy(inbuf, input + in_off, sizeof(float16) * ((burstchannels * ydim * 
             xtile_pad * 2) >> 4)); 
 
-    ofm_iters = (outchannels & 0x3) ? (outchannels >> OCDIV) + 1 : 
+    ofm_iters = (outchannels & (OCFACT - 1)) ? (outchannels >> OCDIV) + 1 : 
       (outchannels >> OCDIV);
     for (o = 0; o < ofm_iters; ++o) {
       if (n == 0 && !backward_flag) {
@@ -359,7 +370,7 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
             outbuf[k][i].sf = biasbuf[o * OCFACT + k];
           }
         } 
-      } else if (!backward_flag) {
+      } else {
         for (k = 0; k < OCFACT; ++k) {
           out_offset = image_idx * numgroups * outchannels * ydim * fact + 
           ((o * OCFACT + k + outchannels * group_idx) * ydim) * fact;
@@ -367,23 +378,9 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
           memcpy(outbuf[k], output + out_offset, sizeof(float16) * fact * 
               ydim);
         }
-      } else {
-        for (k = 0; k < OCFACT; ++k) {
-          out_offset = (o * OCFACT + k + outchannels * group_idx) * inchannels
-            + n * burstchannels;
-          out_size = burstchannels;
-
-          if (ksize == 5) {
-            out_offset = out_offset << 1;
-            out_size = out_size << 1;
-          }
-          memcpy(outbuf[k], output + out_offset, 
-              sizeof(float16) * out_size);
-        } 
-      }
+      } 
       
       for (k = 0; k < OCFACT; ++k) {
-        if (!backward_flag) {
           weight_offset = (o * OCFACT + k + outchannels * group_idx) *
             inchannels + n * burstchannels;
           weight_size = burstchannels;
@@ -392,15 +389,10 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
             weight_offset = weight_offset << 1;
             weight_size = weight_size << 1;
           }
-        } else {
-          weight_offset = image_idx * numgroups * outchannels * ydim * fact +
-            ((o * OCFACT + k + outchannels * group_idx) * ydim) * fact;
-          weight_size = fact * ydim;
-        }
-        memcpy(wbuf[k], weights + weight_offset, 
-            sizeof(float16) * weight_size);
+          memcpy(wbuf[k], weights + weight_offset, sizeof(float16) *
+              weight_size);
       }
-      
+
       w_off = 0;
       xt_off = 0;
       yt_off = 0;
@@ -447,11 +439,13 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
         } 
 
         offset = yt_off * fact + xt_off;
-        unsigned short w_idx = (backward_flag) ? offset : w_off;
 
         input_stage(inbuf, ksize, xt_off, xtile_pad, yt_off, 
             row_off, ydim, xdim, w_off, burstchannels, it);
-        wt_set(wbuf, wt, w_idx, row_off, ksize, xt_off, xdim, backward_flag); 
+        if (backward_flag)
+          wt_set_backward(outbuf, yt_off, xt_off, fact, wt);
+        else
+          wt_set(wbuf, wt, w_off, row_off, ksize); 
 
         for (k = 0; k < OCFACT; ++k) {
           for (p = 0; p < 16; ++p) {
@@ -491,24 +485,41 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
             for (p = 0; p < 3; ++p)
               otf[row_off * 3 + p] = ot_s4[p];
           }
-          unsigned short o_idx = (backward_flag) ? w_off : offset;
-
-          outbuf[k][o_idx].s0 += otf[0];
-          outbuf[k][o_idx].s1 += otf[1];
-          outbuf[k][o_idx].s2 += otf[2];
-          outbuf[k][o_idx].s3 += otf[3];
-          outbuf[k][o_idx].s4 += otf[4];
-          outbuf[k][o_idx].s5 += otf[5];
-          outbuf[k][o_idx].s6 += otf[6];
-          outbuf[k][o_idx].s7 += otf[7];
-          outbuf[k][o_idx].s8 += otf[8];
-          outbuf[k][o_idx].s9 += otf[9];
-          outbuf[k][o_idx].sa += otf[10];
-          outbuf[k][o_idx].sb += otf[11];
-          outbuf[k][o_idx].sc += otf[12];
-          outbuf[k][o_idx].sd += otf[13];
-          outbuf[k][o_idx].se += otf[14];
-          outbuf[k][o_idx].sf += otf[15]; 
+          if (backward_flag) {
+            wbuf[k][w_off].s0 += otf[0];
+            wbuf[k][w_off].s1 += otf[1];
+            wbuf[k][w_off].s2 += otf[2];
+            wbuf[k][w_off].s3 += otf[3];
+            wbuf[k][w_off].s4 += otf[4];
+            wbuf[k][w_off].s5 += otf[5];
+            wbuf[k][w_off].s6 += otf[6];
+            wbuf[k][w_off].s7 += otf[7];
+            wbuf[k][w_off].s8 += otf[8];
+            wbuf[k][w_off].s9 += otf[9];
+            wbuf[k][w_off].sa += otf[10];
+            wbuf[k][w_off].sb += otf[11];
+            wbuf[k][w_off].sc += otf[12];
+            wbuf[k][w_off].sd += otf[13];
+            wbuf[k][w_off].se += otf[14];
+            wbuf[k][w_off].sf += otf[15]; 
+          } else {
+            outbuf[k][offset].s0 += otf[0];
+            outbuf[k][offset].s1 += otf[1];
+            outbuf[k][offset].s2 += otf[2];
+            outbuf[k][offset].s3 += otf[3];
+            outbuf[k][offset].s4 += otf[4];
+            outbuf[k][offset].s5 += otf[5];
+            outbuf[k][offset].s6 += otf[6];
+            outbuf[k][offset].s7 += otf[7];
+            outbuf[k][offset].s8 += otf[8];
+            outbuf[k][offset].s9 += otf[9];
+            outbuf[k][offset].sa += otf[10];
+            outbuf[k][offset].sb += otf[11];
+            outbuf[k][offset].sc += otf[12];
+            outbuf[k][offset].sd += otf[13];
+            outbuf[k][offset].se += otf[14];
+            outbuf[k][offset].sf += otf[15]; 
+          }
         }
       }
       for (k = 0; k < OCFACT; ++k) {
@@ -521,14 +532,16 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
             out_offset = out_offset << 1;
             out_size = out_size << 1;
           }
+          if (o * OCFACT + k < outchannels) {
+            memcpy(weights + out_offset, wbuf[k], sizeof(float16) * out_size);
+          }
         } else {
           out_offset = image_idx * numgroups * outchannels * ydim * fact +
             ((o * OCFACT + k + outchannels * group_idx) * ydim) * fact;
           out_size = fact * ydim;
-        }
-
-        if (o * OCFACT + k < outchannels) {
-          memcpy(output + out_offset, outbuf[k], sizeof(float16) * out_size);
+          if (o * OCFACT + k < outchannels) {
+            memcpy(output + out_offset, outbuf[k], sizeof(float16) * out_size);
+          }
         }
       }
     }

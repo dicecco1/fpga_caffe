@@ -80,9 +80,11 @@ void input_stage(float16 inbuf[256 * 32], unsigned short ksize,
       tempbuf[19] = inbuf[in_idx + 1].s1;
     }    
   } else {
-    for (p = 0; p < 21; ++p) 
+    for (p = 0; p < 20; ++p) 
       tempbuf[p] = 0;
   }
+
+  tempbuf[20] = 0;
 
   if (ksize != 5)
     toff = 1;
@@ -140,23 +142,15 @@ void wt_set(float16 wbuf[OCFACT][512], float wt[OCFACT][16][3],
   }
 }
 
-/* Kernel used for computing Winograd (F(3x3, 2x2)) based convolution. This 
- * kernel assumes that the weights have been pre-transformed. 
- * input:         flattened input array containing image data
- * weights:       pre-transformed 3x3 filters
+/* Kernel used for computing direct convolution. 
+ * input:         flattened input array containing image data, padded to be
+ *                divisible by 16 on the x dimension
+ * weights:       3x3 filters, padded to be size 16
  * bias:          flattened bias array
  * output:        output of the convolution, padded to be divisible by 16 on 
  *                the x dimension
- * group_idx:         group_idx index, leave as 0 if not using group_idx convolution
- * inchannels:    number of input channels
- * outchannels:   number of output channels
- * burstchannels: number of input channels to be handled at once
- * rpo:           number of reads required to cover all input channels
- * ydim:          size in the  y dimension
- * xdim:          size in the x dimension
- * xtile_pad:     padded number of columns of tiles
- * image_idx:       image offset
- * numgroups:     number of group_idxs
+ * group_idx:     group_idx index, leave as 0 if not using group convolution
+ * image_idx:     image offset
  */ 
 
 extern "C" {
@@ -273,14 +267,13 @@ void conv_layer_direct(float16 *input, float16 *weights, float *bias,
   memcpy(biasbuf, bias + (outchannels * group_idx), sizeof(float) *
       outchannels);
 
-  int mac_iterations;
+  int mac_iterations = burstchannels * ydim * fact;
   
   if (ksize == 3)
-    mac_iterations = (burstchannels * ydim * 3) * fact;
-  else if (ksize == 5) 
-    mac_iterations = (burstchannels * ydim * 5 * 2) * fact;
-  else 
-    mac_iterations = (burstchannels * ydim) * fact;
+    mac_iterations *= 3;
+  else if (ksize == 5)
+    mac_iterations *= 5 * 2;
+
   
   for (n = 0; n < rpo; ++n) {
     /* Read the input line by line and tile it into the tile buffer */
@@ -344,7 +337,7 @@ void conv_layer_direct(float16 *input, float16 *weights, float *bias,
       yt_off = 0;
       row_off = 0;
       MULTACCSTAGE: for (i = 0; i < mac_iterations; ++i, ++xt_off) {
-#pragma HLS DEPENDENCE variable=outbuf inter distance=12 true
+#pragma HLS DEPENDENCE variable=outbuf inter false 
 #pragma HLS pipeline        
         if (xt_off * 8 == xtile_pad) {
           if (yt_off + 1 == ydim) {

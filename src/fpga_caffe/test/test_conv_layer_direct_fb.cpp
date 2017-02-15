@@ -480,11 +480,11 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv1x1B) {
         clSetKernelArg(this->ocl.oclKernel, 0, sizeof(cl_mem),
             &this->ocl_input);
         clSetKernelArg(this->ocl.oclKernel, 1, sizeof(cl_mem), 
-            &this->ocl_weights);
+            &this->ocl_output);
         clSetKernelArg(this->ocl.oclKernel, 2, sizeof(cl_mem),
             &this->ocl_bias);
         clSetKernelArg(this->ocl.oclKernel, 3, sizeof(cl_mem),
-            &this->ocl_output);
+            &this->ocl_weights);
         clSetKernelArg(this->ocl.oclKernel, 4, sizeof(cl_mem), 
             &this->ocl_params);
         clSetKernelArg(this->ocl.oclKernel, 5, sizeof(cl_int), &g);
@@ -584,11 +584,11 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3B) {
         clSetKernelArg(this->ocl.oclKernel, 0, sizeof(cl_mem),
             &this->ocl_input);
         clSetKernelArg(this->ocl.oclKernel, 1, sizeof(cl_mem), 
-            &this->ocl_weights);
+            &this->ocl_output);
         clSetKernelArg(this->ocl.oclKernel, 2, sizeof(cl_mem),
             &this->ocl_bias);
         clSetKernelArg(this->ocl.oclKernel, 3, sizeof(cl_mem),
-            &this->ocl_output);
+            &this->ocl_weights);
         clSetKernelArg(this->ocl.oclKernel, 4, sizeof(cl_mem), 
             &this->ocl_params);
         clSetKernelArg(this->ocl.oclKernel, 5, sizeof(cl_int), &g);
@@ -615,6 +615,7 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3B) {
     }
   }
 }
+
 
 TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5B) {
   typedef typename TypeParam::Dtype Dtype;
@@ -666,7 +667,7 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5B) {
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(Dtype) * insize_pad, NULL, NULL);
-    this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
+    this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
         sizeof(Dtype) * wsize_pad, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
         sizeof(Dtype) * outsize_pad, NULL, NULL);
@@ -690,11 +691,11 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5B) {
         clSetKernelArg(this->ocl.oclKernel, 0, sizeof(cl_mem),
             &this->ocl_input);
         clSetKernelArg(this->ocl.oclKernel, 1, sizeof(cl_mem), 
-            &this->ocl_weights);
+            &this->ocl_output);
         clSetKernelArg(this->ocl.oclKernel, 2, sizeof(cl_mem),
             &this->ocl_bias);
         clSetKernelArg(this->ocl.oclKernel, 3, sizeof(cl_mem),
-            &this->ocl_output);
+            &this->ocl_weights);
         clSetKernelArg(this->ocl.oclKernel, 4, sizeof(cl_mem), 
             &this->ocl_params);
         clSetKernelArg(this->ocl.oclKernel, 5, sizeof(cl_int), &g);
