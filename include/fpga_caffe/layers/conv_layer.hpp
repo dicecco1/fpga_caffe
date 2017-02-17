@@ -1,6 +1,8 @@
 #ifndef CONV_LAYER_HPP_
 #define CONV_LAYER_HPP_
 
+#define FADD_LATENCY 13
+
 typedef struct {
   int inchannels;
   int outchannels;

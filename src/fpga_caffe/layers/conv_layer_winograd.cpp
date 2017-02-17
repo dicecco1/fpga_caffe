@@ -226,7 +226,7 @@ float out_trans_m(float in0, float in1, float in2, int ksize) {
 extern "C" {
 
 void conv_layer_winograd(float16 *input, float16 *weights, float *bias,
-    float16 *output, kernel_params *params, int group_idx, int image_idx) {
+    float16 *output, int *params, int group_idx, int image_idx) {
 
 /* Ports */
 #pragma HLS data_pack variable=weights
@@ -283,15 +283,16 @@ void conv_layer_winograd(float16 *input, float16 *weights, float *bias,
 #pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=2
 
-  int inchannels = params->inchannels;
-  int outchannels = params->outchannels;
-  int burstchannels = params->burstchannels;
-  int xdim = params->xdim;
-  int ydim = params->ydim;
-  int xtile_pad = params->xtile_pad;
-  int ksize = params->ksize;
-  int rpo = params->rpo;
-  int numgroups = params->numgroups;
+  int inchannels = params[0];
+  int outchannels = params[1];
+  int burstchannels = params[2];
+  int rpo = params[3];
+  int ydim = params[4];
+  int xdim = params[5];
+  int xtile_pad = params[6];
+  int ksize = params[7];
+  int numgroups = params[8];
+  int numimages = params[9];
 
   assert(inchannels >= 1);
   assert(inchannels <= 1024);
