@@ -15,13 +15,13 @@ class ConvLayerDirectFBTest : public OCLDeviceTest<TypeParam> {
   virtual void SetUp() {
     params.resize(3);
     params[0].numgroups = 1;
-    params[0].inchannels = 3;
-    params[0].outchannels = 4;
-    params[0].burstchannels = 1;
-    params[0].rpo = 3;
-    params[0].ydim = 224;
-    params[0].xdim = 224;
-    params[0].xtile_pad = 112;
+    params[0].inchannels = 13;
+    params[0].outchannels = 16;
+    params[0].burstchannels = 13;
+    params[0].rpo = 1;
+    params[0].ydim = 13;
+    params[0].xdim = 13;
+    params[0].xtile_pad = 8;
     params[0].numimages = 1;
     params[1].numgroups = 1;
     params[1].inchannels = 256;
@@ -43,12 +43,8 @@ class ConvLayerDirectFBTest : public OCLDeviceTest<TypeParam> {
     params[2].numimages = 2;
   }
 
-  virtual ~ConvLayerDirectFBTest() {
-    clReleaseMemObject(ocl_input);
-    clReleaseMemObject(ocl_weights);
-    clReleaseMemObject(ocl_output);
-    clReleaseMemObject(ocl_bias);
-  }
+  virtual ~ConvLayerDirectFBTest() {}
+  
   OCLUtil ocl;
   std::vector<Dtype> input;
   std::vector<Dtype> input_pad;
@@ -177,6 +173,10 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv1x1F) {
         }
       }
     }
+    clReleaseMemObject(this->ocl_input);
+    clReleaseMemObject(this->ocl_weights);
+    clReleaseMemObject(this->ocl_output);
+    clReleaseMemObject(this->ocl_bias);
   }
 }
 
@@ -290,6 +290,10 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3F) {
         }
       }
     }
+    clReleaseMemObject(this->ocl_input);
+    clReleaseMemObject(this->ocl_weights);
+    clReleaseMemObject(this->ocl_output);
+    clReleaseMemObject(this->ocl_bias);
   }
 }
 
@@ -403,6 +407,10 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5F) {
         }
       }
     }
+    clReleaseMemObject(this->ocl_input);
+    clReleaseMemObject(this->ocl_weights);
+    clReleaseMemObject(this->ocl_output);
+    clReleaseMemObject(this->ocl_bias);
   }
 }
 
@@ -480,11 +488,11 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv1x1B) {
         clSetKernelArg(this->ocl.oclKernel, 0, sizeof(cl_mem),
             &this->ocl_input);
         clSetKernelArg(this->ocl.oclKernel, 1, sizeof(cl_mem), 
-            &this->ocl_output);
+            &this->ocl_weights);
         clSetKernelArg(this->ocl.oclKernel, 2, sizeof(cl_mem),
             &this->ocl_bias);
         clSetKernelArg(this->ocl.oclKernel, 3, sizeof(cl_mem),
-            &this->ocl_weights);
+            &this->ocl_output);
         clSetKernelArg(this->ocl.oclKernel, 4, sizeof(cl_mem), 
             &this->ocl_params);
         clSetKernelArg(this->ocl.oclKernel, 5, sizeof(cl_int), &g);
@@ -507,6 +515,10 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv1x1B) {
       EXPECT_TRUE(checkEQ(this->sw_results[j], 
             this->hw_results[j * ksize_pad + 1], 1e-3, 1e-3));
     }
+    clReleaseMemObject(this->ocl_input);
+    clReleaseMemObject(this->ocl_weights);
+    clReleaseMemObject(this->ocl_output);
+    clReleaseMemObject(this->ocl_bias);
   }
 }
 
@@ -584,11 +596,11 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3B) {
         clSetKernelArg(this->ocl.oclKernel, 0, sizeof(cl_mem),
             &this->ocl_input);
         clSetKernelArg(this->ocl.oclKernel, 1, sizeof(cl_mem), 
-            &this->ocl_output);
+            &this->ocl_weights);
         clSetKernelArg(this->ocl.oclKernel, 2, sizeof(cl_mem),
             &this->ocl_bias);
         clSetKernelArg(this->ocl.oclKernel, 3, sizeof(cl_mem),
-            &this->ocl_weights);
+            &this->ocl_output);
         clSetKernelArg(this->ocl.oclKernel, 4, sizeof(cl_mem), 
             &this->ocl_params);
         clSetKernelArg(this->ocl.oclKernel, 5, sizeof(cl_int), &g);
@@ -613,6 +625,10 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3B) {
               this->hw_results[j * ksize_pad + k], 1e-3, 1e-3));
       }
     }
+    clReleaseMemObject(this->ocl_input);
+    clReleaseMemObject(this->ocl_weights);
+    clReleaseMemObject(this->ocl_output);
+    clReleaseMemObject(this->ocl_bias);
   }
 }
 
@@ -691,11 +707,11 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5B) {
         clSetKernelArg(this->ocl.oclKernel, 0, sizeof(cl_mem),
             &this->ocl_input);
         clSetKernelArg(this->ocl.oclKernel, 1, sizeof(cl_mem), 
-            &this->ocl_output);
+            &this->ocl_weights);
         clSetKernelArg(this->ocl.oclKernel, 2, sizeof(cl_mem),
             &this->ocl_bias);
         clSetKernelArg(this->ocl.oclKernel, 3, sizeof(cl_mem),
-            &this->ocl_weights);
+            &this->ocl_output);
         clSetKernelArg(this->ocl.oclKernel, 4, sizeof(cl_mem), 
             &this->ocl_params);
         clSetKernelArg(this->ocl.oclKernel, 5, sizeof(cl_int), &g);
@@ -728,5 +744,9 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5B) {
         }
       }
     }
+    clReleaseMemObject(this->ocl_input);
+    clReleaseMemObject(this->ocl_weights);
+    clReleaseMemObject(this->ocl_output);
+    clReleaseMemObject(this->ocl_bias);
   }
 }

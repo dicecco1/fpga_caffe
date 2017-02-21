@@ -1,38 +1,21 @@
 #include "fpga_caffe/test/test_fpga_caffe_main.hpp"
 
-int convertToString(const char *filename, char **str) {
-  size_t size;
-
-  FILE *f = fopen(filename, "rb");
-
-  if (f != NULL) {
-    fseek(f, 0, SEEK_END);
-    size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    *str = new char[size+1];
-    memset(*str, 0, size + 1);
-    if (!str) {
-      fclose(f);
-      LOG(FATAL) << "Could not reserve memory for string";
-      return -1;
-    }
-
-    fread(*str, sizeof(char), size, f);
-    fclose(f);
-    (*str)[size] = '\0';
-
-    return size;
-  }
-  LOG(FATAL) << "Could not open opencl binary file.";
-  return -1;
-}
-
 OCLUtil::OCLUtil(std::string xclbin, std::string xclkernel) {
   xcl_name = xclbin;
   kernel = xclkernel;
 }
 
 void OCLUtil::Setup() {
+  std::string path(".build_release/opencl/src/caffe/layers/");
+
+  const char *filename = (path + xcl_name).c_str();
+
+  std::ifstream file_stream(filename);
+  std::string source( (std::istreambuf_iterator<char>(file_stream)),
+      (std::istreambuf_iterator<char>()));
+  size_t sourceSize = source.length();
+  
+  const char *sourceStr = source.c_str();
   oclPlatform.resize(1);
   clGetPlatformIDs(0, NULL, &oclNumPlatforms);
   clGetPlatformIDs(1, &(oclPlatform[0]), NULL);
@@ -40,20 +23,12 @@ void OCLUtil::Setup() {
       NULL);
   oclContext = clCreateContext(NULL, 1, &oclDevices, NULL, NULL, NULL);
   oclCommandQueue = clCreateCommandQueue(oclContext, oclDevices,
-      CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, NULL);
-  std::string path(".build_release/opencl/src/caffe/layers/");
-
-  const char *filename = (path + xcl_name).c_str();
-
-  char *sourceStr;
-  size_t sourceSize = convertToString(filename, &sourceStr);
-
+      /*CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE*/ 0, NULL);
   cl_program oclProgram = clCreateProgramWithBinary(oclContext, 1,
-      &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL,
+      &oclDevices, &sourceSize, (const unsigned char **)(&sourceStr), NULL,
       NULL);
 
   clBuildProgram(oclProgram, 0, NULL, NULL, NULL, NULL);
-
   oclKernel = clCreateKernel(oclProgram, kernel.c_str(), NULL);
 }
 
@@ -243,7 +218,7 @@ bool checkEQ(float expected, float result, float epsilon, float absError) {
 
   if (diff <= largest * epsilon)
     return true;
-
+  std::cout << "Expected: " << expected << " Got: " << result << std::endl;
   return false;
 }
 

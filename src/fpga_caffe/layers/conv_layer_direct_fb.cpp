@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdbool.h>
+#include "hls_half.h"
 #include "fpga_caffe/layers/conv_layer.hpp"
 
 #define OCFACT 1 
@@ -235,7 +236,7 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
   float ot_s4[3];
 #pragma HLS ARRAY_PARTITION variable=ot_s4 complete dim=1
   
-  float otf[16];
+  float otf[16] = {0};
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=1
   
   int inchannels = params[0];
@@ -295,10 +296,10 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
   
   if (backward_flag) {
     if (ksize == 5) {
-      mod_channel = (burstchannels * 2 < FADD_LATENCY) ? FADD_LATENCY :
+      mod_channel = (burstchannels * 2 * ksize < FADD_LATENCY) ? FADD_LATENCY :
         burstchannels * 2;
     } else {
-      mod_channel = (burstchannels < FADD_LATENCY) ? FADD_LATENCY :
+      mod_channel = (burstchannels * ksize < FADD_LATENCY) ? FADD_LATENCY :
         burstchannels;
     }
   } else {
@@ -397,14 +398,13 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
       MULTACCSTAGE: for (i = 0; i < mac_iterations; ++i, ++iter) {
 #pragma HLS DEPENDENCE variable=outbuf inter false
 #pragma HLS DEPENDENCE variable=wbuf inter false
-#pragma HLS DEPENDENCE variable=outbuf intra false
-#pragma HLS DEPENDENCE variable=wbuf intra false
+#pragma HLS DEPENDENCE variable=otf inter false
 #pragma HLS pipeline        
         if (backward_flag) {
-          if (iter == mod_channel) {
+          if (iter == ksize) {
             iter = 0;
-            if (row_off + 1 == ksize) {
-              row_off = 0;
+            if (w_off == mod_channel - 1) {
+              w_off = 0;
               if (xt_off + 1 == fact) {
                 xt_off = 0;
                 yt_off++;
@@ -412,10 +412,10 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
                 xt_off++;
               }
             } else {
-              row_off++;
+              w_off++;
             }
           }
-          w_off = iter;
+          row_off = iter;
         } else {
           if (iter == fact) {
             if (yt_off + 1 == mod_ydim) {
@@ -464,39 +464,44 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
               ot_s1[p] = ot[k][p][0] + ot[k][p][1] + ot[k][p][2];
             }
           }
+
           for (q = 0; q < 3; ++q) {
             for (p = 0; p < 2; ++p)
               ot_s3[q][p] = ot_s2[q][p * 2] + ot_s2[q][p * 2 + 1];
             ot_s4[q] = ot_s3[q][0] + ot_s3[q][1];
           }
  
-          for (p = 0; p < 16; ++p)
-            otf[p] = ot_s1[p];
-
           if (backward_flag) {
-            for (p = 0; p < 16; ++p)
-              otf[p] = 0;
             for (p = 0; p < 3; ++p)
               otf[row_off * 3 + p] = ot_s4[p];
+          } else {
+            for (p = 0; p < 16; ++p)
+              otf[p] = ot_s1[p];
           }
-          unsigned short o_idx = (backward_flag) ? w_off : offset;
 
-          outbuf[k][o_idx].s0 += otf[0];
-          outbuf[k][o_idx].s1 += otf[1];
-          outbuf[k][o_idx].s2 += otf[2];
-          outbuf[k][o_idx].s3 += otf[3];
-          outbuf[k][o_idx].s4 += otf[4];
-          outbuf[k][o_idx].s5 += otf[5];
-          outbuf[k][o_idx].s6 += otf[6];
-          outbuf[k][o_idx].s7 += otf[7];
-          outbuf[k][o_idx].s8 += otf[8];
-          outbuf[k][o_idx].s9 += otf[9];
-          outbuf[k][o_idx].sa += otf[10];
-          outbuf[k][o_idx].sb += otf[11];
-          outbuf[k][o_idx].sc += otf[12];
-          outbuf[k][o_idx].sd += otf[13];
-          outbuf[k][o_idx].se += otf[14];
-          outbuf[k][o_idx].sf += otf[15]; 
+          unsigned short o_idx = (backward_flag) ? w_off : offset;
+         
+          int acc_enable = (backward_flag) ? ((row_off == ksize - 1) ? 1 : 0) :
+            1;
+
+          if (acc_enable) {
+            outbuf[k][o_idx].s0 += otf[0];
+            outbuf[k][o_idx].s1 += otf[1];
+            outbuf[k][o_idx].s2 += otf[2];
+            outbuf[k][o_idx].s3 += otf[3];
+            outbuf[k][o_idx].s4 += otf[4];
+            outbuf[k][o_idx].s5 += otf[5];
+            outbuf[k][o_idx].s6 += otf[6];
+            outbuf[k][o_idx].s7 += otf[7];
+            outbuf[k][o_idx].s8 += otf[8];
+            outbuf[k][o_idx].s9 += otf[9];
+            outbuf[k][o_idx].sa += otf[10];
+            outbuf[k][o_idx].sb += otf[11];
+            outbuf[k][o_idx].sc += otf[12];
+            outbuf[k][o_idx].sd += otf[13];
+            outbuf[k][o_idx].se += otf[14];
+            outbuf[k][o_idx].sf += otf[15];
+          }
         }
       }
       for (k = 0; k < OCFACT; ++k) {

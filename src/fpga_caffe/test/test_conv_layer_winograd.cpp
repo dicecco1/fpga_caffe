@@ -43,12 +43,8 @@ class ConvLayerWinogradTest : public OCLDeviceTest<TypeParam> {
     params[2].numimages = 2;
   }
 
-  virtual ~ConvLayerWinogradTest() {
-    clReleaseMemObject(ocl_input);
-    clReleaseMemObject(ocl_weights);
-    clReleaseMemObject(ocl_output);
-    clReleaseMemObject(ocl_bias);
-  }
+  virtual ~ConvLayerWinogradTest() {}
+
   OCLUtil ocl;
   std::vector<Dtype> input;
   std::vector<Dtype> input_pad;
@@ -176,6 +172,10 @@ TYPED_TEST(ConvLayerWinogradTest, TestWinogradConv1x1) {
         }
       }
     }
+    clReleaseMemObject(this->ocl_input);
+    clReleaseMemObject(this->ocl_weights);
+    clReleaseMemObject(this->ocl_output);
+    clReleaseMemObject(this->ocl_bias);
   }
 }
 
@@ -288,6 +288,10 @@ TYPED_TEST(ConvLayerWinogradTest, TestWinogradConv3x3) {
         }
       }
     }
+    clReleaseMemObject(this->ocl_input);
+    clReleaseMemObject(this->ocl_weights);
+    clReleaseMemObject(this->ocl_output);
+    clReleaseMemObject(this->ocl_bias);
   }
 }
 
@@ -400,6 +404,10 @@ TYPED_TEST(ConvLayerWinogradTest, TestWinogradConv5x5) {
         }
       }
     }
+    clReleaseMemObject(this->ocl_input);
+    clReleaseMemObject(this->ocl_weights);
+    clReleaseMemObject(this->ocl_output);
+    clReleaseMemObject(this->ocl_bias);
   }
 }
 

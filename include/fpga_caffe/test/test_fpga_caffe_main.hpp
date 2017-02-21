@@ -11,6 +11,8 @@
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_real_distribution.hpp>
 #include <CL/opencl.h>
+#include <fstream>
+#include <string>
 #include "fpga_caffe/layers/conv_layer.hpp"
 
 using std::cout;
