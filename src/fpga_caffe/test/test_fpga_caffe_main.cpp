@@ -79,6 +79,22 @@ void copyWeights(std::vector<float> w_input, std::vector<float>& w_output,
   }
 }
 
+void ref_fc_layer(std::vector<float> input, std::vector<float> weights,
+    std::vector<float> bias, std::vector<float>& output,
+    kernel_params params) {
+  int inchannels = params.inchannels;
+  int outchannels = params.outchannels;
+
+  for (int j = 0; j < outchannels; ++j)
+    output[j] = bias[0];
+
+  for (int i = 0; i < inchannels; ++i) {
+    for (int j = 0; j < outchannels; ++j) {
+      output[j] += input[i] * weights[i * outchannels + j];
+    }
+  }
+}
+
 void ref_conv_layer(std::vector<float> input, std::vector<float> weights,
     std::vector<float> bias, std::vector<float>& output,
     kernel_params params) {

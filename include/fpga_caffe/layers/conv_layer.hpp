@@ -14,6 +14,7 @@ typedef struct {
   int ksize;
   int numgroups;
   int numimages;
+  int fc;
   int backward;
 } kernel_params;
 

@@ -4,6 +4,7 @@
 
 #define OCFACT 1 
 #define OCDIV 0
+
 /* float16 data type definition */
 
 typedef struct {
@@ -25,7 +26,7 @@ typedef struct {
   float sf;
 } float16;
 
-void input_stage(float16 inbuf[256 * 32], unsigned short ksize,
+void input_stage(float16 inbuf[256 * 16], unsigned short ksize,
     unsigned short xt_off, unsigned short xtile_pad, unsigned short yt_off, 
     unsigned short row_off, unsigned short ydim, unsigned short w_off,
     float it[16][3]) {
