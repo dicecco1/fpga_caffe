@@ -81,7 +81,7 @@ TYPED_TEST(ConvLayerDirectFCTest, TestDirectFCF) {
     int wsize_pad = wsize;
     int outsize = params[i].numimages * params[i].outchannels;
     int outsize_pad = outsize;
-    int bsize = 1;
+    int bsize = params[i].outchannels;
     // Clear input vectors
     this->input.clear();
     this->input_pad.clear();

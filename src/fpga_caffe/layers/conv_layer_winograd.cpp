@@ -76,7 +76,7 @@ void p_transform(float input[4], float output[4], int ksize) {
   }
 }
 
-void winograd_input_stage(float16 inbuf[256 * 32], unsigned short ksize,
+void winograd_input_stage(float16 inbuf[256 * 16], unsigned short ksize,
     unsigned short xt_off, unsigned short xtile_pad, unsigned short yt_off, 
     unsigned short row_off, unsigned short ydim, unsigned short w_off,
     float it[8][4]) {

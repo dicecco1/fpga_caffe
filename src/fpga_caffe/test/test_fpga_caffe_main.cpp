@@ -86,7 +86,7 @@ void ref_fc_layer(std::vector<float> input, std::vector<float> weights,
   int outchannels = params.outchannels;
 
   for (int j = 0; j < outchannels; ++j)
-    output[j] = bias[0];
+    output[j] = bias[j];
 
   for (int i = 0; i < inchannels; ++i) {
     for (int j = 0; j < outchannels; ++j) {
