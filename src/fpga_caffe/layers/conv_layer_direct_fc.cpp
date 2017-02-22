@@ -301,10 +301,17 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
   unsigned short offset;
   int in_off;
   int in_size;
-  unsigned short iter, ofm_iters;
+  unsigned short iter;
   bool backward_flag = backward;
   unsigned short mod_channel;
   
+  unsigned short outer_iter;
+  if (fc) 
+    outer_iter = inchannels;
+  else
+    outer_iter = (outchannels & (OCFACT - 1)) ? (outchannels >> OCDIV) + 1 :
+      (outchannels >> OCDIV);
+
   if (backward_flag) {
     if (ksize == 5) {
       mod_channel = (burstchannels * 2 * ksize < FADD_LATENCY) ? FADD_LATENCY :
@@ -340,20 +347,15 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
 
     memcpy(inbuf, input + in_off, sizeof(float16) * in_size); 
 
-    int outer_iter;
-    if (fc) 
-      outer_iter = inchannels;
-    else
-      outer_iter = (outchannels & (OCFACT - 1)) ? (outchannels >> OCDIV) + 1 :
-        (outchannels >> OCDIV);
     for (o = 0; o < outer_iter; ++o) {
-      if ((n == 0 && !backward_flag && !fc) || (o == 0 && fc)) {
+      if ((n == 0 && !backward_flag/* && !fc) || (o == 0 && fc*/)) {
         // Set the output buffers to contain the biases
         out_size = (fc) ? outchannels >> 4 : ydim * fact; 
         for (i = 0; i < out_size; ++i) {
 #pragma HLS pipeline
           for (k = 0; k < OCFACT; ++k) {
             float bias_val = (fc) ? biasbuf[0] : biasbuf[o * OCFACT + k];
+            if ((o == 0 && fc) || !fc) {
             outbuf[k][i].s0 = bias_val;
             outbuf[k][i].s1 = bias_val;
             outbuf[k][i].s2 = bias_val;
@@ -370,6 +372,7 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
             outbuf[k][i].sd = bias_val;
             outbuf[k][i].se = bias_val;
             outbuf[k][i].sf = bias_val;
+            }
           }
         } 
       } else if (!backward_flag && !fc) {
