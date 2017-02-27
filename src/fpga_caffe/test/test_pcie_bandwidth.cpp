@@ -10,7 +10,7 @@ class PCIeBandwidthTest : public OCLDeviceTest<TypeParam> {
 
  protected:
   PCIeBandwidthTest()
-    : ocl("conv_layer_direct_fc.xclbin", "conv_layer_direct_fb") 
+    : ocl("bandwidth_test_16.xclbin", "bandwidth_test_16") 
   {}
   virtual void SetUp() {
     params.resize(1);
@@ -34,6 +34,7 @@ class PCIeBandwidthTest : public OCLDeviceTest<TypeParam> {
   std::vector<Dtype> hw;
   std::vector<kernel_params> params;
   cl_mem ocl_input;
+  cl_mem ocl_output;
 };
 
 TYPED_TEST_CASE(PCIeBandwidthTest, TestOCLDtypesAndDevices);
@@ -219,4 +220,48 @@ TYPED_TEST(PCIeBandwidthTest, TestByChannel) {
 
     clReleaseMemObject(this->ocl_input);
   }
+}
+
+TYPED_TEST(PCIeBandwidthTest, TestLocalBandwidth) {
+  typedef typename TypeParam::Dtype Dtype;
+  this->ocl.Setup();
+  std::vector<kernel_params> params = this->params;
+  std::vector<cl_event> events;
+
+  std::vector<Dtype> in_mod;
+  int burst = 256 * 256;
+  int rpo = 256 / 256;
+  int insize = 256 * 256; 
+  // Clear input vectors
+  this->input.clear();
+  events.resize(1);
+  // Resize vectors
+  this->input.resize(insize, 0);
+  this->hw_results.resize(insize, 0);
+  // Populate vectors
+  fillVector(this->input, 0.0, 1.0);
+
+  // Create buffers
+  this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
+      sizeof(Dtype) * insize, NULL, NULL);
+
+  this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
+      sizeof(Dtype) * insize, NULL, NULL);
+
+  clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
+      0, sizeof(Dtype) * insize, this->input.data(), 0, NULL, NULL);
+  clSetKernelArg(this->ocl.oclKernel, 0, sizeof(cl_mem), &this->ocl_input);
+  clSetKernelArg(this->ocl.oclKernel, 1, sizeof(cl_mem), &this->ocl_output);
+  clSetKernelArg(this->ocl.oclKernel, 2, sizeof(cl_int), &burst);
+  clSetKernelArg(this->ocl.oclKernel, 3, sizeof(cl_int), &rpo);
+  clEnqueueTask(this->ocl.oclCommandQueue, this->ocl.oclKernel, 0, NULL,
+      &(events[0]));
+
+  clWaitForEvents(1, events.data());
+
+  clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
+      0, sizeof(Dtype) * insize, this->hw_results.data(), 0, NULL,
+      NULL);
+
+  clReleaseMemObject(this->ocl_input);
 }

@@ -37,6 +37,7 @@ class OCLUtil {
  public:
   OCLUtil(std::string xclbin, std::string xclkernel);
   void Setup();
+  void Setup_Platform();
   cl_uint oclNumPlatforms;
   std::vector<cl_platform_id> oclPlatform;
   cl_device_id oclDevices;

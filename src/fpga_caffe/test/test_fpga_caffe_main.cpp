@@ -5,6 +5,17 @@ OCLUtil::OCLUtil(std::string xclbin, std::string xclkernel) {
   kernel = xclkernel;
 }
 
+void OCLUtil::Setup_Platform() {
+  oclPlatform.resize(1);
+  clGetPlatformIDs(0, NULL, &oclNumPlatforms);
+  clGetPlatformIDs(1, &(oclPlatform[0]), NULL);
+  clGetDeviceIDs(oclPlatform[0], CL_DEVICE_TYPE_ACCELERATOR, 1, &oclDevices,
+      NULL);
+  oclContext = clCreateContext(NULL, 1, &oclDevices, NULL, NULL, NULL);
+  oclCommandQueue = clCreateCommandQueue(oclContext, oclDevices,
+      /*CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE*/ 0, NULL);
+}
+
 void OCLUtil::Setup() {
   std::string path(".build_release/opencl/src/caffe/layers/");
 
@@ -14,8 +25,9 @@ void OCLUtil::Setup() {
   std::string source( (std::istreambuf_iterator<char>(file_stream)),
       (std::istreambuf_iterator<char>()));
   size_t sourceSize = source.length();
-  
+ 
   const char *sourceStr = source.c_str();
+
   oclPlatform.resize(1);
   clGetPlatformIDs(0, NULL, &oclNumPlatforms);
   clGetPlatformIDs(1, &(oclPlatform[0]), NULL);

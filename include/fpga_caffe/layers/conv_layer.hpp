@@ -8,6 +8,8 @@ typedef struct {
   int outchannels;
   int burstchannels;
   int rpo;
+  int rpofm;
+  int burstydim;
   int ydim;
   int xdim; 
   int xtile_pad;

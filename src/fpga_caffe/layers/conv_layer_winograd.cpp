@@ -1,10 +1,9 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include "fpga_caffe/layers/conv_layer.hpp"
 
-#define OCFACT 1 
-#define OCDIV 0 
+#define OCFACT 8 
+#define OCDIV 3
 #define EXP_MASK 0x7f800000
 #define MANT_MASK 0x007fffff
 #define SIGN_MASK 0x80000000
@@ -251,7 +250,7 @@ void conv_layer_winograd(float16 *input, float16 *weights, float *bias,
   float16 inbuf[256 * 16]; 
 
   // Output buffer used for writing
-  float16 outbuf[OCFACT][256 * 16];
+  float16 outbuf[OCFACT][512];
 #pragma HLS ARRAY_PARTITION variable=outbuf complete dim=1
 
   // Weight buffer
@@ -287,12 +286,14 @@ void conv_layer_winograd(float16 *input, float16 *weights, float *bias,
   int outchannels = params[1];
   int burstchannels = params[2];
   int rpo = params[3];
-  int ydim = params[4];
-  int xdim = params[5];
-  int xtile_pad = params[6];
-  int ksize = params[7];
-  int numgroups = params[8];
-  int numimages = params[9];
+  int rpofm = params[4];
+  int burstydim = params[5];
+  int ydim = params[6];
+  int xdim = params[7];
+  int xtile_pad = params[8];
+  int ksize = params[9];
+  int numgroups = params[10];
+  int numimages = params[11];
 
   assert(inchannels >= 1);
   assert(inchannels <= 1024);
@@ -307,9 +308,6 @@ void conv_layer_winograd(float16 *input, float16 *weights, float *bias,
   assert(ydim >= 7);
   assert(ydim <= 256);
 
-  assert(group_idx >= 0);
-  assert(group_idx <= 1);
-
   assert(numgroups <= 2);
   assert(numgroups >= 1);
 
@@ -319,9 +317,13 @@ void conv_layer_winograd(float16 *input, float16 *weights, float *bias,
   assert(rpo >= 1);
   assert(rpo <= 64);
 
-  assert(ksize == 1 || ksize == 3 || ksize == 5);
+  assert(rpofm <= 32);
+  assert(rpofm >= 1);
 
-  int i, n, y, x, p, q, j, o, k;
+  assert(burstydim <= 64);
+  assert(burstydim >= 1);
+
+  assert(ksize == 1 || ksize == 3 || ksize == 5);
 
   unsigned short w_off = 0;
   unsigned short row_off = 0;
@@ -339,14 +341,14 @@ void conv_layer_winograd(float16 *input, float16 *weights, float *bias,
   memcpy(biasbuf, bias + (outchannels * group_idx), sizeof(float) *
       outchannels);
 
-  int mac_iterations = burstchannels * ydim * fact;
+  int mac_iterations = burstchannels * burstydim * fact;
   
   if (ksize == 3)
     mac_iterations *= 3;
   else if (ksize == 5)
     mac_iterations *= 5 * 2;
   
-  for (n = 0; n < rpo; ++n) {
+  for (int n = 0; n < rpo; ++n) {
     /* Read the input line by line and tile it into the tile buffer */
     in_off = (((image_idx * numgroups + group_idx) * inchannels) * ydim *
         xtile_pad * 2 + n * burstchannels * ydim * xtile_pad * 2) >> 4;
@@ -356,40 +358,8 @@ void conv_layer_winograd(float16 *input, float16 *weights, float *bias,
 
     unsigned short ofm_iters = (outchannels & 0x3) ? 
       (outchannels >> OCDIV) + 1 : (outchannels >> OCDIV);
-    for (o = 0; o < ofm_iters; ++o) {
-      if (n == 0) {
-        // Set the output buffers to contain the biases 
-        for (i = 0; i < ydim * fact; ++i) {
-#pragma HLS pipeline
-          for (k = 0; k < OCFACT; ++k) {
-            outbuf[k][i].s0 = biasbuf[o * OCFACT + k];
-            outbuf[k][i].s1 = biasbuf[o * OCFACT + k];
-            outbuf[k][i].s2 = biasbuf[o * OCFACT + k];
-            outbuf[k][i].s3 = biasbuf[o * OCFACT + k];
-            outbuf[k][i].s4 = biasbuf[o * OCFACT + k];
-            outbuf[k][i].s5 = biasbuf[o * OCFACT + k];
-            outbuf[k][i].s6 = biasbuf[o * OCFACT + k];
-            outbuf[k][i].s7 = biasbuf[o * OCFACT + k];
-            outbuf[k][i].s8 = biasbuf[o * OCFACT + k];
-            outbuf[k][i].s9 = biasbuf[o * OCFACT + k];
-            outbuf[k][i].sa = biasbuf[o * OCFACT + k];
-            outbuf[k][i].sb = biasbuf[o * OCFACT + k];
-            outbuf[k][i].sc = biasbuf[o * OCFACT + k];
-            outbuf[k][i].sd = biasbuf[o * OCFACT + k];
-            outbuf[k][i].se = biasbuf[o * OCFACT + k];
-            outbuf[k][i].sf = biasbuf[o * OCFACT + k];
-          }
-        } 
-      } else {
-        for (k = 0; k < OCFACT; ++k) {
-          out_offset = image_idx * numgroups * outchannels * ydim * fact + 
-          ((o * OCFACT + k + outchannels * group_idx) * ydim) * fact;
-          memcpy(outbuf[k], output + out_offset, sizeof(float16) * fact * 
-              ydim);
-        }
-      }
-
-      for (k = 0; k < OCFACT; ++k) {
+    for (int o = 0; o < ofm_iters; ++o) {
+      for (int k = 0; k < OCFACT; ++k) {
         weight_offset = (o * OCFACT + k + outchannels * group_idx) * inchannels 
           + n * burstchannels;
         weight_size = burstchannels;
@@ -402,74 +372,109 @@ void conv_layer_winograd(float16 *input, float16 *weights, float *bias,
         memcpy(wbuf[k], weights + weight_offset, 
             sizeof(float16) * weight_size);
       }
+      for (int offy = 0; offy < rpofm; ++offy) {
+        if (n == 0) {
+          // Set the output buffers to contain the biases 
+          for (int i = 0; i < burstydim * fact; ++i) {
+#pragma HLS pipeline
+            for (int k = 0; k < OCFACT; ++k) {
+              outbuf[k][i].s0 = biasbuf[o * OCFACT + k];
+              outbuf[k][i].s1 = biasbuf[o * OCFACT + k];
+              outbuf[k][i].s2 = biasbuf[o * OCFACT + k];
+              outbuf[k][i].s3 = biasbuf[o * OCFACT + k];
+              outbuf[k][i].s4 = biasbuf[o * OCFACT + k];
+              outbuf[k][i].s5 = biasbuf[o * OCFACT + k];
+              outbuf[k][i].s6 = biasbuf[o * OCFACT + k];
+              outbuf[k][i].s7 = biasbuf[o * OCFACT + k];
+              outbuf[k][i].s8 = biasbuf[o * OCFACT + k];
+              outbuf[k][i].s9 = biasbuf[o * OCFACT + k];
+              outbuf[k][i].sa = biasbuf[o * OCFACT + k];
+              outbuf[k][i].sb = biasbuf[o * OCFACT + k];
+              outbuf[k][i].sc = biasbuf[o * OCFACT + k];
+              outbuf[k][i].sd = biasbuf[o * OCFACT + k];
+              outbuf[k][i].se = biasbuf[o * OCFACT + k];
+              outbuf[k][i].sf = biasbuf[o * OCFACT + k];
+            }
+          } 
+        } else {
+          for (int k = 0; k < OCFACT; ++k) {
+            out_offset = image_idx * numgroups * outchannels * ydim * fact +
+              ((o * OCFACT + k + outchannels * group_idx) * ydim + offy *
+               burstydim) * fact;
+            memcpy(outbuf[k], output + out_offset, sizeof(float16) * fact * 
+                burstydim);
+          }
+        }
 
-      w_off = 0;
-      xt_off = 0;
-      yt_off = 0;
-      row_off = 0;
-      MULTACCSTAGE: for (i = 0; i < mac_iterations; ++i, ++xt_off) {
+        w_off = 0;
+        xt_off = 0;
+        yt_off = 0;
+        row_off = 0;
+        MULTACCSTAGE: for (int i = 0; i < mac_iterations; ++i, ++xt_off) {
 #pragma HLS DEPENDENCE variable=outbuf inter false 
 #pragma HLS pipeline        
-        if (xt_off * 8 == xtile_pad) {
-          if (yt_off + 1 == ydim) {
-            yt_off = 0;
-            if ((row_off + 1 == ksize) || ksize == 1) {
-              row_off = 0;
-              w_off++;
+          if (xt_off * 8 == xtile_pad) {
+            if (yt_off + 1 == burstydim) {
+              yt_off = 0;
+              if ((row_off + 1 == ksize) || ksize == 1) {
+                row_off = 0;
+                w_off++;
+              } else {
+                row_off++;
+              }
             } else {
-              row_off++;
+              yt_off++;
             }
-          } else {
-            yt_off++;
+            xt_off = 0;
           }
-          xt_off = 0;
-        }
 
-        offset = yt_off * fact + xt_off;        
-        winograd_input_stage(inbuf, ksize, xt_off, xtile_pad, yt_off, 
-            row_off, ydim, w_off, it);
-        // Compute the element-wise multiplication between weight and input
-        // tile 
-        winograd_wt_set(wbuf, wt, w_off, row_off, ksize); 
-        for (k = 0; k < OCFACT; ++k) {
-          for (p = 0; p < 8; ++p) {
-            for (q = 0; q < 4; ++q) {
-              ot[k][p][q] = it[p][q] * wt[k][p][q];
+          offset = yt_off * fact + xt_off;        
+          winograd_input_stage(inbuf, ksize, xt_off, xtile_pad, yt_off + offy *
+              burstydim, row_off, ydim, w_off, it);
+          // Compute the element-wise multiplication between weight and input
+          // tile 
+          winograd_wt_set(wbuf, wt, w_off, row_off, ksize); 
+          for (int k = 0; k < OCFACT; ++k) {
+            for (int p = 0; p < 8; ++p) {
+              for (int q = 0; q < 4; ++q) {
+                ot[k][p][q] = it[p][q] * wt[k][p][q];
+              }
             }
+           
+            for (int p = 0; p < 8; ++p) {
+              ot_s1[p][0] = out_trans_p(ot[k][p][0], ot[k][p][1], ot[k][p][2], 
+                  ksize);
+              ot_s1[p][1] = out_trans_m(ot[k][p][1], ot[k][p][2], ot[k][p][3], 
+                  ksize);
+            } 
+            outbuf[k][offset].s0 += ot_s1[0][0];
+            outbuf[k][offset].s1 += ot_s1[0][1];
+            outbuf[k][offset].s2 += ot_s1[1][0];
+            outbuf[k][offset].s3 += ot_s1[1][1];
+            outbuf[k][offset].s4 += ot_s1[2][0];
+            outbuf[k][offset].s5 += ot_s1[2][1];
+            outbuf[k][offset].s6 += ot_s1[3][0];
+            outbuf[k][offset].s7 += ot_s1[3][1];
+            outbuf[k][offset].s8 += ot_s1[4][0];
+            outbuf[k][offset].s9 += ot_s1[4][1];
+            outbuf[k][offset].sa += ot_s1[5][0];
+            outbuf[k][offset].sb += ot_s1[5][1];
+            outbuf[k][offset].sc += ot_s1[6][0];
+            outbuf[k][offset].sd += ot_s1[6][1];
+            outbuf[k][offset].se += ot_s1[7][0];
+            outbuf[k][offset].sf += ot_s1[7][1];
           }
-         
-          for (p = 0; p < 8; ++p) {
-            ot_s1[p][0] = out_trans_p(ot[k][p][0], ot[k][p][1], ot[k][p][2], 
-                ksize);
-            ot_s1[p][1] = out_trans_m(ot[k][p][1], ot[k][p][2], ot[k][p][3], 
-                ksize);
-          } 
-          outbuf[k][offset].s0 += ot_s1[0][0];
-          outbuf[k][offset].s1 += ot_s1[0][1];
-          outbuf[k][offset].s2 += ot_s1[1][0];
-          outbuf[k][offset].s3 += ot_s1[1][1];
-          outbuf[k][offset].s4 += ot_s1[2][0];
-          outbuf[k][offset].s5 += ot_s1[2][1];
-          outbuf[k][offset].s6 += ot_s1[3][0];
-          outbuf[k][offset].s7 += ot_s1[3][1];
-          outbuf[k][offset].s8 += ot_s1[4][0];
-          outbuf[k][offset].s9 += ot_s1[4][1];
-          outbuf[k][offset].sa += ot_s1[5][0];
-          outbuf[k][offset].sb += ot_s1[5][1];
-          outbuf[k][offset].sc += ot_s1[6][0];
-          outbuf[k][offset].sd += ot_s1[6][1];
-          outbuf[k][offset].se += ot_s1[7][0];
-          outbuf[k][offset].sf += ot_s1[7][1];
+        }     
+        for (int k = 0; k < OCFACT; ++k) {
+          out_offset = image_idx * numgroups * outchannels * ydim * fact +
+            ((o * OCFACT + k + outchannels * group_idx) * ydim + offy *
+             burstydim) * fact;
+          if (o * OCFACT + k < outchannels) {
+            memcpy(output + out_offset, outbuf[k], sizeof(float16) * fact *
+                burstydim);
+          }
         }
-      }     
-      for (k = 0; k < OCFACT; ++k) {
-        out_offset = image_idx * numgroups * outchannels * ydim * fact +
-          ((o * OCFACT + k + outchannels * group_idx) * ydim) * fact;
-        if (o * OCFACT + k < outchannels) {
-          memcpy(output + out_offset, outbuf[k], sizeof(float16) * fact *
-              ydim);
-        }
-      }      
+      } 
     }
   }
 }

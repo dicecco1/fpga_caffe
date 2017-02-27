@@ -19,6 +19,8 @@ class ConvLayerDirectTest : public OCLDeviceTest<TypeParam> {
     params[0].outchannels = 64;
     params[0].burstchannels = 1;
     params[0].rpo = 3;
+    params[0].rpofm = 8;
+    params[0].burstydim = 28;
     params[0].ydim = 224;
     params[0].xdim = 224;
     params[0].xtile_pad = 112;
@@ -28,6 +30,8 @@ class ConvLayerDirectTest : public OCLDeviceTest<TypeParam> {
     params[1].outchannels = 384;
     params[1].burstchannels = 256;
     params[1].rpo = 1;
+    params[1].rpofm = 1;
+    params[1].burstydim = 13;
     params[1].ydim = 13;
     params[1].xdim = 13;
     params[1].xtile_pad = 8;
@@ -37,6 +41,8 @@ class ConvLayerDirectTest : public OCLDeviceTest<TypeParam> {
     params[2].outchannels = 128;
     params[2].burstchannels = 48;
     params[2].rpo = 1;
+    params[2].rpofm = 1;
+    params[2].burstydim = 27;
     params[2].ydim = 27;
     params[2].xdim = 27;
     params[2].xtile_pad = 16;

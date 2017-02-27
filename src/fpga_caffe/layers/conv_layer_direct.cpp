@@ -238,9 +238,6 @@ void conv_layer_direct(float16 *input, float16 *weights, float *bias,
   assert(ydim >= 7);
   assert(ydim <= 256);
 
-  assert(group_idx >= 0);
-  assert(group_idx <= 1);
-
   assert(numgroups <= 2);
   assert(numgroups >= 1);
 
