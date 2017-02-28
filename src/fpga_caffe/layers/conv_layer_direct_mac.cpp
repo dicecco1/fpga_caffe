@@ -152,21 +152,28 @@ void wt_set(float16 wbuf[OCFACT][512], float wt[OCFACT][16],
 
 extern "C" {
 
-void conv_layer_direct(float16 *input, float16 *weights, float *bias,
-    float16 *output, int *params, int group_idx, int image_idx) {
+void conv_layer_direct(float16 *input, float16 *weights_A, float16 *weights_B,
+    float *bias, float16 *output_A, float16 *output_B, int *params,
+    int group_idx, int image_idx) {
 
 /* Ports */
-#pragma HLS data_pack variable=weights
-#pragma HLS data_pack variable=output
+#pragma HLS data_pack variable=weights_A
+#pragma HLS data_pack variable=weights_B
+#pragma HLS data_pack variable=output_A
+#pragma HLS data_pack variable=output_B
 #pragma HLS data_pack variable=input
 #pragma HLS INTERFACE m_axi port=input offset=slave bundle=gmem1
-#pragma HLS INTERFACE m_axi port=output offset=slave bundle=gmem2
-#pragma HLS INTERFACE m_axi port=weights offset=slave bundle=gmem3
-#pragma HLS INTERFACE m_axi port=bias offset=slave bundle=gmem4
-#pragma HLS INTERFACE m_axi port=params offset=slave bundle=gmem5
+#pragma HLS INTERFACE m_axi port=output_A offset=slave bundle=gmem2
+#pragma HLS INTERFACE m_axi port=weights_A offset=slave bundle=gmem3
+#pragma HLS INTERFACE m_axi port=output_B offset=slave bundle=gmem4
+#pragma HLS INTERFACE m_axi port=weights_B offset=slave bundle=gmem5
+#pragma HLS INTERFACE m_axi port=bias offset=slave bundle=gmem6
+#pragma HLS INTERFACE m_axi port=params offset=slave bundle=gmem7
 #pragma HLS INTERFACE s_axilite port=input bundle=control
-#pragma HLS INTERFACE s_axilite port=output bundle=control
-#pragma HLS INTERFACE s_axilite port=weights bundle=control
+#pragma HLS INTERFACE s_axilite port=output_A bundle=control
+#pragma HLS INTERFACE s_axilite port=weights_A bundle=control
+#pragma HLS INTERFACE s_axilite port=output_B bundle=control
+#pragma HLS INTERFACE s_axilite port=weights_B bundle=control
 #pragma HLS INTERFACE s_axilite port=bias bundle=control
 #pragma HLS INTERFACE s_axilite port=params bundle=control
 
@@ -186,8 +193,8 @@ void conv_layer_direct(float16 *input, float16 *weights, float *bias,
 #pragma HLS ARRAY_PARTITION variable=wbuf complete dim=1
 
   // Bias buffer
-  float biasbuf[1024];
-#pragma HLS ARRAY_PARTITION variable=biasbuf cyclic factor=4
+  float biasbuf[OCFACT][(1024 >> OCDIV)];
+#pragma HLS ARRAY_PARTITION variable=biasbuf complete dim=1
 
   // Input tile registers post transform
   float it[16];
@@ -262,8 +269,9 @@ void conv_layer_direct(float16 *input, float16 *weights, float *bias,
   float lineval;
   int in_off;
   /* Read bias data into buffer */
-  memcpy(biasbuf, bias + (outchannels * group_idx), sizeof(float) *
-      outchannels);
+  for (int k = 0; k < OCFACT; ++k)
+    memcpy(biasbuf[k], bias + k * (outchannels >> OCDIV) + (outchannels *
+          group_idx), sizeof(float) * outchannels >> (OCDIV));
 
   int mac_iterations = burstchannels * burstydim * fact;
   
@@ -283,9 +291,9 @@ void conv_layer_direct(float16 *input, float16 *weights, float *bias,
     unsigned short ofm_iters = (outchannels & (OCFACT - 1)) ? 
       (outchannels >> OCDIV) + 1 : (outchannels >> OCDIV);
     for (int o = 0; o < ofm_iters; ++o) {
-      for (int k = 0; k < OCFACT; ++k) {
-        weight_offset = (o * OCFACT + k + outchannels * group_idx) * inchannels
-          + n * burstchannels;
+      for (int k = 0; k < (OCFACT >> 1); ++k) {
+        weight_offset = (o * (OCFACT >> 1) + k + (outchannels >> 1) *
+            group_idx) * inchannels + n * burstchannels;
         weight_size = burstchannels;
 
         if (ksize == 5) {
@@ -293,7 +301,9 @@ void conv_layer_direct(float16 *input, float16 *weights, float *bias,
           weight_size = weight_size << 1;
         }
 
-        memcpy(wbuf[k], weights + weight_offset, 
+        memcpy(wbuf[k], weights_A + weight_offset, sizeof(float16) *
+            weight_size);
+        memcpy(wbuf[k + (OCFACT >> 1)], weights_B + weight_offset,
             sizeof(float16) * weight_size);
       }
 
@@ -303,31 +313,33 @@ void conv_layer_direct(float16 *input, float16 *weights, float *bias,
           for (int i = 0; i < burstydim * fact; ++i) {
 #pragma HLS pipeline
             for (int k = 0; k < OCFACT; ++k) {
-              outbuf[k][i].s0 = biasbuf[o * OCFACT + k];
-              outbuf[k][i].s1 = biasbuf[o * OCFACT + k];
-              outbuf[k][i].s2 = biasbuf[o * OCFACT + k];
-              outbuf[k][i].s3 = biasbuf[o * OCFACT + k];
-              outbuf[k][i].s4 = biasbuf[o * OCFACT + k];
-              outbuf[k][i].s5 = biasbuf[o * OCFACT + k];
-              outbuf[k][i].s6 = biasbuf[o * OCFACT + k];
-              outbuf[k][i].s7 = biasbuf[o * OCFACT + k];
-              outbuf[k][i].s8 = biasbuf[o * OCFACT + k];
-              outbuf[k][i].s9 = biasbuf[o * OCFACT + k];
-              outbuf[k][i].sa = biasbuf[o * OCFACT + k];
-              outbuf[k][i].sb = biasbuf[o * OCFACT + k];
-              outbuf[k][i].sc = biasbuf[o * OCFACT + k];
-              outbuf[k][i].sd = biasbuf[o * OCFACT + k];
-              outbuf[k][i].se = biasbuf[o * OCFACT + k];
-              outbuf[k][i].sf = biasbuf[o * OCFACT + k];
+              outbuf[k][i].s0 = biasbuf[k][o];
+              outbuf[k][i].s1 = biasbuf[k][o];
+              outbuf[k][i].s2 = biasbuf[k][o];
+              outbuf[k][i].s3 = biasbuf[k][o];
+              outbuf[k][i].s4 = biasbuf[k][o];
+              outbuf[k][i].s5 = biasbuf[k][o];
+              outbuf[k][i].s6 = biasbuf[k][o];
+              outbuf[k][i].s7 = biasbuf[k][o];
+              outbuf[k][i].s8 = biasbuf[k][o];
+              outbuf[k][i].s9 = biasbuf[k][o];
+              outbuf[k][i].sa = biasbuf[k][o];
+              outbuf[k][i].sb = biasbuf[k][o];
+              outbuf[k][i].sc = biasbuf[k][o];
+              outbuf[k][i].sd = biasbuf[k][o];
+              outbuf[k][i].se = biasbuf[k][o];
+              outbuf[k][i].sf = biasbuf[k][o];
             }
           } 
         } else {
-          for (int k = 0; k < OCFACT; ++k) {
-            out_offset = image_idx * numgroups * outchannels * ydim * fact +
-              ((o * OCFACT + k + outchannels * group_idx) * ydim + offy *
-              burstydim) * fact;
-            memcpy(outbuf[k], output + out_offset, sizeof(float16) * fact *
+          for (int k = 0; k < (OCFACT >> 1); ++k) {
+            out_offset = image_idx * numgroups * (outchannels >> 1) * ydim *
+              fact + ((o * (OCFACT >> 1) + k + (outchannels >> 1) * group_idx)
+                  * ydim + offy * burstydim) * fact;
+            memcpy(outbuf[k], output_A + out_offset, sizeof(float16) * fact *
                 burstydim);
+            memcpy(outbuf[k + (OCFACT >> 1)], output_B + out_offset,
+                sizeof(float16) * fact * burstydim);
           }
         }
 
@@ -387,14 +399,19 @@ void conv_layer_direct(float16 *input, float16 *weights, float *bias,
             outbuf[k][offset].sf += ot[k][15];
           }
         }
-        int image_off = image_idx * numgroups * outchannels * ydim * fact;
-        for (int k = 0; k < OCFACT; ++k) {
+        int image_off = image_idx * numgroups * (outchannels >> 1) * ydim *
+          fact;
+        for (int k = 0; k < (OCFACT >> 1); ++k) {
           out_offset = image_off +
-            ((o * OCFACT + k + outchannels * group_idx) * ydim + offy *
-             burstydim) * fact;
-          if (o * OCFACT + k < outchannels) {
-            memcpy(output + out_offset, outbuf[k], sizeof(float16) * fact *
+            ((o * (OCFACT >> 1) + k + (outchannels >> 1) * group_idx) * ydim +
+             offy * burstydim) * fact;
+          if (o * (OCFACT >> 1) + k < outchannels) {
+            memcpy(output_A + out_offset, outbuf[k], sizeof(float16) * fact *
                 burstydim);
+          }
+          if (o * (OCFACT >> 1) + k + (outchannels >> 1) < outchannels) {
+            memcpy(output_B + out_offset, outbuf[k + (OCFACT >> 1)],
+                sizeof(float16) * fact * burstydim);
           }
         }
       }   

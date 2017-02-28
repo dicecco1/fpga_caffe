@@ -12,7 +12,7 @@ NK = 1
 
 DSA = xilinx:adm-pcie-8k5:2ddr:3.2
 
-XCLBIN_NAME=conv_layer_direct
+XCLBIN_NAME=conv_layer_direct_mac
 
 INCLUDE_DIR=../../../include/
 
