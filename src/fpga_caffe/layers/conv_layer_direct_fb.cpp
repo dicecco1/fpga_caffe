@@ -283,7 +283,6 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
   assert(ksize == 1 || ksize == 3 || ksize == 5);
 
   assert(numimages >= 1);
-  assert(numimages <= 4);
 
   assert(backward == 0 || backward == 1);
 
@@ -319,20 +318,19 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
       outchannels);
 
   int mac_iterations = mod_channel * mod_ydim * fact * ksize;
-    
+    ofm_iters = (outchannels & (OCFACT - 1)) ? (outchannels >> OCDIV) + 1 : 
+      (outchannels >> OCDIV);
+
   for (int n = 0; n < rpo; ++n) {
     // Read the input
     for (int image_off = 0; image_off < numimages; ++image_off) {
-      in_off = ((((image_idx * numimages + image_off) * numgroups + group_idx)
-            * inchannels) * ydim * xtile_pad * 2 + n * burstchannels * ydim *
-            xtile_pad * 2) >> 4;
+      in_off = (((image_idx * numimages + image_off) * numgroups + group_idx)
+        * inchannels) * ydim * fact + n * burstchannels * ydim * fact;
 
-      inbuf_off = image_off * burstchannels * ydim * (xtile_pad >> 3);
+      inbuf_off = image_off * burstchannels * ydim * fact;
       memcpy(inbuf + inbuf_off, input + in_off, sizeof(float16) *
-          ((burstchannels * ydim * xtile_pad * 2) >> 4)); 
+        burstchannels * ydim * fact); 
     }
-    ofm_iters = (outchannels & (OCFACT - 1)) ? (outchannels >> OCDIV) + 1 : 
-      (outchannels >> OCDIV);
     for (int o = 0; o < ofm_iters; ++o) {
       for (int image_off = 0; image_off < numimages; ++image_off) {
         for (int offy = 0; offy < rpofm; ++offy) {
@@ -361,28 +359,34 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
             } 
           } else if (!backward_flag) {
             for (int k = 0; k < OCFACT; ++k) {
-              out_offset = (image_idx * numimages + image_off) * numgroups * outchannels * ydim * fact +
-                ((o * OCFACT + k + outchannels * group_idx) * ydim + offy *
-                 burstydim) * fact;
+              out_offset = (image_idx * numimages + image_off) * numgroups *
+                outchannels * ydim * fact + ((o * OCFACT + k + outchannels *
+                group_idx) * ydim + offy * burstydim) * fact;
               out_size = fact * burstydim;
-              memcpy(outbuf[k], output + out_offset, sizeof(float16) * out_size);
+              memcpy(outbuf[k], output + out_offset, sizeof(float16) *
+                  out_size);
             }
           } else if (offy == 0 && image_off == 0) {
             for (int k = 0; k < OCFACT; ++k) {
-              out_offset = (o * OCFACT + k + outchannels * group_idx) * inchannels
-                + n * burstchannels;
+              out_offset = (o * OCFACT + k + outchannels * group_idx) *
+                inchannels + n * burstchannels;
               out_size = burstchannels;
 
               if (ksize == 5) {
                 out_offset = out_offset << 1;
                 out_size = out_size << 1;
               }
-              memcpy(outbuf[k], output + out_offset, sizeof(float16) * out_size);
+              memcpy(outbuf[k], output + out_offset, sizeof(float16) *
+                  out_size);
             } 
           }
-          
           for (int k = 0; k < OCFACT; ++k) {
-            if (!backward_flag) {
+            if (backward_flag) {
+              weight_offset = (image_idx * numimages + image_off) * numgroups
+                * outchannels * ydim * fact + ((o * OCFACT + k + outchannels
+                * group_idx) * ydim + offy * burstydim) * fact;
+              weight_size = fact * burstydim;
+            } else {
               weight_offset = (o * OCFACT + k + outchannels * group_idx) *
                 inchannels + n * burstchannels;
               weight_size = burstchannels;
@@ -391,13 +395,9 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
                 weight_offset = weight_offset << 1;
                 weight_size = weight_size << 1;
               }
-            } else {
-              weight_offset = (image_idx * numimages + image_off) * numgroups * outchannels * ydim * fact +
-                ((o * OCFACT + k + outchannels * group_idx) * ydim + offy *
-                 burstydim) * fact;
-              weight_size = fact * burstydim;
-            }
-            if ((!backward_flag && (offy == 0) && image_off == 0) || backward_flag)
+            } 
+            if ((!backward_flag && (offy == 0) && image_off == 0) ||
+              backward_flag)
               memcpy(wbuf[k], weights + weight_offset, sizeof(float16) *
                   weight_size);
           }
@@ -450,8 +450,11 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
             unsigned short w_idx = (backward_flag) ? offset : w_off;
 
             input_stage(inbuf, ksize, xt_off, xtile_pad, yt_off + offy *
-                burstydim, row_off, ydim, xdim, w_off, burstchannels, image_off, it);
-            wt_set(wbuf, wt, w_idx, row_off, ksize, xt_off, xdim, backward_flag); 
+              burstydim, row_off, ydim, xdim, w_off, burstchannels,
+              image_off, it);
+            
+            wt_set(wbuf, wt, w_idx, row_off, ksize, xt_off, xdim,
+                backward_flag); 
 
             for (int k = 0; k < OCFACT; ++k) {
               for (int p = 0; p < 16; ++p) {
@@ -469,7 +472,8 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
                 }
                 for (int q = 0; q < 3; ++q) {
                   for (int p = 0; p < 4; ++p)
-                    ot_s2[q][p] = ot_s1[p * 2 + q * 8] + ot_s1[p * 2 + 1 + q * 8];
+                    ot_s2[q][p] = ot_s1[p * 2 + q * 8] +
+                      ot_s1[p * 2 + 1 + q * 8];
                 }
               } else {
                 for (int p = 0; p < 16; ++p) {
@@ -518,8 +522,8 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
           }
           for (int k = 0; k < OCFACT; ++k) {
             if (backward_flag) {
-              out_offset = (o * OCFACT + k + outchannels * group_idx) * inchannels
-                + n * burstchannels;
+              out_offset = (o * OCFACT + k + outchannels * group_idx) *
+                inchannels + n * burstchannels;
               out_size = burstchannels;
 
               if (ksize == 5) {
@@ -527,15 +531,17 @@ void conv_layer_direct_fb(float16 *input, float16 *weights, float *bias,
                 out_size = out_size << 1;
               }
             } else {
-              out_offset = (image_idx * numimages + image_off) * numgroups * outchannels * ydim * fact +
-                ((o * OCFACT + k + outchannels * group_idx) * ydim + offy *
-                 burstydim) * fact;
+              out_offset = (image_idx * numimages + image_off) * numgroups *
+                outchannels * ydim * fact + ((o * OCFACT + k + outchannels *
+                group_idx) * ydim + offy * burstydim) * fact;
               out_size = fact * burstydim;
             }
 
             if (o * OCFACT + k < outchannels && 
-                ((backward_flag && (offy == rpofm - 1) && (image_off == numimages - 1)) || !backward_flag)) {
-              memcpy(output + out_offset, outbuf[k], sizeof(float16) * out_size);
+              ((backward_flag && (offy == rpofm - 1) && 
+              (image_off == numimages - 1)) || !backward_flag)) {
+              memcpy(output + out_offset, outbuf[k], sizeof(float16) *
+                out_size);
             }
           }
         }
