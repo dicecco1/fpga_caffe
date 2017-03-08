@@ -26,7 +26,7 @@ void half_mult(float *input, float *weights, float *output,
 
   for (int i = 0; i < inchannels >> 4; ++i) {
     for (int j = 0; j < 16; ++j) {
-      output[i * 16 + j] = float(half(input[i * 16 + j]) * half(weights[i * 16 + j]));
+      output[i * 16 + j] = float(chalf(input[i * 16 + j]) * chalf(weights[i * 16 + j]));
     }
   }
 

@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstring>
 #include <stdint.h>
+#include "ap_int.h"
 
 #define EXP_MASK_HP 0x7C00
 #define SIGN_MASK_HP 0x8000
@@ -21,18 +22,18 @@ typedef uint32_t uint32;
 	#define HALF_ROUND_STYLE	1			// = std::round_indeterminate
 #endif
 
-class half;
+class chalf;
 
-/// Convert IEEE single-precision to half-precision.
-/// Credit for this goes to [Jeroen van der Zijp](ftp://ftp.fox-toolkit.org/pub/fasthalffloatconversion.pdf).
+/// Convert IEEE single-precision to chalf-precision.
+/// Credit for this goes to [Jeroen van der Zijp](ftp://ftp.fox-toolkit.org/pub/fastchalffloatconversion.pdf).
 /// \tparam R rounding mode to use, `std::round_indeterminate` for fastest rounding
 /// \param value single-precision value
-/// \return binary representation of half-precision value
-template<std::float_round_style R> uint16 float2half_impl(float value)
+/// \return binary representation of chalf-precision value
+template<std::float_round_style R> uint16 float2chalf_impl(float value)
 {
 #if HALF_ENABLE_CPP11_STATIC_ASSERT
-  static_assert(std::numeric_limits<float>::is_iec559, "float to half conversion needs IEEE 754 conformant 'float' type");
-  static_assert(sizeof(uint32)==sizeof(float), "float to half conversion needs unsigned integer type of exactly the size of a 'float'");
+  static_assert(std::numeric_limits<float>::is_iec559, "float to chalf conversion needs IEEE 754 conformant 'float' type");
+  static_assert(sizeof(uint32)==sizeof(float), "float to chalf conversion needs unsigned integer type of exactly the size of a 'float'");
 #endif
   static const uint16 base_table[512] = { 
     0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 
@@ -105,23 +106,23 @@ template<std::float_round_style R> uint16 float2half_impl(float value)
   return hbits;
 }
 
-/// Convert single-precision to half-precision.
+/// Convert single-precision to chalf-precision.
 /// \param value single-precision value
-/// \return binary representation of half-precision value
-template<std::float_round_style R> uint16 float2half(float value)
+/// \return binary representation of chalf-precision value
+template<std::float_round_style R> uint16 float2chalf(float value)
 {
-  return float2half_impl<R>(value);
+  return float2chalf_impl<R>(value);
 }
 
-/// Convert half-precision to IEEE single-precision.
-/// Credit for this goes to [Jeroen van der Zijp](ftp://ftp.fox-toolkit.org/pub/fasthalffloatconversion.pdf).
-/// \param value binary representation of half-precision value
+/// Convert chalf-precision to IEEE single-precision.
+/// Credit for this goes to [Jeroen van der Zijp](ftp://ftp.fox-toolkit.org/pub/fastchalffloatconversion.pdf).
+/// \param value binary representation of chalf-precision value
 /// \return single-precision value
-inline float half2float_impl(uint16 value)
+inline float chalf2float_impl(uint16 value)
 {
 #if HALF_ENABLE_CPP11_STATIC_ASSERT
-  static_assert(std::numeric_limits<float>::is_iec559, "half to float conversion needs IEEE 754 conformant 'float' type");
-  static_assert(sizeof(uint32)==sizeof(float), "half to float conversion needs unsigned integer type of exactly the size of a 'float'");
+  static_assert(std::numeric_limits<float>::is_iec559, "chalf to float conversion needs IEEE 754 conformant 'float' type");
+  static_assert(sizeof(uint32)==sizeof(float), "chalf to float conversion needs unsigned integer type of exactly the size of a 'float'");
 #endif
   static const uint32 mantissa_table[2048] = { 
     0x00000000, 0x33800000, 0x34000000, 0x34400000, 0x34800000, 0x34A00000, 0x34C00000, 0x34E00000, 0x35000000, 0x35100000, 0x35200000, 0x35300000, 0x35400000, 0x35500000, 0x35600000, 0x35700000, 
@@ -267,26 +268,26 @@ inline float half2float_impl(uint16 value)
   return out;
 }
 
-/// Convert half-precision to single-precision.
-/// \param value binary representation of half-precision value
+/// Convert chalf-precision to single-precision.
+/// \param value binary representation of chalf-precision value
 /// \return single-precision value
-inline float half2float(uint16 value)
+inline float chalf2float(uint16 value)
 {
-  return half2float_impl(value);
+  return chalf2float_impl(value);
 }
 
-class half {
-  friend half operator*(half T, half U);
-  friend half operator+(half T, half U);
+class chalf {
+  friend chalf operator*(chalf T, chalf U);
+  friend chalf operator+(chalf T, chalf U);
   public:
-    half() : data_() {}
+    chalf() : data_() {}
 
-    half(float rhs) : data_(float2half<round_style>(rhs)) {}
+    chalf(float rhs) : data_(float2chalf<round_style>(rhs)) {}
     
-    half(uint16 rhs) : data_(rhs) {}
+    chalf(uint16 rhs) : data_(rhs) {}
 
     operator float() const {
-      return half2float(data_);
+      return chalf2float(data_);
     }
 
     operator uint16() const {
@@ -297,51 +298,64 @@ class half {
     uint16 data_;
 };
 
-half operator*(half T, half U) {
+chalf operator*(chalf T, chalf U) {
 #pragma HLS INLINE off
-  uint8_t e1 = (T.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
-  uint8_t e2 = (U.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
-  uint16 res = (T.data_ & SIGN_MASK_HP) ^ (U.data_ & SIGN_MASK_HP);
-  uint16 mant1 = ((T.data_ & MANT_MASK_HP));// | MANT_NORM_HP); // 11 bits
-  uint16 mant2 = ((U.data_ & MANT_MASK_HP));// | MANT_NORM_HP); // 11 bits
-  uint16 sign_res = res;
+#pragma HLS pipeline
+  ap_uint<5> e1 = (T.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
+  ap_uint<5> e2 = (U.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
+  ap_uint<11> mant1 = (T.data_ & MANT_MASK_HP);// 11 bits
+  ap_uint<11> mant2 = (U.data_ & MANT_MASK_HP);// 11 bits
+  ap_uint<1> sign = ((T.data_ & SIGN_MASK_HP) >> 15) ^ 
+    ((U.data_ & SIGN_MASK_HP) >> 15);
 
-  uint8_t eres;
+  uint16 res = sign << 15;
+
+  ap_uint<6> eres;
+  ap_uint<5> off = 15;
   uint16 mantres;
+  uint16 eresf;
 
   if (e1 != 0 && e2 != 0 && e1 != 0x1F && e2 != 0x1F) { // normals
-    mant1 |= MANT_NORM_HP;
-    mant2 |= MANT_NORM_HP;
-    uint32 prod = mant1 * mant2;
-    mantres = prod >> 11;
-    uint16 guard = (prod >> 10) & 0x1;
-    uint16 round_bit = (prod >> 9) & 0x1;
-    uint16 sticky = ((prod & 0x1FF) > 0);
-    uint8_t eres = e1 + e2;
-    uint8_t eres_off = 0;
-    if (eres == 15) {
-      eres_off++;
-      guard = mantres & 0x1;
+    mant1 |= MANT_NORM_HP; // 11 bits
+    mant2 |= MANT_NORM_HP; // 11 bits
+    ap_uint<22> prod = mant1 * mant2; // 22 bits
+    mantres = prod >> 11; // 11 bits
+    ap_uint<1> guard = (prod >> 10) & 0x1; // 1 bit
+    ap_uint<1> round_bit = (prod >> 9) & 0x1; // 1 bit
+    ap_uint<1> sticky = ((prod & 0x1FF) > 0); // 1 bit
+    ap_uint<6> esum = e1 + e2 + 1;
+    eres = esum;
+
+    if (((mantres >> 10) & 0x1) == 0) {
+      off++;
+      mantres = mantres << 1;
+      mantres |= guard;
+      guard = round_bit;
+      round_bit = 0;
+    }
+    if (eres < 16) {
+      eres++;
       sticky = sticky | round_bit;
+      round_bit = guard;
+      guard = mantres & 0x1;
       mantres = mantres >> 1;
     }
 
     if (guard && (round_bit | sticky | (mantres & 0x1))) {
       if (mantres == 0x7FF)
-        eres_off++;
-      mantres = mantres + 1;
+        eres++;
+      mantres++;
     }
 
-    if (eres + eres_off > 15) {
-      if (eres + eres_off - 15 < 0x1F)
-        eres = eres + eres_off - 15;
-      else
-        eres = 0x1F;
-    } else { // subnormal, set to 0
-      eres = 0;
+    if (eres - off >= 0x1F) {
+      eresf = 0x1F;
+    } else if (eres - off < 1) { // subnormal, set to 0
+      eresf = 0;
       mantres = 0;
+    } else {
+      eresf = eres - off;
     }
-    res = sign_res | (eres << 10) | (mantres & 0x3FF);
+    res |= ((eresf) << EXP_SHIFT_HP) | (mantres & MANT_MASK_HP);
   } else {
     if ((e1 == 0x1F && mant1 != 0) || (e2 == 0x1F && mant2 != 0)) { // NAN
       res = 0xFE00;
@@ -349,17 +363,15 @@ half operator*(half T, half U) {
       res = 0xFE00;
     } else if ((e2 == 0x1F) && (e1 == 0)) { // 0 * inf = NAN
       res = 0xFE00;
-    } else if (e1 == 0x1F) { // inf * U = inf
-      res |= EXP_MASK_HP;
-    } else if (e2 == 0x1F) { // T * inf = inf
+    } else { // inf * U = inf
       res |= EXP_MASK_HP;
     }
   }
 
-  return half(res);
+  return chalf(res);
 }
 
-half operator+(half T, half U) {
+chalf operator+(chalf T, chalf U) {
 #pragma HLS INLINE off
   uint8_t e1 = (T.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
   uint8_t e2 = (U.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
@@ -393,5 +405,5 @@ half operator+(half T, half U) {
 //    mant_res = mant1 - mant2;
 
   uint16 result = mant_res | (exp_res << EXP_SHIFT_HP);
-  return half(result);
+  return chalf(result);
 }
