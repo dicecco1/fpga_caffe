@@ -24,10 +24,10 @@ else ifeq (${SDA_FLOW}, hw_emu)
 	XCLBIN = ${XCLBIN_NAME}_hw_emu.xclbin
 else ifeq (${SDA_FLOW}, hw)
 	XCL_OPT += -t hw
-	XCLBIN = ${XCLBIN_NAME}.xclbin
+	XCLBIN = ${XCLBIN_NAME}_cl.xclbin
 endif
 
-XCL_OPT += --platform ${DSA} --report estimate --nk ${KERNEL_NAME}:${NK} --kernel ${KERNEL_NAME} -I ${INCLUDE_DIR} -s -g -o ${XCLBIN}
+XCL_OPT += --platform ${DSA} --report estimate --nk ${KERNEL_NAME}:${NK} --kernel ${KERNEL_NAME} -I ${INCLUDE_DIR} -s -o ${XCLBIN}
 
 ${XCLBIN}: ${KERNEL_SRCS} 
 	${XOCC} ${XCL_OPT} ${KERNEL_SRCS}
