@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include "ap_int.h"
 
+#define NaN_HP 0x7E00
 #define EXP_MASK_HP 0x7C00
 #define SIGN_MASK_HP 0x8000
 #define MANT_MASK_HP 0x03FF
@@ -308,7 +309,7 @@ chalf operator*(chalf T, chalf U) {
   ap_uint<1> sign = ((T.data_ & SIGN_MASK_HP) >> 15) ^ 
     ((U.data_ & SIGN_MASK_HP) >> 15);
 
-  uint16 res = sign << 15;
+  uint16 res;
 
   ap_uint<6> eres;
   ap_uint<5> off = 15;
@@ -347,7 +348,7 @@ chalf operator*(chalf T, chalf U) {
       mantres++;
     }
 
-    if (eres - off >= 0x1F) {
+    if (eres - off >= 0x1F) { // exponent overflow
       eresf = 0x1F;
     } else if (eres - off < 1) { // subnormal, set to 0
       eresf = 0;
@@ -355,18 +356,17 @@ chalf operator*(chalf T, chalf U) {
     } else {
       eresf = eres - off;
     }
-    res |= ((eresf) << EXP_SHIFT_HP) | (mantres & MANT_MASK_HP);
+    res = ((eresf) << EXP_SHIFT_HP) | (mantres & MANT_MASK_HP);
   } else {
-    if ((e1 == 0x1F && mant1 != 0) || (e2 == 0x1F && mant2 != 0)) { // NAN
-      res = 0xFE00;
-    } else if ((e1 == 0x1F) && (e2 == 0)) { // inf * 0 = NAN
-      res = 0xFE00;
-    } else if ((e2 == 0x1F) && (e1 == 0)) { // 0 * inf = NAN
-      res = 0xFE00;
-    } else { // inf * U = inf
-      res |= EXP_MASK_HP;
+    if ((e1 == 0x1F && mant1 != 0) || (e2 == 0x1F && mant2 != 0) ||
+        ((e1 == 0x1F) && (e2 == 0)) || (e2 == 0x1F && e1 == 0)) {
+      res = NaN_HP;
+    } else if ((e1 == 0x1F) || (e2 == 0x1F)) { // inf * U = inf
+      res = EXP_MASK_HP;
     }
   }
+
+  res |= (sign << 15);
 
   return chalf(res);
 }
