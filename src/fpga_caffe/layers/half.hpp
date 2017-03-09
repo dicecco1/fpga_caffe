@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstring>
 #include <stdint.h>
+#include <stdbool.h>
 #include "ap_int.h"
 
 #define NaN_HP 0x7E00
@@ -13,7 +14,7 @@
 #define MANT_MASK_HP 0x03FF
 #define MANT_NORM_HP 0x0400
 #define EXP_SHIFT_HP 10
-#define SHIFTED_INF_NAN 0x001F
+#define SHIFTED_INF_NAN 0x1F
 
 typedef uint16_t uint16;
 typedef uint32_t uint32;
@@ -304,70 +305,70 @@ chalf operator*(chalf T, chalf U) {
 #pragma HLS pipeline
   ap_uint<5> e1 = (T.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
   ap_uint<5> e2 = (U.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
-  ap_uint<11> mant1 = (T.data_ & MANT_MASK_HP);// 11 bits
-  ap_uint<11> mant2 = (U.data_ & MANT_MASK_HP);// 11 bits
-  ap_uint<1> sign = ((T.data_ & SIGN_MASK_HP) >> 15) ^ 
+  ap_uint<10> mant1 = (T.data_ & MANT_MASK_HP);// 11 bits
+  ap_uint<10> mant2 = (U.data_ & MANT_MASK_HP);// 11 bits
+  ap_uint<16> sign = ((T.data_ & SIGN_MASK_HP) >> 15) ^ 
     ((U.data_ & SIGN_MASK_HP) >> 15);
 
-  uint16 res;
-
-  ap_uint<6> eres;
-  ap_uint<5> off = 15;
-  uint16 mantres;
+  ap_uint<4> off = 15;
+  ap_uint<11> mantres, mantresf;
   uint16 eresf;
+  ap_uint<11> mant1_n = mant1 | MANT_NORM_HP; // 11 bits
+  ap_uint<11> mant2_n = mant2 | MANT_NORM_HP; // 11 bits
+  ap_uint<22> product = mant1_n * mant2_n; // 22 bits
+  mantres = product >> 11; // 11 bits
+  ap_uint<1> guard = (product >> 10) & 0x1; // 1 bit
+  ap_uint<1> round_bit = (product >> 9) & 0x1; // 1 bit
+  ap_uint<1> sticky = ((product & 0x1FF) > 0); // 1 bit
+  ap_uint<6> eres = e1 + e2 + 1;
 
-  if (e1 != 0 && e2 != 0 && e1 != 0x1F && e2 != 0x1F) { // normals
-    mant1 |= MANT_NORM_HP; // 11 bits
-    mant2 |= MANT_NORM_HP; // 11 bits
-    ap_uint<22> prod = mant1 * mant2; // 22 bits
-    mantres = prod >> 11; // 11 bits
-    ap_uint<1> guard = (prod >> 10) & 0x1; // 1 bit
-    ap_uint<1> round_bit = (prod >> 9) & 0x1; // 1 bit
-    ap_uint<1> sticky = ((prod & 0x1FF) > 0); // 1 bit
-    ap_uint<6> esum = e1 + e2 + 1;
-    eres = esum;
-
-    if (((mantres >> 10) & 0x1) == 0) {
-      off++;
-      mantres = mantres << 1;
-      mantres |= guard;
-      guard = round_bit;
-      round_bit = 0;
-    }
-    if (eres < 16) {
-      eres++;
-      sticky = sticky | round_bit;
-      round_bit = guard;
-      guard = mantres & 0x1;
-      mantres = mantres >> 1;
-    }
-
-    if (guard && (round_bit | sticky | (mantres & 0x1))) {
-      if (mantres == 0x7FF)
-        eres++;
-      mantres++;
-    }
-
-    if (eres - off >= 0x1F) { // exponent overflow
-      eresf = 0x1F;
-    } else if (eres - off < 1) { // subnormal, set to 0
-      eresf = 0;
-      mantres = 0;
-    } else {
-      eresf = eres - off;
-    }
-    res = ((eresf) << EXP_SHIFT_HP) | (mantres & MANT_MASK_HP);
-  } else {
-    if ((e1 == 0x1F && mant1 != 0) || (e2 == 0x1F && mant2 != 0) ||
-        ((e1 == 0x1F) && (e2 == 0)) || (e2 == 0x1F && e1 == 0)) {
-      res = NaN_HP;
-    } else if ((e1 == 0x1F) || (e2 == 0x1F)) { // inf * U = inf
-      res = EXP_MASK_HP;
-    }
+  if (((mantres >> 10) & 0x1) == 0) {
+    eres--;
+    mantres = (product >> 10);
+    guard = (product >> 9) & 0x1; // round_bit
+    round_bit = 0;
   }
 
-  res |= (sign << 15);
+  if (eres == 15) {
+    eres++;
+    sticky |= round_bit;
+    round_bit = guard;
+    guard = mantres & 0x1;
+    mantres = mantres >> 1;
+  }
 
+  ap_uint<1> m_0 = mantres & 0x1;
+
+  // Rounding
+  if (guard && (round_bit | sticky | m_0)) {
+    if (mantres == 0x7FF)
+      eres++;
+    mantres++;
+  }
+
+  if ((e1 == 0x1F && ((mant1 != 0) || (e2 == 0))) || 
+      (e2 == 0x1F && ((mant2 != 0) || (e1 == 0)))) { 
+    // NaN * val, inf * 0, 0 * inf
+    eres = 0x1F;
+    mantresf = 0x200;
+  } else if ((e1 == 0x1F) || (e2 == 0x1F) || (eres - off >= 0x1F)) {
+    // inf * U = inf, overflow
+    eres = 0x1F;
+    mantresf = 0;
+  } else if ((e1 == 0) || (e2 == 0) || (eres < 16)) {
+    // 0 * val, underflow
+    eres = 0;
+    mantresf = 0;
+  } else {
+    eres = eres - off;
+    mantresf = mantres;
+  }
+
+  eresf = eres;
+
+  uint16 res;
+  res = ((sign << 15) & SIGN_MASK_HP) |
+    ((eresf << EXP_SHIFT_HP) & EXP_MASK_HP) | (mantresf & MANT_MASK_HP);
   return chalf(res);
 }
 
