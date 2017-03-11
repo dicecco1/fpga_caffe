@@ -311,36 +311,28 @@ chalf operator*(chalf T, chalf U) {
     ((U.data_ & SIGN_MASK_HP) >> 15);
 
   ap_uint<4> off = 15;
-  ap_uint<11> mantres, mantresf;
+  ap_uint<12> mantres, mantresf;
   uint16 eresf;
   ap_uint<11> mant1_n = mant1 | MANT_NORM_HP; // 11 bits
   ap_uint<11> mant2_n = mant2 | MANT_NORM_HP; // 11 bits
   ap_uint<22> product = mant1_n * mant2_n; // 22 bits
-  mantres = product >> 11; // 11 bits
-  ap_uint<1> guard = (product >> 10) & 0x1; // 1 bit
-  ap_uint<1> round_bit = (product >> 9) & 0x1; // 1 bit
+  mantres = product >> 10; // 11 bits
+  ap_uint<1> last = (product >> 10) & 0x1;
+  ap_uint<1> guard = (product >> 9) & 0x1; // 1 bit
   ap_uint<1> sticky = ((product & 0x1FF) > 0); // 1 bit
-  ap_uint<6> eres = e1 + e2 + 1;
+  ap_uint<6> eres = e1 + e2;
 
-  if (((mantres >> 10) & 0x1) == 0) {
-    eres--;
-    mantres = (product >> 10);
-    guard = (product >> 9) & 0x1; // round_bit
-    round_bit = 0;
-  }
-
-  if (eres == 15) {
+  // normalize
+  if (((mantres >> 11) & 0x1) == 1) {
+    last = (product >> 11) & 0x1;
+    sticky |= guard;
+    guard = (product >> 10) & 0x1;
+    mantres = (product >> 11);
     eres++;
-    sticky |= round_bit;
-    round_bit = guard;
-    guard = mantres & 0x1;
-    mantres = mantres >> 1;
   }
-
-  ap_uint<1> m_0 = mantres & 0x1;
 
   // Rounding
-  if (guard && (round_bit | sticky | m_0)) {
+  if (guard & (sticky | last)) {
     if (mantres == 0x7FF)
       eres++;
     mantres++;
@@ -374,37 +366,149 @@ chalf operator*(chalf T, chalf U) {
 
 chalf operator+(chalf T, chalf U) {
 #pragma HLS INLINE off
-  uint8_t e1 = (T.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
-  uint8_t e2 = (U.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
-  uint16 mant1 = (T.data_ & MANT_MASK_HP);
-  uint16 mant2 = (U.data_ & MANT_MASK_HP);
+#pragma HLS pipeline
+  ap_uint<5> e1 = (T.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
+  ap_uint<5> e2 = (U.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
+  ap_uint<22> mant1 = (T.data_ & MANT_MASK_HP);// 11 bits
+  ap_uint<22> mant2 = (U.data_ & MANT_MASK_HP);// 11 bits
+  ap_uint<1> sign1 = ((T.data_ & SIGN_MASK_HP) >> 15);
+  ap_uint<1> sign2 = ((U.data_ & SIGN_MASK_HP) >> 15);
 
-  uint8_t s1 = (T.data_ & SIGN_MASK_HP) >> 15;
-  uint8_t s2 = (U.data_ & SIGN_MASK_HP) >> 15;
-  uint8_t diff;
+  // EOP = 0 -> add, EOP = 1 -> sub
+  ap_uint<1> EOP = sign1 ^ sign2; 
 
-  uint8_t exp_res;
+  // 1 if e1 is bigger, 0 if e2 is bigger
+  ap_uint<1> exp_cmp = (e1 >= e2) ? 1 : 0;
+  ap_uint<5> eres = (exp_cmp) ? e1 : e2;
+  ap_uint<5> diff = (exp_cmp) ? e1 - e2 : e2 - e1;
+  ap_uint<1> guard, round, sticky, last;
+  ap_uint<10> mantresf;
+  ap_uint<15> eresf;
 
-  uint16 mant_res;
+  ap_int<16> sum;
+  ap_uint<1> sign_sum;
 
-  if (e1 < e2) {
-    diff = e2 - e1;
-    mant1 >> diff;
-    exp_res = e2;
-  } else {
-    diff = e1 - e2;
-    mant2 >> diff;
-    exp_res = e1;
+  ap_uint<1> Rshifter = 0;
+  ap_uint<4> Lshifter = 0;
+
+  ap_uint<5> sat_val = 11;
+  ap_uint<5> diff_sat = (diff > 11) ? sat_val : diff; // saturate difference at 11 bits
+
+
+  ap_uint<22> temp_mant;
+  ap_uint<1> temp_sign;
+  if (!exp_cmp) {
+    temp_mant = mant2;
+    mant2 = mant1;
+    mant1 = temp_mant;
+    temp_sign = sign2;
+    sign2 = sign1;
+    sign1 = temp_sign; 
   }
-  if (s1 == s2)
-    mant_res = mant1 + mant2;
-  else
-    mant_res = mant1;
-//  else if (s1 == 1)
-//    mant_res = mant2 - mant1;
-//  else if (s2 == 1)
-//    mant_res = mant1 - mant2;
 
-  uint16 result = mant_res | (exp_res << EXP_SHIFT_HP);
-  return chalf(result);
+
+/*  ap_uint<22> mant1_a = (exp_cmp) ? (mant1 | MANT_NORM_HP) << 11 :
+    (mant1 | MANT_NORM_HP) << (11 - diff_sat);
+
+  ap_uint<22> mant2_a = (exp_cmp) ? (mant2 | MANT_NORM_HP) << (11 - diff_sat) :
+    (mant2 | MANT_NORM_HP) << 11;
+
+  sticky = (exp_cmp) ? ((mant2_a & 0x7FF) > 0) : ((mant1_a & 0x7FF) > 0);
+
+  ap_uint<14> mant1_s = (exp_cmp) ? mant1_a >> 8 : (mant1_a >> 8) | sticky;
+  ap_uint<14> mant2_s = (exp_cmp) ? (mant2_a >> 8) | sticky : mant2_a >> 8;
+*/
+
+  ap_uint<22> mant2_a = (mant2 | MANT_NORM_HP) << (11 - diff_sat);
+
+  sticky = ((mant2_a & 0x7FF) > 0);
+
+  ap_uint<14> mant1_s = (mant1 | MANT_NORM_HP) << 3;
+  ap_uint<14> mant2_s = (mant2_a >> 8) | sticky;
+
+  if (!EOP) {
+    sum = mant1_s + mant2_s;
+  } else {
+    if (sign1)
+      sum = mant2_s - mant1_s;
+    else
+      sum = mant1_s - mant2_s;
+  }
+
+  if (sum < 0) {
+    sum = -1 * sum;
+    sign_sum = 1;
+  } else {
+    sign_sum = 0;
+  }  
+
+  last = (sum >> 3) & 0x1;
+  guard = (sum >> 2) & 0x1;
+  round = (sum >> 1) & 0x1;
+  sticky = sum & 0x1;
+
+  sum = sum >> 3;
+
+  if (((sum >> 11) & 0x1) == 1) { // shift right
+    Rshifter = 1;
+  } else {
+    for (int i = 0; i < 11; ++i) {
+      if (((sum >> i) & 0x1) == 1)
+        Lshifter = 10 - i;
+    }
+  }
+
+  if (Rshifter) {
+    sticky |= round;
+    round = guard;
+    guard = last;
+    sum = sum >> 1;
+    last = sum & 0x1;
+  } else {
+    if (Lshifter == 1) {
+      guard = round;
+      round = 0;
+    } else {
+      guard = 0;
+      round = 0;
+    }
+    sum = sum << Lshifter;
+    last = sum & 0x1;
+  }
+
+  if (guard & (last | round | sticky)) {
+    if (sum == 0x7FF)
+      eres++;
+    sum++;
+  }
+
+  ap_uint<16> sign = (sign1 == sign2) ? sign1 : sign_sum;
+
+  if ((e1 == 0x1F && ((mant1 != 0))) || 
+      (e2 == 0x1F && ((mant2 != 0))) ||
+      (e1 == 0x1F && e2 == 0x1F && sign1 != sign2)) { 
+    // NaN + val, inf * 0, 0 * inf
+    eres = 0x1F;
+    mantresf = 0x200;
+  } else if ((e1 == 0x1F) || (e2 == 0x1F) ||
+      (eres + Rshifter - Lshifter >= 0x1F)) {
+    // overflow
+    eres = 0x1F;
+    mantresf = 0;
+  } else if ((eres + Rshifter - Lshifter < 1) || (sum == 0)) {
+    // underflow
+    eres = 0;
+    mantresf = 0;
+  } else {
+    eres = eres + Rshifter - Lshifter;
+    mantresf = sum;
+  }
+
+  eresf = eres;
+
+  uint16 res;
+  res = ((sign << 15) & SIGN_MASK_HP) |
+    ((eresf << EXP_SHIFT_HP) & EXP_MASK_HP) | (mantresf);
+
+  return chalf(res);
 }
