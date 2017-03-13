@@ -31,7 +31,7 @@ class chalf;
 /// \tparam R rounding mode to use, `std::round_indeterminate` for fastest rounding
 /// \param value single-precision value
 /// \return binary representation of chalf-precision value
-template<std::float_round_style R> uint16 float2chalf_impl(float value)
+uint16 float2chalf_impl(float value)
 {
 #if HALF_ENABLE_CPP11_STATIC_ASSERT
   static_assert(std::numeric_limits<float>::is_iec559, "float to chalf conversion needs IEEE 754 conformant 'float' type");
@@ -91,29 +91,20 @@ template<std::float_round_style R> uint16 float2chalf_impl(float value)
   float *temp = &value;
   bits = *((uint32 *)temp);
   uint16 hbits = base_table[bits>>23] + static_cast<uint16>((bits&0x7FFFFF)>>shift_table[bits>>23]);
-  if(R == std::round_to_nearest)
-    hbits += (((bits&0x7FFFFF)>>(shift_table[bits>>23]-1))|(((bits>>23)&0xFF)==102)) & ((hbits&0x7C00)!=0x7C00)
-    #if HALF_ROUND_TIES_TO_EVEN
-      & (((((static_cast<uint32>(1)<<(shift_table[bits>>23]-1))-1)&bits)!=0)|hbits)
-    #endif
-    ;
-  else if(R == std::round_toward_zero)
-    hbits -= ((hbits&0x7FFF)==0x7C00) & ~shift_table[bits>>23];
-  else if(R == std::round_toward_infinity)
-    hbits += ((((bits&0x7FFFFF&((static_cast<uint32>(1)<<(shift_table[bits>>23]))-1))!=0)|(((bits>>23)<=102)&
-      ((bits>>23)!=0)))&(hbits<0x7C00)) - ((hbits==0xFC00)&((bits>>23)!=511));
-  else if(R == std::round_toward_neg_infinity)
-    hbits += ((((bits&0x7FFFFF&((static_cast<uint32>(1)<<(shift_table[bits>>23]))-1))!=0)|(((bits>>23)<=358)&
-      ((bits>>23)!=256)))&(hbits<0xFC00)&(hbits>>15)) - ((hbits==0x7C00)&((bits>>23)!=255));
+  hbits += (((bits&0x7FFFFF)>>(shift_table[bits>>23]-1))|(((bits>>23)&0xFF)==102)) & ((hbits&0x7C00)!=0x7C00)
+  #if HALF_ROUND_TIES_TO_EVEN
+    & (((((static_cast<uint32>(1)<<(shift_table[bits>>23]-1))-1)&bits)!=0)|hbits)
+  #endif
+  ;
   return hbits;
 }
 
 /// Convert single-precision to chalf-precision.
 /// \param value single-precision value
 /// \return binary representation of chalf-precision value
-template<std::float_round_style R> uint16 float2chalf(float value)
+uint16 float2chalf(float value)
 {
-  return float2chalf_impl<R>(value);
+  return float2chalf_impl(value);
 }
 
 /// Convert chalf-precision to IEEE single-precision.
@@ -284,7 +275,7 @@ class chalf {
   public:
     chalf() : data_() {}
 
-    chalf(float rhs) : data_(float2chalf<round_style>(rhs)) {}
+    chalf(float rhs) : data_(float2chalf(rhs)) {}
     
     chalf(uint16 rhs) : data_(rhs) {}
 
@@ -296,7 +287,6 @@ class chalf {
       return data_;
     }
   private:
-    static const std::float_round_style round_style = (std::float_round_style)(HALF_ROUND_STYLE);
     uint16 data_;
 };
 
@@ -369,31 +359,33 @@ chalf operator+(chalf T, chalf U) {
 #pragma HLS pipeline
   ap_uint<5> e1 = (T.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
   ap_uint<5> e2 = (U.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
-  ap_uint<22> mant1 = (T.data_ & MANT_MASK_HP);// 11 bits
-  ap_uint<22> mant2 = (U.data_ & MANT_MASK_HP);// 11 bits
+  ap_uint<14> mant1 = (T.data_ & MANT_MASK_HP) | MANT_NORM_HP;
+  ap_uint<22> mant2 = (U.data_ & MANT_MASK_HP) | MANT_NORM_HP;
   ap_uint<1> sign1 = ((T.data_ & SIGN_MASK_HP) >> 15);
   ap_uint<1> sign2 = ((U.data_ & SIGN_MASK_HP) >> 15);
 
-  // EOP = 0 -> add, EOP = 1 -> sub
-  ap_uint<1> EOP = sign1 ^ sign2; 
+  // EOP = 1 -> add, EOP = 0 -> sub
+  ap_uint<1> EOP = sign1 == sign2; 
 
   // 1 if e1 is bigger, 0 if e2 is bigger
   ap_uint<1> exp_cmp = (e1 >= e2) ? 1 : 0;
   ap_uint<5> eres = (exp_cmp) ? e1 : e2;
   ap_uint<5> diff = (exp_cmp) ? e1 - e2 : e2 - e1;
-  ap_uint<1> guard, round, sticky, last;
+  ap_uint<1> guard, round, sticky, last, rnd_ovfl;
   ap_uint<10> mantresf;
   ap_uint<15> eresf;
 
-  ap_int<16> sum;
-  ap_uint<1> sign_sum;
+  ap_uint<15> sum_fpath;
+  ap_uint<1> sum_fpath_sign = 0;
 
-  ap_uint<1> Rshifter = 0;
+  ap_int<2> Rshifter = 0;
   ap_uint<4> Lshifter = 0;
 
-  ap_uint<5> sat_val = 11;
-  ap_uint<5> diff_sat = (diff > 11) ? sat_val : diff; // saturate difference at 11 bits
+  // saturate difference at 11 bits
+ 
+  ap_uint<1> fpath_flag = (diff > 1) || EOP;
 
+  diff = (diff > 11) ? (ap_uint<5>)11 : diff;
 
   ap_uint<22> temp_mant;
   ap_uint<1> temp_sign;
@@ -406,109 +398,131 @@ chalf operator+(chalf T, chalf U) {
     sign1 = temp_sign; 
   }
 
+  // Close path, sub and diff = 0 or diff = 1
+  ap_uint<12> mant1_cpath;
+  ap_uint<12> mant2_cpath;
 
-/*  ap_uint<22> mant1_a = (exp_cmp) ? (mant1 | MANT_NORM_HP) << 11 :
-    (mant1 | MANT_NORM_HP) << (11 - diff_sat);
+  mant1_cpath = mant1 << 1;
 
-  ap_uint<22> mant2_a = (exp_cmp) ? (mant2 | MANT_NORM_HP) << (11 - diff_sat) :
-    (mant2 | MANT_NORM_HP) << 11;
+  if (diff == 1)
+    mant2_cpath = mant2;
+  else
+    mant2_cpath = mant2 << 1;
 
-  sticky = (exp_cmp) ? ((mant2_a & 0x7FF) > 0) : ((mant1_a & 0x7FF) > 0);
+  ap_int<14> sum_cpath;
+ 
+  sum_cpath = mant1_cpath - mant2_cpath;
 
-  ap_uint<14> mant1_s = (exp_cmp) ? mant1_a >> 8 : (mant1_a >> 8) | sticky;
-  ap_uint<14> mant2_s = (exp_cmp) ? (mant2_a >> 8) | sticky : mant2_a >> 8;
-*/
+  ap_uint<1> sum_cpath_sign;
 
-  ap_uint<22> mant2_a = (mant2 | MANT_NORM_HP) << (11 - diff_sat);
-
-  sticky = ((mant2_a & 0x7FF) > 0);
-
-  ap_uint<14> mant1_s = (mant1 | MANT_NORM_HP) << 3;
-  ap_uint<14> mant2_s = (mant2_a >> 8) | sticky;
-
-  if (!EOP) {
-    sum = mant1_s + mant2_s;
+  if (sum_cpath < 0) {
+    sum_cpath = -1 * sum_cpath;
+    sum_cpath_sign = sign2; 
   } else {
-    if (sign1)
-      sum = mant2_s - mant1_s;
-    else
-      sum = mant1_s - mant2_s;
+    sum_cpath_sign = sign1;
   }
 
-  if (sum < 0) {
-    sum = -1 * sum;
-    sign_sum = 1;
-  } else {
-    sign_sum = 0;
-  }  
+  sum_cpath = sum_cpath >> 1;
 
-  last = (sum >> 3) & 0x1;
-  guard = (sum >> 2) & 0x1;
-  round = (sum >> 1) & 0x1;
-  sticky = sum & 0x1;
+  if ((sum_cpath >> 0) & 0x1)
+    Lshifter = 10;
+  if ((sum_cpath >> 1) & 0x1)
+    Lshifter = 9;
+  if ((sum_cpath >> 2) & 0x1)
+    Lshifter = 8;
+  if ((sum_cpath >> 3) & 0x1)
+    Lshifter = 7;
+  if ((sum_cpath >> 4) & 0x1)
+    Lshifter = 6;
+  if ((sum_cpath >> 5) & 0x1)
+    Lshifter = 5;
+  if ((sum_cpath >> 6) & 0x1)
+    Lshifter = 4;
+  if ((sum_cpath >> 7) & 0x1)
+    Lshifter = 3;
+  if ((sum_cpath >> 8) & 0x1)
+    Lshifter = 2;
+  if ((sum_cpath >> 9) & 0x1)
+    Lshifter = 1;
+  if ((sum_cpath >> 10) & 0x1)
+    Lshifter = 0;
 
-  sum = sum >> 3;
+  ap_uint<10> sum_cpath_f = sum_cpath << Lshifter;
 
-  if (((sum >> 11) & 0x1) == 1) { // shift right
+  // Far path
+
+  ap_uint<22> mant2_a = mant2 << (11 - diff);
+
+  sticky = ((mant2_a & 0xFF) > 0);
+
+  ap_uint<14> mant1_fpath = mant1 << 3;
+  ap_uint<14> mant2_fpath = (mant2_a >> 8) | sticky;
+ 
+  if (EOP) {
+    sum_fpath = mant1_fpath + mant2_fpath;
+  } else
+    sum_fpath = mant1_fpath - mant2_fpath; 
+
+  guard = (sum_fpath >> 2) & 0x1;
+  round = (sum_fpath >> 1) & 0x1;
+  sticky = sum_fpath & 0x1;
+  ap_uint<12> sum_t = sum_fpath >> 3;
+
+  if ((sum_t >> 11) & 0x1) {
     Rshifter = 1;
-  } else {
-    for (int i = 0; i < 11; ++i) {
-      if (((sum >> i) & 0x1) == 1)
-        Lshifter = 10 - i;
-    }
-  }
-
-  if (Rshifter) {
     sticky |= round;
     round = guard;
-    guard = last;
-    sum = sum >> 1;
-    last = sum & 0x1;
-  } else {
-    if (Lshifter == 1) {
-      guard = round;
-      round = 0;
-    } else {
-      guard = 0;
-      round = 0;
-    }
-    sum = sum << Lshifter;
-    last = sum & 0x1;
+    guard = sum_t & 0x1;
+    sum_t = sum_t >> 1;
+  } else if (((sum_t >> 10) & 0x1) == 0) {
+    Rshifter = -1;
+    guard = round;
+    round = 0;
+    sum_t = sum_t << 1;
   }
 
+  last = sum_t & 0x1;
+  rnd_ovfl = 0;
   if (guard & (last | round | sticky)) {
-    if (sum == 0x7FF)
-      eres++;
-    sum++;
+    if (sum_t == 0x7FF)
+      rnd_ovfl = 1;
+    sum_t++;
   }
 
-  ap_uint<16> sign = (sign1 == sign2) ? sign1 : sign_sum;
+  ap_uint<10> sum_fpath_f = sum_t;
 
-  if ((e1 == 0x1F && ((mant1 != 0))) || 
-      (e2 == 0x1F && ((mant2 != 0))) ||
-      (e1 == 0x1F && e2 == 0x1F && sign1 != sign2)) { 
-    // NaN + val, inf * 0, 0 * inf
+  ap_uint<16> sign = (fpath_flag) ? sign1 : sum_cpath_sign;
+
+  Rshifter = (fpath_flag) ? Rshifter : (ap_int<2>)0;
+  Lshifter = (fpath_flag) ? (ap_uint<4>)0 : Lshifter;
+  rnd_ovfl = (fpath_flag) ? rnd_ovfl : (ap_uint<1>)0;
+
+  if ((e1 == 0x1F && (((mant1 & 0x3FF) != 0))) || 
+      (e2 == 0x1F && (((mant2 & 0x3FF) != 0))) ||
+      (e1 == 0x1F && e2 == 0x1F && !EOP)) { 
+    // NaN + val, inf - inf
     eres = 0x1F;
     mantresf = 0x200;
   } else if ((e1 == 0x1F) || (e2 == 0x1F) ||
-      (eres + Rshifter - Lshifter >= 0x1F)) {
+      (eres + Rshifter - Lshifter + rnd_ovfl >= 0x1F)) {
     // overflow
     eres = 0x1F;
     mantresf = 0;
-  } else if ((eres + Rshifter - Lshifter < 1) || (sum == 0)) {
+  } else if ((eres + Rshifter - Lshifter + rnd_ovfl < 1) || ((sum_cpath == 0)
+        && !fpath_flag)) {
     // underflow
     eres = 0;
     mantresf = 0;
   } else {
-    eres = eres + Rshifter - Lshifter;
-    mantresf = sum;
+    eres = eres + Rshifter - Lshifter + rnd_ovfl;
+    mantresf = (fpath_flag) ? sum_fpath_f : sum_cpath_f;
   }
 
   eresf = eres;
 
   uint16 res;
   res = ((sign << 15) & SIGN_MASK_HP) |
-    ((eresf << EXP_SHIFT_HP) & EXP_MASK_HP) | (mantresf);
+    ((eresf << EXP_SHIFT_HP) & EXP_MASK_HP) | mantresf;
 
   return chalf(res);
 }
