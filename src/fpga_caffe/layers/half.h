@@ -306,19 +306,23 @@ class chalf {
 chalf operator*(chalf T, chalf U) {
 #pragma HLS INLINE off
 #pragma HLS pipeline
-  ap_uint<5> e1 = (T.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
-  ap_uint<5> e2 = (U.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
-  ap_uint<10> mant1 = (T.data_ & MANT_MASK_HP);// 11 bits
-  ap_uint<10> mant2 = (U.data_ & MANT_MASK_HP);// 11 bits
-  ap_uint<16> sign = ((T.data_ & SIGN_MASK_HP) >> 15) ^ 
-    ((U.data_ & SIGN_MASK_HP) >> 15);
+  uint16 Tdata_ = T.data_;
+  uint16 Udata_ = U.data_;
+  ap_uint<5> e1 = (Tdata_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
+  ap_uint<5> e2 = (Udata_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
+  ap_uint<11> mant1 = (Tdata_ & MANT_MASK_HP) | MANT_NORM_HP;// 11 bits
+  ap_uint<11> mant2 = (Udata_ & MANT_MASK_HP) | MANT_NORM_HP;// 11 bits
+  ap_uint<1> sign1 = (Tdata_ & SIGN_MASK_HP) >> 15;
+  ap_uint<1> sign2 = (Udata_ & SIGN_MASK_HP) >> 15;
+  ap_uint<1> sign_res = sign1 ^ sign2;
+
+  ap_uint<16> sign = sign_res;
 
   ap_uint<4> off = 15;
-  ap_uint<12> mantres, mantresf;
+  ap_uint<12> mantres;
+  ap_uint<10> mantresf;
   uint16 eresf;
-  ap_uint<11> mant1_n = mant1 | MANT_NORM_HP; // 11 bits
-  ap_uint<11> mant2_n = mant2 | MANT_NORM_HP; // 11 bits
-  ap_uint<22> product = mant1_n * mant2_n; // 22 bits
+  ap_uint<22> product = mant1 * mant2; // 22 bits
   mantres = product >> 10; // 11 bits
   ap_uint<1> last = (product >> 10) & 0x1;
   ap_uint<1> guard = (product >> 9) & 0x1; // 1 bit
@@ -326,7 +330,7 @@ chalf operator*(chalf T, chalf U) {
   ap_uint<6> eres = e1 + e2;
 
   // normalize
-  if (((mantres >> 11) & 0x1) == 1) {
+  if ((mantres >> 11) & 0x1) {
     last = (product >> 11) & 0x1;
     sticky |= guard;
     guard = (product >> 10) & 0x1;
@@ -341,20 +345,22 @@ chalf operator*(chalf T, chalf U) {
     mantres++;
   }
 
-  if (eres - off >= 0x1F) {
+  ap_uint<5> eres_t;
+
+  if (eres >= 0x2E) {
     // saturate results
-    eres = 0x1E;
+    eres_t = 0x1E;
     mantresf = 0x3FF;
   } else if ((e1 == 0) || (e2 == 0) || (eres < 16)) {
     // 0 * val, underflow
-    eres = 0;
+    eres_t = 0;
     mantresf = 0;
   } else {
-    eres = eres - off;
+    eres_t = eres - off;
     mantresf = mantres;
   }
 
-  eresf = eres;
+  eresf = eres_t;
 
   uint16 res;
   res = ((sign << 15) & SIGN_MASK_HP) |
@@ -365,12 +371,14 @@ chalf operator*(chalf T, chalf U) {
 chalf operator+(chalf T, chalf U) {
 #pragma HLS INLINE off
 #pragma HLS pipeline
-  ap_uint<5> e1 = (T.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
-  ap_uint<5> e2 = (U.data_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
-  ap_uint<14> mant1 = (T.data_ & MANT_MASK_HP) | MANT_NORM_HP;
-  ap_uint<22> mant2 = (U.data_ & MANT_MASK_HP) | MANT_NORM_HP;
-  ap_uint<1> sign1 = ((T.data_ & SIGN_MASK_HP) >> 15);
-  ap_uint<1> sign2 = ((U.data_ & SIGN_MASK_HP) >> 15);
+  uint16 Tdata_ = T.data_;
+  uint16 Udata_ = U.data_;
+  ap_uint<5> e1 = (Tdata_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
+  ap_uint<5> e2 = (Udata_ & EXP_MASK_HP) >> EXP_SHIFT_HP;
+  ap_uint<10> mant1 = (Tdata_ & MANT_MASK_HP);
+  ap_uint<10> mant2 = (Udata_ & MANT_MASK_HP);
+  ap_uint<1> sign1 = ((Tdata_ & SIGN_MASK_HP) >> 15);
+  ap_uint<1> sign2 = ((Udata_ & SIGN_MASK_HP) >> 15);
 
   // EOP = 1 -> add, EOP = 0 -> sub
   ap_uint<1> EOP = sign1 == sign2; 
@@ -388,32 +396,36 @@ chalf operator+(chalf T, chalf U) {
 
   ap_int<2> Rshifter = 0;
   ap_uint<4> Lshifter = 0;
-
-  // saturate difference at 11 bits
  
   ap_uint<1> fpath_flag = (diff > 1) || EOP;
 
-  ap_uint<22> temp_mant;
-  ap_uint<1> temp_sign;
+  ap_uint<10> mant1_s, mant2_s;
+  ap_uint<1> sign1_s, sign2_s;
   if (!exp_cmp) {
-    temp_mant = mant2;
-    mant2 = mant1;
-    mant1 = temp_mant;
-    temp_sign = sign2;
-    sign2 = sign1;
-    sign1 = temp_sign; 
+    mant2_s = mant1;
+    mant1_s = mant2;
+    sign2_s = sign1;
+    sign1_s = sign2; 
+  } else {
+    mant2_s = mant2;
+    mant1_s = mant1;
+    sign2_s = sign2;
+    sign1_s = sign1;
   }
+
+  ap_uint<14> mant1_large = mant1_s | MANT_NORM_HP;
+  ap_uint<22> mant2_large = mant2_s | MANT_NORM_HP;
 
   // Close path, sub and (diff = 0 or diff = 1)
   ap_uint<12> mant1_cpath;
   ap_uint<12> mant2_cpath;
 
-  mant1_cpath = mant1 << 1;
+  mant1_cpath = mant1_large << 1;
 
   if (diff == 1)
-    mant2_cpath = mant2;
+    mant2_cpath = mant2_large;
   else
-    mant2_cpath = mant2 << 1;
+    mant2_cpath = mant2_large << 1;
 
   ap_int<14> sum_cpath;
  
@@ -423,46 +435,49 @@ chalf operator+(chalf T, chalf U) {
 
   if (sum_cpath < 0) {
     sum_cpath = -1 * sum_cpath;
-    sum_cpath_sign = sign2; 
+    sum_cpath_sign = sign2_s; 
   } else {
-    sum_cpath_sign = sign1;
+    sum_cpath_sign = sign1_s;
   }
 
   sum_cpath = sum_cpath >> 1;
 
-  if ((sum_cpath >> 0) & 0x1)
-    Lshifter = 10;
-  if ((sum_cpath >> 1) & 0x1)
-    Lshifter = 9;
-  if ((sum_cpath >> 2) & 0x1)
-    Lshifter = 8;
-  if ((sum_cpath >> 3) & 0x1)
-    Lshifter = 7;
-  if ((sum_cpath >> 4) & 0x1)
-    Lshifter = 6;
-  if ((sum_cpath >> 5) & 0x1)
-    Lshifter = 5;
-  if ((sum_cpath >> 6) & 0x1)
-    Lshifter = 4;
-  if ((sum_cpath >> 7) & 0x1)
-    Lshifter = 3;
-  if ((sum_cpath >> 8) & 0x1)
-    Lshifter = 2;
-  if ((sum_cpath >> 9) & 0x1)
-    Lshifter = 1;
+  Lshifter = 11;
   if ((sum_cpath >> 10) & 0x1)
     Lshifter = 0;
+  else if ((sum_cpath >> 9) & 0x1)
+    Lshifter = 1;
+  else if ((sum_cpath >> 8) & 0x1)
+    Lshifter = 2;
+  else if ((sum_cpath >> 7) & 0x1)
+    Lshifter = 3;
+  else if ((sum_cpath >> 6) & 0x1)
+    Lshifter = 4;
+  else if ((sum_cpath >> 5) & 0x1)
+    Lshifter = 5;
+  else if ((sum_cpath >> 4) & 0x1)
+    Lshifter = 6;
+  else if ((sum_cpath >> 3) & 0x1)
+    Lshifter = 7;
+  else if ((sum_cpath >> 2) & 0x1)
+    Lshifter = 8;
+  else if ((sum_cpath >> 1) & 0x1)
+    Lshifter = 9;
+  else if ((sum_cpath >> 0) & 0x1)
+    Lshifter = 10;
 
   ap_uint<10> sum_cpath_f = sum_cpath << Lshifter;
 
   // Far path
+
+  // saturate difference at 11 bits
   ap_uint<5> diff_sat = (diff > 11) ? (ap_uint<5>)11 : diff;
 
-  ap_uint<22> mant2_a = mant2 << (11 - diff_sat);
+  ap_uint<22> mant2_a = mant2_large << (11 - diff_sat);
 
   sticky = ((mant2_a & 0xFF) > 0);
 
-  ap_uint<14> mant1_fpath = mant1 << 3;
+  ap_uint<14> mant1_fpath = mant1_large << 3;
   ap_uint<14> mant2_fpath = (mant2_a >> 8) | sticky;
  
   if (EOP) {
@@ -480,12 +495,12 @@ chalf operator+(chalf T, chalf U) {
     sticky |= round;
     round = guard;
     guard = sum_t & 0x1;
-    sum_t = sum_t >> 1;
+    sum_t = sum_fpath >> 4;
   } else if (((sum_t >> 10) & 0x1) == 0) {
     Rshifter = -1;
     guard = round;
     round = 0;
-    sum_t = sum_t << 1;
+    sum_t = sum_fpath >> 2;
   }
 
   last = sum_t & 0x1;
@@ -498,7 +513,7 @@ chalf operator+(chalf T, chalf U) {
 
   ap_uint<10> sum_fpath_f = sum_t;
 
-  ap_uint<16> sign = (fpath_flag) ? sign1 : sum_cpath_sign;
+  ap_uint<16> sign = (fpath_flag) ? sign1_s : sum_cpath_sign;
 
   ap_uint<5> eres_t;
 
@@ -506,8 +521,8 @@ chalf operator+(chalf T, chalf U) {
     // saturate results
     eres_t = 0x1E;
     mantresf = 0x3FF;
-  } else if (((e1 == 0) && (e2 == 0)) || ((eres - Lshifter < 1) ||
-        (sum_cpath == 0)) && !fpath_flag) {
+  } else if (((e1 == 0) && (e2 == 0)) || (((eres - Lshifter < 1) ||
+        (Lshifter == 11)) && !fpath_flag)) {
     // underflow
     eres_t = 0;
     mantresf = 0;

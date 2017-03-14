@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include "half.hpp"
+#include "half.h"
 
 #define OCFACT 8
 #define OCDIV 3

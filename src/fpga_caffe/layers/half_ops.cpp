@@ -1,7 +1,7 @@
 #include <cstdio>
 #include <cstring>
 #include <stdint.h>
-#include "half.hpp"
+#include "half.h"
 
 extern "C" {
 
