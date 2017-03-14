@@ -280,15 +280,18 @@ class chalf {
     chalf(float rhs) : data_(float2chalf(rhs)) {}
     
     chalf(uint16 rhs) : data_(rhs) {}
-
-    chalf(int rhs) : data_(rhs) {}
-
+ 
     operator float() const {
       return chalf2float(data_);
     }
 
     operator uint16() const {
       return data_;
+    }
+
+    chalf& operator=(const int& rhs) {
+      this->data_ = rhs;
+      return *this;
     }
 
     chalf& operator+=(const chalf& rhs) {
@@ -338,15 +341,10 @@ chalf operator*(chalf T, chalf U) {
     mantres++;
   }
 
-  if ((e1 == 0x1F && ((mant1 != 0) || (e2 == 0))) || 
-      (e2 == 0x1F && ((mant2 != 0) || (e1 == 0)))) { 
-    // NaN * val, inf * 0, 0 * inf
-    eres = 0x1F;
-    mantresf = 0x200;
-  } else if ((e1 == 0x1F) || (e2 == 0x1F) || (eres - off >= 0x1F)) {
-    // inf * U = inf, overflow
-    eres = 0x1F;
-    mantresf = 0;
+  if (eres - off >= 0x1F) {
+    // saturate results
+    eres = 0x1E;
+    mantresf = 0x3FF;
   } else if ((e1 == 0) || (e2 == 0) || (eres < 16)) {
     // 0 * val, underflow
     eres = 0;
@@ -504,19 +502,12 @@ chalf operator+(chalf T, chalf U) {
 
   ap_uint<5> eres_t;
 
-  if ((e1 == 0x1F && (((mant1 & 0x3FF) != 0))) || 
-      (e2 == 0x1F && (((mant2 & 0x3FF) != 0))) ||
-      (e1 == 0x1F && e2 == 0x1F && !EOP)) { 
-    // NaN + val, inf - inf
-    eres_t = 0x1F;
-    mantresf = 0x200;
-  } else if ((e1 == 0x1F) || (e2 == 0x1F) ||
-      ((eres + Rshifter + rnd_ovfl >= 0x1F) && fpath_flag)) {
-    // overflow
-    eres_t = 0x1F;
-    mantresf = 0;
-  } else if (((eres - Lshifter < 1) || (sum_cpath == 0))
-        && !fpath_flag) {
+  if (((eres + Rshifter + rnd_ovfl >= 0x1F) && fpath_flag)) {
+    // saturate results
+    eres_t = 0x1E;
+    mantresf = 0x3FF;
+  } else if (((e1 == 0) && (e2 == 0)) || ((eres - Lshifter < 1) ||
+        (sum_cpath == 0)) && !fpath_flag) {
     // underflow
     eres_t = 0;
     mantresf = 0;
