@@ -26,6 +26,8 @@ typedef uint32_t uint32;
 
 class chalf;
 
+chalf operator*(chalf T, chalf U);
+chalf operator+(chalf T, chalf U);
 /// Convert IEEE single-precision to chalf-precision.
 /// Credit for this goes to [Jeroen van der Zijp](ftp://ftp.fox-toolkit.org/pub/fastchalffloatconversion.pdf).
 /// \tparam R rounding mode to use, `std::round_indeterminate` for fastest rounding
@@ -279,6 +281,8 @@ class chalf {
     
     chalf(uint16 rhs) : data_(rhs) {}
 
+    chalf(int rhs) : data_(rhs) {}
+
     operator float() const {
       return chalf2float(data_);
     }
@@ -286,6 +290,12 @@ class chalf {
     operator uint16() const {
       return data_;
     }
+
+    chalf& operator+=(const chalf& rhs) {
+      *this = *this + rhs;
+      return *this;
+    }
+ 
   private:
     uint16 data_;
 };
@@ -385,8 +395,6 @@ chalf operator+(chalf T, chalf U) {
  
   ap_uint<1> fpath_flag = (diff > 1) || EOP;
 
-  diff = (diff > 11) ? (ap_uint<5>)11 : diff;
-
   ap_uint<22> temp_mant;
   ap_uint<1> temp_sign;
   if (!exp_cmp) {
@@ -398,7 +406,7 @@ chalf operator+(chalf T, chalf U) {
     sign1 = temp_sign; 
   }
 
-  // Close path, sub and diff = 0 or diff = 1
+  // Close path, sub and (diff = 0 or diff = 1)
   ap_uint<12> mant1_cpath;
   ap_uint<12> mant2_cpath;
 
@@ -450,8 +458,9 @@ chalf operator+(chalf T, chalf U) {
   ap_uint<10> sum_cpath_f = sum_cpath << Lshifter;
 
   // Far path
+  ap_uint<5> diff_sat = (diff > 11) ? (ap_uint<5>)11 : diff;
 
-  ap_uint<22> mant2_a = mant2 << (11 - diff);
+  ap_uint<22> mant2_a = mant2 << (11 - diff_sat);
 
   sticky = ((mant2_a & 0xFF) > 0);
 
@@ -493,32 +502,33 @@ chalf operator+(chalf T, chalf U) {
 
   ap_uint<16> sign = (fpath_flag) ? sign1 : sum_cpath_sign;
 
-  Rshifter = (fpath_flag) ? Rshifter : (ap_int<2>)0;
-  Lshifter = (fpath_flag) ? (ap_uint<4>)0 : Lshifter;
-  rnd_ovfl = (fpath_flag) ? rnd_ovfl : (ap_uint<1>)0;
+  ap_uint<5> eres_t;
 
   if ((e1 == 0x1F && (((mant1 & 0x3FF) != 0))) || 
       (e2 == 0x1F && (((mant2 & 0x3FF) != 0))) ||
       (e1 == 0x1F && e2 == 0x1F && !EOP)) { 
     // NaN + val, inf - inf
-    eres = 0x1F;
+    eres_t = 0x1F;
     mantresf = 0x200;
   } else if ((e1 == 0x1F) || (e2 == 0x1F) ||
-      (eres + Rshifter - Lshifter + rnd_ovfl >= 0x1F)) {
+      ((eres + Rshifter + rnd_ovfl >= 0x1F) && fpath_flag)) {
     // overflow
-    eres = 0x1F;
+    eres_t = 0x1F;
     mantresf = 0;
-  } else if ((eres + Rshifter - Lshifter + rnd_ovfl < 1) || ((sum_cpath == 0)
-        && !fpath_flag)) {
+  } else if (((eres - Lshifter < 1) || (sum_cpath == 0))
+        && !fpath_flag) {
     // underflow
-    eres = 0;
+    eres_t = 0;
     mantresf = 0;
   } else {
-    eres = eres + Rshifter - Lshifter + rnd_ovfl;
+    if (fpath_flag)
+      eres_t = eres + Rshifter + rnd_ovfl;
+    else
+      eres_t = eres - Lshifter;
     mantresf = (fpath_flag) ? sum_fpath_f : sum_cpath_f;
   }
 
-  eresf = eres;
+  eresf = eres_t;
 
   uint16 res;
   res = ((sign << 15) & SIGN_MASK_HP) |
