@@ -497,9 +497,8 @@ chalf operator+(chalf T, chalf U) {
 
   ap_uint<12> sum_t = sum_fpath >> 2;
   guard = (sum_fpath >> 2) & 0x1;
-  last = (sum_fpath >> 3) & 0x1;
   round = (sum_fpath >> 1) & 0x1;
-  rnd_flag = (guard & (round | last));
+  rnd_flag = (guard & round);
 
   if ((sum_t >> 11) & 0x1) {
     Rshifter = 1;
