@@ -485,8 +485,10 @@ chalf operator+(chalf T, chalf U) {
   guard = (mant2_fpath >> 1) & 0x1;
   last = (mant2_fpath >> 2) & 0x1;
   round = (mant2_fpath) & 0x1;
+  
+  ap_uint<1> rnd_flag = (guard & (round | last));
 
-  ap_uint<3> off = (guard & (round | last)) ? 4 : 0;
+  ap_uint<3> off = (rnd_flag) ? 4 : 0;
 
   if (EOP) 
     sum_fpath = mant1_fpath + mant2_fpath + off;
@@ -494,10 +496,14 @@ chalf operator+(chalf T, chalf U) {
     sum_fpath = mant1_fpath - mant2_fpath; 
 
   ap_uint<12> sum_t = sum_fpath >> 2;
+  guard = (sum_fpath >> 2) & 0x1;
+  last = (sum_fpath >> 3) & 0x1;
+  round = (sum_fpath >> 1) & 0x1;
+  rnd_flag = (guard & (round | last));
 
   if ((sum_t >> 11) & 0x1) {
     Rshifter = 1;
-    sum_t = sum_fpath >> 3;
+    sum_t = (sum_fpath >> 3) | (rnd_flag);
   } else if (((sum_t >> 10) & 0x1) == 0) {
     Rshifter = -1;
     sum_t = sum_fpath >> 1;
