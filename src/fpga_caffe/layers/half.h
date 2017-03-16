@@ -391,7 +391,7 @@ chalf operator+(chalf T, chalf U) {
   ap_uint<10> mantresf;
   ap_uint<15> eresf;
 
-  ap_uint<15> sum_fpath;
+  ap_uint<14> sum_fpath;
   ap_uint<1> sum_fpath_sign = 0;
 
   ap_int<2> Rshifter = 0;
@@ -413,7 +413,7 @@ chalf operator+(chalf T, chalf U) {
     sign1_s = sign1;
   }
 
-  ap_uint<14> mant1_large = mant1_s | MANT_NORM_HP;
+  ap_uint<13> mant1_large = mant1_s | MANT_NORM_HP;
   ap_uint<22> mant2_large = mant2_s | MANT_NORM_HP;
 
   // Close path, sub and (diff = 0 or diff = 1)
@@ -479,40 +479,28 @@ chalf operator+(chalf T, chalf U) {
 
   ap_uint<22> mant2_a = (mant2_large & 0x7FF) << (11 - diff_sat);
 
-  sticky = ((mant2_a & 0xFF) > 0);
-
-  ap_uint<14> mant1_fpath = (mant1_large & 0x7FF) << 3;
-  ap_uint<14> mant2_fpath = (mant2_a >> 8) | sticky;
+  ap_uint<13> mant1_fpath = (mant1_large & 0x7FF) << 2;
+  ap_uint<13> mant2_fpath = (mant2_a >> 9);
  
+  guard = (mant2_fpath >> 1) & 0x1;
+  last = (mant2_fpath >> 2) & 0x1;
+  round = (mant2_fpath) & 0x1;
+
+  ap_uint<3> off = (guard & (round | last)) ? 4 : 0;
+
   if (EOP) 
-    sum_fpath = mant1_fpath + mant2_fpath;
+    sum_fpath = mant1_fpath + mant2_fpath + off;
   else
     sum_fpath = mant1_fpath - mant2_fpath; 
 
-  guard = (sum_fpath >> 2) & 0x1;
-  round = (sum_fpath >> 1) & 0x1;
-  sticky = sum_fpath & 0x1;
-  ap_uint<12> sum_t = sum_fpath >> 3;
+  ap_uint<12> sum_t = sum_fpath >> 2;
 
   if ((sum_t >> 11) & 0x1) {
     Rshifter = 1;
-    sticky |= round;
-    round = guard;
-    guard = sum_t & 0x1;
-    sum_t = sum_fpath >> 4;
+    sum_t = sum_fpath >> 3;
   } else if (((sum_t >> 10) & 0x1) == 0) {
     Rshifter = -1;
-    guard = round;
-    round = 0;
-    sum_t = sum_fpath >> 2;
-  }
-
-  last = sum_t & 0x1;
-  rnd_ovfl = 0;
-  if (guard & (last | round | sticky)) {
-    if (sum_t == 0x7FF)
-      rnd_ovfl = 1;
-    sum_t++;
+    sum_t = sum_fpath >> 1;
   }
 
   ap_uint<10> sum_fpath_f = sum_t;
@@ -521,10 +509,10 @@ chalf operator+(chalf T, chalf U) {
 
   ap_uint<5> eres_t;
 
-  ap_uint<5> eres_fpath_f = eres + Rshifter + rnd_ovfl;
+  ap_uint<5> eres_fpath_f = eres + Rshifter;
   ap_uint<5> eres_cpath_f = eres - Lshifter;
 
-  if (((eres + Rshifter + rnd_ovfl >= 0x1F) && fpath_flag)) {
+  if (((eres + Rshifter >= 0x1F) && fpath_flag)) {
     // saturate results
     eres_t = 0x1E;
     mantresf = 0x3FF;
