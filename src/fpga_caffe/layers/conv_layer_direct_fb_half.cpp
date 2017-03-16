@@ -6,8 +6,8 @@
 #include "../../../include/fpga_caffe/layers/conv_layer.hpp"
 #include "half.h"
 
-#define HADD_LATENCY 10
-#define OCFACT 8 
+#define HADD_LATENCY 9 
+#define OCFACT 8
 #define OCDIV 3
 /* chalf16 data type definition */
 
@@ -30,7 +30,7 @@ typedef struct {
   chalf sf;
 } chalf16;
 
-void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
+void input_stage(chalf16 inbuf[4 * 256 * 16], unsigned short ksize,
     unsigned short xt_off, unsigned short xtile_pad, unsigned short yt_off, 
     unsigned short row_off, unsigned short ydim, unsigned short xdim, 
     unsigned short w_off, unsigned short burstchannels, int image_off,
@@ -193,7 +193,7 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
   // Input tile buffer
-  chalf16 inbuf[8 * 256 * 16]; 
+  chalf16 inbuf[4 * 256 * 16]; 
 
   // Output buffer used for writing
   chalf16 outbuf[OCFACT][512];
