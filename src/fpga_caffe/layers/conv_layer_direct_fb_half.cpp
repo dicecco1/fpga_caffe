@@ -7,8 +7,8 @@
 #include "half.h"
 
 #define HADD_LATENCY 8 
-#define OCFACT 8
-#define OCDIV 3
+#define OCFACT 1 
+#define OCDIV 0
 /* chalf16 data type definition */
 
 typedef struct {
@@ -29,6 +29,20 @@ typedef struct {
   chalf se;
   chalf sf;
 } chalf16;
+
+void set_otf(bool backward_flag, unsigned short row_off,
+    chalf ot_s4[OCFACT][3], chalf ot_s1[OCFACT][24], chalf otf[OCFACT][16]) {
+#pragma HLS INLINE off
+  for (int k = 0; k < OCFACT; ++k) {
+    if (backward_flag) {
+      for (int p = 0; p < 3; ++p)
+        otf[k][row_off * 3 + p] = ot_s4[k][p];
+    } else {
+      for (int p = 0; p < 16; ++p)
+        otf[k][p] = ot_s1[k][p];
+    }
+  }
+}
 
 void input_stage(chalf16 inbuf[4 * 256 * 16], unsigned short ksize,
     unsigned short xt_off, unsigned short xtile_pad, unsigned short yt_off, 
@@ -288,7 +302,7 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   assert(burstydim <= 64);
   assert(burstydim >= 1);
 
-  assert((ksize == 1) || (ksize == 3) || (ksize == 5));
+  assert(ksize == 1 || ksize == 3 || ksize == 5);
 
   assert(numimages >= 1);
 
@@ -308,10 +322,10 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   
   if (backward_flag) {
     if (ksize == 5) {
-      mod_channel = (burstchannels * 2 < HADD_LATENCY) ? HADD_LATENCY :
+      mod_channel = (burstchannels * 2 * ksize < HADD_LATENCY) ? HADD_LATENCY :
         burstchannels * 2;
     } else {
-      mod_channel = (burstchannels < HADD_LATENCY) ? HADD_LATENCY :
+      mod_channel = (burstchannels * ksize < HADD_LATENCY) ? HADD_LATENCY :
         burstchannels;
     }
   } else {
@@ -425,26 +439,27 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS DEPENDENCE variable=otf inter false
 #pragma HLS pipeline        
             if (backward_flag) {
-              if (iter == mod_channel) {
+              if (iter == ksize) {
                 iter = 0;
-                if (row_off == ksize - 1) {
-                  row_off = 0;
-                  if (xt_off + 1 == fact) {
+                if (w_off == mod_channel - 1) {
+                  w_off = 0;
+                  if (xt_off == fact - 1) {
                     xt_off = 0;
                     yt_off++;
                   } else {
                     xt_off++;
                   }
                 } else {
-                  row_off++;
+                  w_off++;
                 }
               }
-              w_off = iter;
+              row_off = iter;
             } else {
               if (iter == fact) {
-                if (yt_off + 1 == mod_ydim) {
+                iter = 0;
+                if (yt_off == mod_ydim - 1) {
                   yt_off = 0;
-                  if (row_off + 1 == ksize) {
+                  if (row_off == ksize - 1) {
                     row_off = 0;
                     w_off++;
                   } else {
@@ -453,13 +468,16 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 } else {
                   yt_off++;
                 }
-                iter = 0;
               }
               xt_off = iter;
             } 
 
             offset = yt_off * fact + xt_off;
             unsigned short w_idx = (backward_flag) ? offset : w_off;
+            unsigned short o_idx = (backward_flag) ? w_off : offset;
+           
+            bool acc_enable = ((backward_flag && (row_off == ksize - 1)) ||
+                !backward_flag);
 
             input_stage(inbuf, ksize, xt_off, xtile_pad, yt_off + offy *
               burstydim, row_off, ydim, xdim, w_off, burstchannels,
@@ -499,37 +517,30 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                   ot_s3[k][q][p] = ot_s2[k][q][p * 2] + ot_s2[k][q][p * 2 + 1];
                 ot_s4[k][q] = ot_s3[k][q][0] + ot_s3[k][q][1];
               }
-     
-              if (backward_flag) {
-                for (int p = 0; p < 16; ++p)
-                  otf[k][p] = 0;
-                for (int p = 0; p < 3; ++p)
-                  otf[k][row_off * 3 + p] = ot_s4[k][p];
-              } else {
-                for (int p = 0; p < 16; ++p)
-                  otf[k][p] = ot_s1[k][p];
+            }              
+            set_otf(backward_flag, row_off, ot_s4, ot_s1, otf);
+            for (int k = 0; k < OCFACT; ++k) {
+              if (acc_enable) {
+                outbuf[k][o_idx].s0 += otf[k][0];
+                outbuf[k][o_idx].s1 += otf[k][1];
+                outbuf[k][o_idx].s2 += otf[k][2];
+                outbuf[k][o_idx].s3 += otf[k][3];
+                outbuf[k][o_idx].s4 += otf[k][4];
+                outbuf[k][o_idx].s5 += otf[k][5];
+                outbuf[k][o_idx].s6 += otf[k][6];
+                outbuf[k][o_idx].s7 += otf[k][7];
+                outbuf[k][o_idx].s8 += otf[k][8];
+                outbuf[k][o_idx].s9 += otf[k][9];
+                outbuf[k][o_idx].sa += otf[k][10];
+                outbuf[k][o_idx].sb += otf[k][11];
+                outbuf[k][o_idx].sc += otf[k][12];
+                outbuf[k][o_idx].sd += otf[k][13];
+                outbuf[k][o_idx].se += otf[k][14];
+                outbuf[k][o_idx].sf += otf[k][15];
               }
-
-              unsigned short o_idx = (backward_flag) ? w_off : offset;
-             
-              outbuf[k][o_idx].s0 += otf[k][0];
-              outbuf[k][o_idx].s1 += otf[k][1];
-              outbuf[k][o_idx].s2 += otf[k][2];
-              outbuf[k][o_idx].s3 += otf[k][3];
-              outbuf[k][o_idx].s4 += otf[k][4];
-              outbuf[k][o_idx].s5 += otf[k][5];
-              outbuf[k][o_idx].s6 += otf[k][6];
-              outbuf[k][o_idx].s7 += otf[k][7];
-              outbuf[k][o_idx].s8 += otf[k][8];
-              outbuf[k][o_idx].s9 += otf[k][9];
-              outbuf[k][o_idx].sa += otf[k][10];
-              outbuf[k][o_idx].sb += otf[k][11];
-              outbuf[k][o_idx].sc += otf[k][12];
-              outbuf[k][o_idx].sd += otf[k][13];
-              outbuf[k][o_idx].se += otf[k][14];
-              outbuf[k][o_idx].sf += otf[k][15];
             }
           }
+
           for (int k = 0; k < OCFACT; ++k) {
             if (backward_flag) {
               out_offset = (o * OCFACT + k + outchannels * group_idx) *
@@ -547,11 +558,12 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               out_size = fact * burstydim;
             }
 
-            if ((o * OCFACT + k < outchannels) && ((!backward_flag) || (
-              backward_flag && (offy == rpofm - 1) &&
-              (image_off == numimages - 1))))
+            if (o * OCFACT + k < outchannels && 
+              ((backward_flag && (offy == rpofm - 1) && 
+              (image_off == numimages - 1)) || !backward_flag)) {
               memcpy(output + out_offset, outbuf[k], sizeof(chalf16) *
                 out_size);
+            }
           }
         }
       }
