@@ -6,7 +6,7 @@
 #include "../../../include/fpga_caffe/layers/conv_layer.hpp"
 #include "half.h"
 
-#define HADD_LATENCY 8 
+#define HADD_LATENCY 10 
 #define OCFACT 1 
 #define OCDIV 0
 /* chalf16 data type definition */
@@ -29,13 +29,6 @@ typedef struct {
   chalf se;
   chalf sf;
 } chalf16;
-
-void set_otf(bool backward_flag, unsigned short row_off,
-    chalf ot_s4[OCFACT][3], chalf ot_s1[OCFACT][24], chalf otf[OCFACT][16]) {
-#pragma HLS INLINE off
-  for (int k = 0; k < OCFACT; ++k) {
-  }
-}
 
 void input_stage(chalf16 inbuf[4 * 256 * 16], unsigned short ksize,
     unsigned short xt_off, unsigned short xtile_pad, unsigned short yt_off, 
@@ -252,7 +245,11 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   chalf otf[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=2
- 
+
+  chalf otb[OCFACT][16];
+#pragma HLS ARRAY_PARTITION variable=otb complete dim=1
+#pragma HLS ARRAY_PARTITION variable=otb complete dim=2
+
   int inchannels = params[0];
   int outchannels = params[1];
   int burstchannels = params[2];
@@ -429,7 +426,7 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
           MULTACCSTAGE: for (int i = 0; i < mac_iterations; ++i, ++iter) {
 #pragma HLS DEPENDENCE variable=outbuf inter false
 #pragma HLS DEPENDENCE variable=wbuf inter false
-#pragma HLS DEPENDENCE variable=otf inter false
+#pragma HLS DEPENDENCE variable=otb inter false
 #pragma HLS pipeline        
             if (backward_flag) {
               if (iter == ksize) {
@@ -510,14 +507,16 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                   ot_s3[k][q][p] = ot_s2[k][q][p * 2] + ot_s2[k][q][p * 2 + 1];
                 ot_s4[k][q] = ot_s3[k][q][0] + ot_s3[k][q][1];
               }
-                          
-              if (backward_flag) {
-                for (int p = 0; p < 3; ++p)
-                  otf[k][row_off * 3 + p] = ot_s4[k][p];
-              } else {
-                for (int p = 0; p < 16; ++p)
+               
+              for (int p = 0; p < 3; ++p)
+                otb[k][row_off * 3 + p] = ot_s4[k][p];
+
+              for (int p = 0; p < 16; ++p)
+                if (backward_flag)
+                  otf[k][p] = otb[k][p];
+                else
                   otf[k][p] = ot_s1[k][p];
-              }
+
               if (acc_enable) {
                 outbuf[k][o_idx].s0 += otf[k][0];
                 outbuf[k][o_idx].s1 += otf[k][1];
