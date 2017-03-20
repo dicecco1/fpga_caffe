@@ -517,18 +517,23 @@ chalf operator+(chalf T, chalf U) {
   ap_uint<5> eres_fpath_f = eres + Rshifter;
   ap_uint<5> eres_cpath_f = eres - Lshifter;
 
-  if (((eres + Rshifter >= 0x1F) && fpath_flag)) {
-    // saturate results
-    eres_t = 0x1E;
-    mantresf = 0x3FF;
-  } else if (((e1 == 0) && (e2 == 0)) || (((eres - Lshifter < 1) ||
-        (Lshifter == 12)) && !fpath_flag)) {
-    // underflow
-    eres_t = 0;
-    mantresf = 0;
+  if (fpath_flag) {
+    if (eres + Rshifter >= 0x1F) {
+      eres_t = 0x1E;
+      mantresf = 0x3FF;
+    } else {
+      eres_t = eres_fpath_f;
+      mantresf = sum_fpath_f;
+    }
   } else {
-    eres_t = (fpath_flag) ? eres_fpath_f : eres_cpath_f;
-    mantresf = (fpath_flag) ? sum_fpath_f : sum_cpath_f; 
+    if (((e1 == 0) && (e2 == 0)) || ((eres - Lshifter < 1) ||
+      (Lshifter == 12))) {
+      eres_t = 0;
+      mantresf = 0;
+    } else {
+      eres_t = eres_cpath_f;
+      mantresf = sum_cpath_f;
+    }
   }
 
   eresf = eres_t;
