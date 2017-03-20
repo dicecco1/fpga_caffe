@@ -34,13 +34,6 @@ void set_otf(bool backward_flag, unsigned short row_off,
     chalf ot_s4[OCFACT][3], chalf ot_s1[OCFACT][24], chalf otf[OCFACT][16]) {
 #pragma HLS INLINE off
   for (int k = 0; k < OCFACT; ++k) {
-    if (backward_flag) {
-      for (int p = 0; p < 3; ++p)
-        otf[k][row_off * 3 + p] = ot_s4[k][p];
-    } else {
-      for (int p = 0; p < 16; ++p)
-        otf[k][p] = ot_s1[k][p];
-    }
   }
 }
 
@@ -517,9 +510,14 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                   ot_s3[k][q][p] = ot_s2[k][q][p * 2] + ot_s2[k][q][p * 2 + 1];
                 ot_s4[k][q] = ot_s3[k][q][0] + ot_s3[k][q][1];
               }
-            }              
-            set_otf(backward_flag, row_off, ot_s4, ot_s1, otf);
-            for (int k = 0; k < OCFACT; ++k) {
+                          
+              if (backward_flag) {
+                for (int p = 0; p < 3; ++p)
+                  otf[k][row_off * 3 + p] = ot_s4[k][p];
+              } else {
+                for (int p = 0; p < 16; ++p)
+                  otf[k][p] = ot_s1[k][p];
+              }
               if (acc_enable) {
                 outbuf[k][o_idx].s0 += otf[k][0];
                 outbuf[k][o_idx].s1 += otf[k][1];
