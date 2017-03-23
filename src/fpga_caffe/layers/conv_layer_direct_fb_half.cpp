@@ -8,7 +8,6 @@
 
 #define HADD_LATENCY 10 
 #define OCFACT 1 
-#define OCDIV 0
 /* chalf16 data type definition */
 
 typedef struct {
@@ -30,7 +29,7 @@ typedef struct {
   chalf sf;
 } chalf16;
 
-void input_stage(chalf16 inbuf[4 * 256 * 16], unsigned short ksize,
+void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
     unsigned short xt_off, unsigned short xtile_pad, unsigned short yt_off, 
     unsigned short row_off, unsigned short ydim, unsigned short xdim, 
     unsigned short w_off, unsigned short burstchannels, int image_off,
@@ -193,7 +192,7 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
   // Input tile buffer
-  chalf16 inbuf[4 * 256 * 16]; 
+  chalf16 inbuf[8 * 256 * 16]; 
 
   // Output buffer used for writing
   chalf16 outbuf[OCFACT][512];
@@ -330,8 +329,8 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
       outchannels);
 
   int mac_iterations = mod_channel * mod_ydim * fact * ksize;
-    ofm_iters = (outchannels & (OCFACT - 1)) ? (outchannels >> OCDIV) + 1 : 
-      (outchannels >> OCDIV);
+  ofm_iters = (outchannels % OCFACT != 0) ? (outchannels / OCFACT) + 1 : 
+    (outchannels / OCFACT);
 
   for (int n = 0; n < rpo; ++n) {
     // Read the input
