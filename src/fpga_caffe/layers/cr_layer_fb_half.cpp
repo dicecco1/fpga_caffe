@@ -133,10 +133,10 @@ void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
   crow_off = (ksize >> 1) - row_off;
  
   unsigned short pad = 2;
-  int xt_off_t = (fc) ? (fc_off >> 4) : xt_off;
 
-  int in_idx = ((((image_off * burstchannels + c_off) * ydim +
-    (yt_off - crow_off)) * xtile_pad * 2) >> 4) + xt_off_t;
+  int in_idx = (fc) ? image_off * burstchannels + (fc_off >> 4) : 
+    ((((image_off * burstchannels + c_off) * ydim + (yt_off - crow_off))
+    * xtile_pad * 2) >> 4) + xt_off;
 
   if (yt_off - crow_off >= 0 && yt_off - crow_off < ydim && 
       c_off < burstchannels) {
@@ -187,7 +187,10 @@ void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
   for (p = 0; p < 3; ++p) {
     for (q = 0; q < 16; ++q) {
       if (fc) {
-        it[q][p] = tempbuf[2 + (fc_off & 0xF)];
+        if (p == 0)
+          it[q][p] = tempbuf[2 + (fc_off & 0xF)];
+        else
+          it[q][p] = 0;
       } else {
         if (p + q + toff + xt_off * 16 < xdim + pad)
           it[q][p] = tempbuf[p + q + toff];
@@ -365,7 +368,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   int fc = params[12];
   int relu = params[13];
   int backward = params[14];
-
+/*
   assert(inchannels >= 1);
   assert(inchannels <= 1024);
   assert(outchannels >= 1);
@@ -384,7 +387,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
   assert(xtile_pad >= 8);
   assert(xtile_pad <= 128);
-
+*/
   assert(rpo >= 1);
   assert(rpo <= 64);
 
@@ -433,7 +436,8 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
   memcpy(biasbuf, bias + bias_offset, sizeof(chalf) * bias_size);
 
-  int parallel_off = (outchannels >> 4) / OCFACT;
+  int parallel_off = ((outchannels >> 4) % OCFACT == 0) ? 
+    (outchannels >> 4) / OCFACT : (outchannels >> 4) / OCFACT + 1;
 
   int mac_iterations = (fc) ? parallel_off : mod_channel * mod_ydim * fact *
     ksize;
@@ -467,8 +471,9 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
       for (int image_off = 0; image_off < numimages; ++image_off) {
         for (int offy = 0; offy < rpofm; ++offy) {
           if (n == 0 && !backward_flag) {
-            // Set the output buffers to contain the biases 
-            for (int i = 0; i < burstydim * fact; ++i) {
+            // Set the output buffers to contain the biases
+            out_size = (fc) ? parallel_off : burstydim * fact; 
+            for (int i = 0; i < out_size; ++i) {
             //#pragma HLS pipeline
               for (int k = 0; k < OCFACT; ++k) {
 #pragma HLS pipeline
@@ -490,7 +495,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                   bias_.sd = biasbuf[i * 16 + k * parallel_off * 16 + 13];
                   bias_.se = biasbuf[i * 16 + k * parallel_off * 16 + 14];
                   bias_.sf = biasbuf[i * 16 + k * parallel_off * 16 + 15];
-                  outbuf[k][i] = bias_;
+                  outbuf[k][image_off * parallel_off + i] = bias_;
                 } else if (!fc) {                  
                   bias_.s0 = biasbuf[o * OCFACT + k];
                   bias_.s1 = biasbuf[o * OCFACT + k];
@@ -521,7 +526,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               memcpy(outbuf[k], output + out_offset, sizeof(chalf16) *
                   out_size);
             }
-          } else if (offy == 0 && image_off == 0 && !fc) {
+          } else if ((offy == 0) && (image_off == 0) && !fc) {
             for (int k = 0; k < OCFACT; ++k) {
               out_offset = (o * OCFACT + k + outchannels * group_idx) *
                 inchannels + n * burstchannels;
@@ -620,7 +625,8 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
             offset = yt_off * fact + xt_off;
             unsigned short w_idx = (backward_flag) ? offset : w_off;
-            unsigned short o_idx = (backward_flag) ? w_off : offset;
+            unsigned short o_idx = (backward_flag) ? w_off : (fc) ? offset +
+              image_off * parallel_off : offset;
            
             bool acc_enable = ((backward_flag && (row_off == ksize - 1)) ||
                 !backward_flag);
@@ -670,9 +676,13 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               for (int p = 0; p < 16; ++p)
                 if (backward_flag)
                   otf[k][p] = otb[k][p];
-                else
-                  otf[k][p] = ot_s1[k][p];
-
+                else {
+                  if (fc) {
+                    otf[k][p] = ot[k][p][0];
+                  } else {
+                    otf[k][p] = ot_s1[k][p];
+                  }
+                }
               if (acc_enable) {
                 outbuf[k][o_idx].s0 += otf[k][0];
                 outbuf[k][o_idx].s1 += otf[k][1];
@@ -706,28 +716,28 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               }
             } else {
               if (fc) {
-                out_offset = (image_idx * numimages + image_off) *
-                  (outchannels >> 4) + k * parallel_off;
-                out_size = parallel_off;
+                out_offset = k * parallel_off * numimages + image_idx *
+                  numimages * (outchannels >> 4);
+                out_size = parallel_off * numimages;
               } else {
                 out_offset = (image_idx * numimages + image_off) * numgroups *
                   outchannels * ydim * fact + ((o * OCFACT + k + outchannels *
                   group_idx) * ydim + offy * burstydim) * fact;
                 out_size = fact * burstydim;
               }
-              if (relu) {
+              if (relu && ((((o * OCFACT + k < outchannels) && !fc) ||
+                ((o == inchannels - 1) && fc &&
+                (image_off == numimages - 1))))) {
                 relu_fw(outbuf, outbuf_relu, k, out_size);
-                if ((o * OCFACT + k < outchannels && !fc) ||
-                    ((o == inchannels - 1) && fc))
-                  memcpy(track_relu + out_offset, outbuf_relu[k],
-                    sizeof(char16) * out_size);
+                memcpy(track_relu + out_offset, outbuf_relu[k],
+                  sizeof(char16) * out_size);
               }
             }
 
             if ((o * OCFACT + k < outchannels && !fc &&
               ((backward_flag && (offy == rpofm - 1) && 
               (image_off == numimages - 1)) || !backward_flag)) ||
-                ((o == inchannels - 1) && fc)) {
+              ((o == inchannels - 1) && fc && (image_off == numimages - 1))) {
               memcpy(output + out_offset, outbuf[k], sizeof(chalf16) *
                 out_size);
             }
