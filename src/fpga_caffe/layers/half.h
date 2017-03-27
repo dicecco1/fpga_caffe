@@ -28,6 +28,10 @@ class chalf;
 
 chalf operator*(chalf T, chalf U);
 chalf operator+(chalf T, chalf U);
+bool operator==(chalf T, chalf U);
+bool operator!=(chalf T, chalf U);
+chalf max(chalf T, chalf U);
+chalf max(chalf T);
 /// Convert IEEE single-precision to chalf-precision.
 /// Credit for this goes to [Jeroen van der Zijp](ftp://ftp.fox-toolkit.org/pub/fastchalffloatconversion.pdf).
 /// \tparam R rounding mode to use, `std::round_indeterminate` for fastest rounding
@@ -274,13 +278,19 @@ inline float chalf2float(uint16 value)
 class chalf {
   friend chalf operator*(chalf T, chalf U);
   friend chalf operator+(chalf T, chalf U);
+  friend chalf max(chalf T, chalf U);
+  friend chalf max(chalf T);
+  friend bool operator==(chalf T, chalf U);
+  friend bool operator!=(chalf T, chalf U);
   public:
     chalf() : data_() {}
 
     chalf(float rhs) : data_(float2chalf(rhs)) {}
     
     chalf(uint16 rhs) : data_(rhs) {}
- 
+
+    chalf(int rhs) : data_(rhs) {}
+
     operator float() const {
       return chalf2float(data_);
     }
@@ -543,4 +553,52 @@ chalf operator+(chalf T, chalf U) {
     ((eresf << EXP_SHIFT_HP) & EXP_MASK_HP) | mantresf;
 
   return chalf(res);
+}
+
+bool operator==(chalf T, chalf U) {
+  uint16 Tdata_ = T.data_;
+  uint16 Udata_ = U.data_;
+
+  return (Tdata_ == Udata_);
+}
+
+bool operator!=(chalf T, chalf U) {
+  uint16 Tdata_ = T.data_;
+  uint16 Udata_ = U.data_;
+
+  return (Tdata_ != Udata_);
+}
+
+chalf max(chalf T, chalf U) {
+#pragma HLS INLINE off
+#pragma HLS pipeline
+  short Tdata_ = T.data_;
+  short Udata_ = U.data_;
+  ap_uint<1> sign1 = Tdata_ >> 15;
+  ap_uint<1> sign2 = Udata_ >> 15;
+
+  ap_uint<1> sign_xor = sign1 ^ sign2;
+
+  chalf res;
+
+  if (Tdata_ < Udata_)
+    res = U;
+  else
+    res = T;  
+  return res;
+}
+
+// Compares T with 0
+chalf max(chalf T) {
+#pragma HLS INLINE off
+#pragma HLS pipeline
+  uint16 Tdata_ = T.data_;
+  ap_uint<1> sign1 = Tdata_ >> 15;
+
+  chalf res;
+  if (sign1)
+    res = chalf(0);
+  else
+    res = T;
+  return res;
 }
