@@ -7,7 +7,7 @@
 #include "half.h"
 
 #define HADD_LATENCY 10 
-#define OCFACT 1 
+#define OCFACT 6 
 /* chalf16 data type definition */
 
 typedef struct {
@@ -120,10 +120,10 @@ void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
     unsigned short xt_off, unsigned short xtile_pad, unsigned short yt_off, 
     unsigned short row_off, unsigned short ydim, unsigned short xdim, 
     unsigned short w_off, unsigned short burstchannels, int image_off,
-    int fc, int fc_off, chalf it[16][3]) {
+    int fc, chalf it[16][3]) {
   unsigned short p, q, j, toff;
 
-  chalf tempbuf[21];
+  chalf tempbuf[48];
 #pragma HLS ARRAY_PARTITION variable=tempbuf complete 
 
   short crow_off;
@@ -133,47 +133,61 @@ void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
   crow_off = (ksize >> 1) - row_off;
  
   unsigned short pad = 2;
-
-  int in_idx = (fc) ? image_off * burstchannels + (fc_off >> 4) : 
-    ((((image_off * burstchannels + c_off) * ydim + (yt_off - crow_off))
-    * xtile_pad * 2) >> 4) + xt_off;
+  short off = 0;
+  int in_idx = ((((image_off * burstchannels + c_off) * ydim +
+    (yt_off - crow_off)) * xtile_pad * 2) >> 4) + xt_off;
 
   if (yt_off - crow_off >= 0 && yt_off - crow_off < ydim && 
       c_off < burstchannels) {
-    tempbuf[2] = inbuf[in_idx].s0;
-    tempbuf[3] = inbuf[in_idx].s1;
-    tempbuf[4] = inbuf[in_idx].s2;
-    tempbuf[5] = inbuf[in_idx].s3;
-    tempbuf[6] = inbuf[in_idx].s4;
-    tempbuf[7] = inbuf[in_idx].s5;
-    tempbuf[8] = inbuf[in_idx].s6;
-    tempbuf[9] = inbuf[in_idx].s7;
-    tempbuf[10] = inbuf[in_idx].s8;
-    tempbuf[11] = inbuf[in_idx].s9;
-    tempbuf[12] = inbuf[in_idx].sa;
-    tempbuf[13] = inbuf[in_idx].sb;
-    tempbuf[14] = inbuf[in_idx].sc;
-    tempbuf[15] = inbuf[in_idx].sd;
-    tempbuf[16] = inbuf[in_idx].se;
-    tempbuf[17] = inbuf[in_idx].sf; 
-
-    if (xt_off == 0) {
-      tempbuf[0] = 0;
-      tempbuf[1] = 0;
-    } else {
-      tempbuf[0] = inbuf[in_idx - 1].se;
-      tempbuf[1] = inbuf[in_idx - 1].sf;
+    for (int i = 1; i < 3; ++i) { 
+      tempbuf[i * 16 + 0] = inbuf[in_idx + i - 1].s0;
+      tempbuf[i * 16 + 1] = inbuf[in_idx + i - 1].s1;
+      tempbuf[i * 16 + 2] = inbuf[in_idx + i - 1].s2;
+      tempbuf[i * 16 + 3] = inbuf[in_idx + i - 1].s3;
+      tempbuf[i * 16 + 4] = inbuf[in_idx + i - 1].s4;
+      tempbuf[i * 16 + 5] = inbuf[in_idx + i - 1].s5;
+      tempbuf[i * 16 + 6] = inbuf[in_idx + i - 1].s6;
+      tempbuf[i * 16 + 7] = inbuf[in_idx + i - 1].s7;
+      tempbuf[i * 16 + 8] = inbuf[in_idx + i - 1].s8;
+      tempbuf[i * 16 + 9] = inbuf[in_idx + i - 1].s9;
+      tempbuf[i * 16 + 10] = inbuf[in_idx + i - 1].sa;
+      tempbuf[i * 16 + 11] = inbuf[in_idx + i - 1].sb;
+      tempbuf[i * 16 + 12] = inbuf[in_idx + i - 1].sc;
+      tempbuf[i * 16 + 13] = inbuf[in_idx + i - 1].sd;
+      tempbuf[i * 16 + 14] = inbuf[in_idx + i - 1].se;
+      tempbuf[i * 16 + 15] = inbuf[in_idx + i - 1].sf;
     }
 
-    if (xt_off * 8 + 8 == xtile_pad) {
-      tempbuf[18] = 0;
-      tempbuf[19] = 0;
+    if (xt_off != 0) {
+      tempbuf[0] = inbuf[in_idx - 1].s0;
+      tempbuf[1] = inbuf[in_idx - 1].s1;
+      tempbuf[2] = inbuf[in_idx - 1].s2;
+      tempbuf[3] = inbuf[in_idx - 1].s3;
+      tempbuf[4] = inbuf[in_idx - 1].s4;
+      tempbuf[5] = inbuf[in_idx - 1].s5;
+      tempbuf[6] = inbuf[in_idx - 1].s6;
+      tempbuf[7] = inbuf[in_idx - 1].s7;
+      tempbuf[8] = inbuf[in_idx - 1].s8;
+      tempbuf[9] = inbuf[in_idx - 1].s9;
+      tempbuf[10] = inbuf[in_idx - 1].sa;
+      tempbuf[11] = inbuf[in_idx - 1].sb;
+      tempbuf[12] = inbuf[in_idx - 1].sc;
+      tempbuf[13] = inbuf[in_idx - 1].sd;
+      tempbuf[14] = inbuf[in_idx - 1].se;
+      tempbuf[15] = inbuf[in_idx - 1].sf;
     } else {
-      tempbuf[18] = inbuf[in_idx + 1].s0;
-      tempbuf[19] = inbuf[in_idx + 1].s1;
-    }    
+      for (int i = 0; i < 16; ++i)
+        tempbuf[i] = 0;
+    }
+
+    for (int i = 0; i < 3; ++i) {
+      if ((xt_off + i - 1) >= (xtile_pad >> 3)) {
+        for (int j = 0; j < 16; ++j)
+          tempbuf[i * 16 + j] = 0;
+      }
+    }
   } else {
-    for (p = 0; p < 21; ++p) 
+    for (p = 0; p < 48; ++p) 
       tempbuf[p] = 0;
   }
 
@@ -187,13 +201,10 @@ void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
   for (p = 0; p < 3; ++p) {
     for (q = 0; q < 16; ++q) {
       if (fc) {
-        if (p == 0)
-          it[q][p] = tempbuf[2 + (fc_off & 0xF)];
-        else
-          it[q][p] = 0;
+        it[q][p] = tempbuf[p * 16 + q];
       } else {
         if (p + q + toff + xt_off * 16 < xdim + pad)
-          it[q][p] = tempbuf[p + q + toff];
+          it[q][p] = tempbuf[p + q + toff + 14];
         else
           it[q][p] = 0;
       }
@@ -203,38 +214,58 @@ void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
 
 void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3], 
     unsigned short w_off, unsigned short row_off, unsigned short ksize,
-    unsigned short xt_off, unsigned short xdim, bool backward_flag, int fc) { 
-  chalf wvals[16]; 
-#pragma HLS ARRAY_PARTITION variable=wvals complete
+    unsigned short xt_off, unsigned short xdim, bool backward_flag, int fc) {
+  chalf wvals[16][3]; 
+#pragma HLS ARRAY_PARTITION variable=wvals complete dim=1
+#pragma HLS ARRAY_PARTITION variable=wvals complete dim=2
 
   chalf it[3];
   chalf ot[3];
 
   for (int k = 0; k < OCFACT; ++k) {
-    wvals[0] = wbuf[k][w_off].s0;
-    wvals[1] = wbuf[k][w_off].s1;
-    wvals[2] = wbuf[k][w_off].s2;
-    wvals[3] = wbuf[k][w_off].s3;
-    wvals[4] = wbuf[k][w_off].s4;
-    wvals[5] = wbuf[k][w_off].s5;
-    wvals[6] = wbuf[k][w_off].s6;
-    wvals[7] = wbuf[k][w_off].s7;
-    wvals[8] = wbuf[k][w_off].s8;
-    wvals[9] = wbuf[k][w_off].s9;
-    wvals[10] = wbuf[k][w_off].sa;
-    wvals[11] = wbuf[k][w_off].sb;
-    wvals[12] = wbuf[k][w_off].sc;
-    wvals[13] = wbuf[k][w_off].sd;
-    wvals[14] = wbuf[k][w_off].se;
-    wvals[15] = wbuf[k][w_off].sf;
-
+    for (int i = 1; i < 3; ++i) {
+      wvals[0][i] = wbuf[k][w_off + i - 1].s0;
+      wvals[1][i] = wbuf[k][w_off + i - 1].s1;
+      wvals[2][i] = wbuf[k][w_off + i - 1].s2;
+      wvals[3][i] = wbuf[k][w_off + i - 1].s3;
+      wvals[4][i] = wbuf[k][w_off + i - 1].s4;
+      wvals[5][i] = wbuf[k][w_off + i - 1].s5;
+      wvals[6][i] = wbuf[k][w_off + i - 1].s6;
+      wvals[7][i] = wbuf[k][w_off + i - 1].s7;
+      wvals[8][i] = wbuf[k][w_off + i - 1].s8;
+      wvals[9][i] = wbuf[k][w_off + i - 1].s9;
+      wvals[10][i] = wbuf[k][w_off + i - 1].sa;
+      wvals[11][i] = wbuf[k][w_off + i - 1].sb;
+      wvals[12][i] = wbuf[k][w_off + i - 1].sc;
+      wvals[13][i] = wbuf[k][w_off + i - 1].sd;
+      wvals[14][i] = wbuf[k][w_off + i - 1].se;
+      wvals[15][i] = wbuf[k][w_off + i - 1].sf;
+    }
+    if (w_off != 0) {
+      wvals[0][0] = wbuf[k][w_off - 1].s0;
+      wvals[1][0] = wbuf[k][w_off - 1].s1;
+      wvals[2][0] = wbuf[k][w_off - 1].s2;
+      wvals[3][0] = wbuf[k][w_off - 1].s3;
+      wvals[4][0] = wbuf[k][w_off - 1].s4;
+      wvals[5][0] = wbuf[k][w_off - 1].s5;
+      wvals[6][0] = wbuf[k][w_off - 1].s6;
+      wvals[7][0] = wbuf[k][w_off - 1].s7;
+      wvals[8][0] = wbuf[k][w_off - 1].s8;
+      wvals[9][0] = wbuf[k][w_off - 1].s9;
+      wvals[10][0] = wbuf[k][w_off - 1].sa;
+      wvals[11][0] = wbuf[k][w_off - 1].sb;
+      wvals[12][0] = wbuf[k][w_off - 1].sc;
+      wvals[13][0] = wbuf[k][w_off - 1].sd;
+      wvals[14][0] = wbuf[k][w_off - 1].se;
+      wvals[15][0] = wbuf[k][w_off - 1].sf;
+    }
     if (ksize != 1) {
-      it[0] = wvals[row_off * 3 + 0];
-      it[1] = wvals[row_off * 3 + 1];
-      it[2] = wvals[row_off * 3 + 2];
+      it[0] = wvals[row_off * 3 + 0][1];
+      it[1] = wvals[row_off * 3 + 1][1];
+      it[2] = wvals[row_off * 3 + 2][1];
     } else {
       it[0] = 0;
-      it[1] = wvals[0];
+      it[1] = wvals[0][1];
       it[2] = 0;
     }
 
@@ -242,11 +273,11 @@ void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3],
       for (int q = 0; q < 3; ++q) {
         if (backward_flag) {
           if (p + xt_off * 16 < xdim)
-            wt[k][p][q] = wvals[p];
+            wt[k][p][q] = wvals[p][1];
           else
             wt[k][p][q] = 0;
         } else if (fc) {
-          wt[k][p][q] = wvals[p];
+          wt[k][p][q] = wvals[p][q];
         } else {
           wt[k][p][q] = it[q];
         }
@@ -294,7 +325,8 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
   // Input tile buffer
-  chalf16 inbuf[8 * 256 * 16]; 
+  chalf16 inbuf[8 * 256 * 16];
+#pragma HLS ARRAY_PARTITION variable=inbuf cyclic factor=2 dim=1 
   char16 inbuf_relu[256 * 16];
   char16 outbuf_relu[OCFACT][512];
 
@@ -305,6 +337,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   // Weight buffer
   chalf16 wbuf[OCFACT][512];
 #pragma HLS ARRAY_PARTITION variable=wbuf complete dim=1
+#pragma HLS ARRAY_PARTITION variable=wbuf cyclic factor=2 dim=2
 
   // Bias buffer
   chalf biasbuf[1024];
@@ -348,6 +381,10 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   chalf otf[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=2
+
+  chalf otfc[OCFACT][16];
+#pragma HLS ARRAY_PARTITION variable=otfc complete dim=1
+#pragma HLS ARRAY_PARTITION variable=otfc complete dim=2
 
   chalf otb[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otb complete dim=1
@@ -431,36 +468,27 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   mod_ydim = ((burstydim < HADD_LATENCY) && !(backward_flag)) ? HADD_LATENCY :
     burstydim; 
   // Read bias data into buffer 
-  int bias_offset = (fc) ? 0 : outchannels * group_idx;
+  int bias_offset = outchannels * group_idx;
   int bias_size = outchannels;
 
   memcpy(biasbuf, bias + bias_offset, sizeof(chalf) * bias_size);
 
-  int parallel_off = ((outchannels >> 4) % OCFACT == 0) ? 
-    (outchannels >> 4) / OCFACT : (outchannels >> 4) / OCFACT + 1;
+  int parallel_off = (fact % 3 == 0) ? numimages * fact / 3 :
+    numimages * (fact / 3 + 1);
 
   int mac_iterations = (fc) ? parallel_off : mod_channel * mod_ydim * fact *
     ksize;
-  
-  if (fc) 
-    outer_iters = inchannels;
-  else
-    outer_iters = (outchannels % OCFACT != 0) ? (outchannels / OCFACT) + 1 : 
-      (outchannels / OCFACT);
+  int numimages_iter = (fc) ? 1 : numimages; 
+  outer_iters = (outchannels % OCFACT != 0) ? (outchannels / OCFACT) + 1 : 
+    (outchannels / OCFACT);
 
   for (int n = 0; n < rpo; ++n) {
     // Read the input
     for (int image_off = 0; image_off < numimages; ++image_off) {
-      if (fc) {
-        in_off = (image_idx * numimages + image_off) * (inchannels >> 4);
-        inbuf_off = image_off * (inchannels >> 4);
-        in_size = inchannels >> 4;
-      } else {
-        in_off = (((image_idx * numimages + image_off) * numgroups + group_idx)
-          * inchannels) * ydim * fact + n * burstchannels * ydim * fact;
-        inbuf_off = image_off * burstchannels * ydim * fact;
-        in_size = burstchannels * ydim * fact;
-      }
+      in_off = (((image_idx * numimages + image_off) * numgroups + group_idx)
+        * inchannels) * ydim * fact + n * burstchannels * ydim * fact;
+      inbuf_off = image_off * burstchannels * ydim * fact;
+      in_size = burstchannels * ydim * fact;
       memcpy(inbuf + inbuf_off, input + in_off, sizeof(chalf16) * in_size);
       if (relu && ((backward == 1) || (backward == 2))) {
         memcpy(inbuf_relu, track_relu + in_off, sizeof(char16) * in_size);
@@ -468,53 +496,31 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
       } 
     }
     for (int o = 0; o < outer_iters; ++o) {
-      for (int image_off = 0; image_off < numimages; ++image_off) {
+      for (int image_off = 0; image_off < numimages_iter; ++image_off) {
         for (int offy = 0; offy < rpofm; ++offy) {
           if (n == 0 && !backward_flag) {
-            // Set the output buffers to contain the biases
-            out_size = (fc) ? parallel_off : burstydim * fact; 
+            out_size = (fc) ? (numimages >> 4) : burstydim * fact;
             for (int i = 0; i < out_size; ++i) {
-            //#pragma HLS pipeline
+            #pragma HLS pipeline
               for (int k = 0; k < OCFACT; ++k) {
-#pragma HLS pipeline
                 chalf16 bias_;
-                if ((o == 0) && fc) {
-                  bias_.s0 = biasbuf[i * 16 + k * parallel_off * 16 + 0];
-                  bias_.s1 = biasbuf[i * 16 + k * parallel_off * 16 + 1];
-                  bias_.s2 = biasbuf[i * 16 + k * parallel_off * 16 + 2];
-                  bias_.s3 = biasbuf[i * 16 + k * parallel_off * 16 + 3];
-                  bias_.s4 = biasbuf[i * 16 + k * parallel_off * 16 + 4];
-                  bias_.s5 = biasbuf[i * 16 + k * parallel_off * 16 + 5];
-                  bias_.s6 = biasbuf[i * 16 + k * parallel_off * 16 + 6];
-                  bias_.s7 = biasbuf[i * 16 + k * parallel_off * 16 + 7];
-                  bias_.s8 = biasbuf[i * 16 + k * parallel_off * 16 + 8];
-                  bias_.s9 = biasbuf[i * 16 + k * parallel_off * 16 + 9];
-                  bias_.sa = biasbuf[i * 16 + k * parallel_off * 16 + 10];
-                  bias_.sb = biasbuf[i * 16 + k * parallel_off * 16 + 11];
-                  bias_.sc = biasbuf[i * 16 + k * parallel_off * 16 + 12];
-                  bias_.sd = biasbuf[i * 16 + k * parallel_off * 16 + 13];
-                  bias_.se = biasbuf[i * 16 + k * parallel_off * 16 + 14];
-                  bias_.sf = biasbuf[i * 16 + k * parallel_off * 16 + 15];
-                  outbuf[k][image_off * parallel_off + i] = bias_;
-                } else if (!fc) {                  
-                  bias_.s0 = biasbuf[o * OCFACT + k];
-                  bias_.s1 = biasbuf[o * OCFACT + k];
-                  bias_.s2 = biasbuf[o * OCFACT + k];
-                  bias_.s3 = biasbuf[o * OCFACT + k];
-                  bias_.s4 = biasbuf[o * OCFACT + k];
-                  bias_.s5 = biasbuf[o * OCFACT + k];
-                  bias_.s6 = biasbuf[o * OCFACT + k];
-                  bias_.s7 = biasbuf[o * OCFACT + k];
-                  bias_.s8 = biasbuf[o * OCFACT + k];
-                  bias_.s9 = biasbuf[o * OCFACT + k];
-                  bias_.sa = biasbuf[o * OCFACT + k];
-                  bias_.sb = biasbuf[o * OCFACT + k];
-                  bias_.sc = biasbuf[o * OCFACT + k];
-                  bias_.sd = biasbuf[o * OCFACT + k];
-                  bias_.se = biasbuf[o * OCFACT + k];
-                  bias_.sf = biasbuf[o * OCFACT + k];
-                  outbuf[k][i] = bias_;
-                }
+                bias_.s0 = biasbuf[o * OCFACT + k];
+                bias_.s1 = biasbuf[o * OCFACT + k];
+                bias_.s2 = biasbuf[o * OCFACT + k];
+                bias_.s3 = biasbuf[o * OCFACT + k];
+                bias_.s4 = biasbuf[o * OCFACT + k];
+                bias_.s5 = biasbuf[o * OCFACT + k];
+                bias_.s6 = biasbuf[o * OCFACT + k];
+                bias_.s7 = biasbuf[o * OCFACT + k];
+                bias_.s8 = biasbuf[o * OCFACT + k];
+                bias_.s9 = biasbuf[o * OCFACT + k];
+                bias_.sa = biasbuf[o * OCFACT + k];
+                bias_.sb = biasbuf[o * OCFACT + k];
+                bias_.sc = biasbuf[o * OCFACT + k];
+                bias_.sd = biasbuf[o * OCFACT + k];
+                bias_.se = biasbuf[o * OCFACT + k];
+                bias_.sf = biasbuf[o * OCFACT + k];
+                outbuf[k][i] = bias_;
               }
             } 
           } else if (!backward_flag && !fc) {
@@ -548,8 +554,8 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
             int weight_offset_f = (o * OCFACT + k + outchannels * group_idx) *
               inchannels + n * burstchannels;
             int weight_size_f = burstchannels;
-            int weight_offset_fc_f = o * (outchannels >> 4) + k * parallel_off;
-            int weight_size_fc_f = parallel_off;
+            int weight_offset_fc_f = (o * OCFACT + k) * fact;
+            int weight_size_fc_f = fact;
             if (ksize == 5) {
               weight_offset_f = weight_offset_f << 1;
               weight_size_f = weight_size_f << 1;
@@ -569,19 +575,25 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
             if ((!backward_flag && (offy == 0) && image_off == 0) ||
               backward_flag)
               memcpy(wbuf[k], weights + weight_offset, sizeof(chalf16) *
-                  weight_size);
+                weight_size);
           }
           
           w_off = 0;
-          xt_off = 0;
+          xt_off = (fc) ? 1 : 0;
           yt_off = 0;
           row_off = 0;
           iter = 0;
-          MULTACCSTAGE: for (int i = 0; i < mac_iterations; ++i, ++iter) {
+          int fc_off = 0;
+          int i_off = 0;
+          MULTACCSTAGE: for (int i = 0; i < mac_iterations; ++i, ++iter,
+            ++fc_off) {
           #pragma HLS DEPENDENCE variable=outbuf inter false
           #pragma HLS DEPENDENCE variable=wbuf inter false
           #pragma HLS DEPENDENCE variable=otb inter false
           #pragma HLS pipeline        
+            if (fc_off == 16) {
+              fc_off = 0;
+            }
             if (backward_flag) {
               if (iter == ksize) {
                 iter = 0;
@@ -600,8 +612,12 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               row_off = iter;
             } else {
               if (fc) {
-                xt_off = i;
-                w_off = i;
+                if (iter == numimages) {
+                  xt_off += 3;
+                  iter = 0;
+                }
+                w_off = xt_off;
+                i_off = iter;
                 yt_off = 0;
                 row_off = 0;
               } else {
@@ -625,15 +641,15 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
             offset = yt_off * fact + xt_off;
             unsigned short w_idx = (backward_flag) ? offset : w_off;
-            unsigned short o_idx = (backward_flag) ? w_off : (fc) ? offset +
-              image_off * parallel_off : offset;
+            unsigned short o_idx = (backward_flag) ? w_off : (fc) ?
+              (i_off >> 4) : offset;
            
-            bool acc_enable = ((backward_flag && (row_off == ksize - 1)) ||
-                !backward_flag);
+            bool acc_enable = ((((backward_flag && (row_off == ksize - 1)) ||
+                !backward_flag) && !fc) || (fc && fc_off == 15));
 
             input_stage(inbuf, ksize, xt_off, xtile_pad, yt_off + offy *
               burstydim, row_off, ydim, xdim, w_off, burstchannels,
-              image_off, fc, o, it);
+              (fc) ? i_off : image_off, fc, it);
             
             wt_set(wbuf, wt, w_idx, row_off, ksize, xt_off, xdim,
                 backward_flag, fc); 
@@ -647,7 +663,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               for (int p = 0; p < 8; ++p) 
                 ot_s1[k][p + 2 * 8] = ot[k][p * 2][2] + ot[k][p * 2 + 1][2];
 
-              if (backward_flag) {
+              if (backward_flag || fc) {
                 for (int q = 0; q < 2; ++q) {
                   for (int p = 0; p < 8; ++p) 
                     ot_s1[k][p + q * 8] = ot[k][p * 2][q] +
@@ -670,6 +686,8 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 ot_s4[k][q] = ot_s3[k][q][0] + ot_s3[k][q][1];
               }
                
+              otfc[k][fc_off] = ot_s4[k][0] + ot_s4[k][1] + ot_s4[k][2];
+
               for (int p = 0; p < 3; ++p)
                 otb[k][row_off * 3 + p] = ot_s4[k][p];
 
@@ -678,7 +696,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                   otf[k][p] = otb[k][p];
                 else {
                   if (fc) {
-                    otf[k][p] = ot[k][p][0];
+                    otf[k][p] = otfc[k][p];
                   } else {
                     otf[k][p] = ot_s1[k][p];
                   }
@@ -716,28 +734,25 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               }
             } else {
               if (fc) {
-                out_offset = k * parallel_off * numimages + image_idx *
-                  numimages * (outchannels >> 4);
-                out_size = parallel_off * numimages;
+                out_offset = image_idx * outchannels * (numimages >> 4) +
+                  (o * OCFACT + k) * (numimages >> 4);
+                out_size = numimages >> 4;
               } else {
                 out_offset = (image_idx * numimages + image_off) * numgroups *
                   outchannels * ydim * fact + ((o * OCFACT + k + outchannels *
                   group_idx) * ydim + offy * burstydim) * fact;
                 out_size = fact * burstydim;
               }
-              if (relu && ((((o * OCFACT + k < outchannels) && !fc) ||
-                ((o == inchannels - 1) && fc &&
-                (image_off == numimages - 1))))) {
+              if (relu && (o * OCFACT + k < outchannels)) {
                 relu_fw(outbuf, outbuf_relu, k, out_size);
                 memcpy(track_relu + out_offset, outbuf_relu[k],
                   sizeof(char16) * out_size);
               }
             }
 
-            if ((o * OCFACT + k < outchannels && !fc &&
+            if ((o * OCFACT + k < outchannels &&
               ((backward_flag && (offy == rpofm - 1) && 
-              (image_off == numimages - 1)) || !backward_flag)) ||
-              ((o == inchannels - 1) && fc && (image_off == numimages - 1))) {
+              (image_off == numimages - 1)) || !backward_flag))) {
               memcpy(output + out_offset, outbuf[k], sizeof(chalf16) *
                 out_size);
             }
