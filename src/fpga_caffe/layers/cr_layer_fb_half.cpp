@@ -247,7 +247,10 @@ void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3],
       for (int q = 0; q < 3; ++q) {
         if (backward_flag) {
           if (fc) {
-            wt[k][p][q] = wvals[p];
+            if (q == 0)
+              wt[k][p][q] = wvals[p];
+            else
+              wt[k][p][q] = 0;
           } else {
             if (p + xt_off * 16 < xdim)
               wt[k][p][q] = wvals[p];
@@ -255,7 +258,10 @@ void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3],
               wt[k][p][q] = 0;
           }
         } else if (fc) {
-          wt[k][p][q] = wvals[p];
+          if (q == 0)
+            wt[k][p][q] = wvals[p];
+          else
+            wt[k][p][q] = 0;
         } else {
           wt[k][p][q] = it[q];
         }
@@ -417,8 +423,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   assert((backward == 0) || (backward == 1) || (backward == 2) ||
     (backward == 3));
 
-  unsigned short w_off;
-  unsigned short row_off, xt_off, yt_off;
+  unsigned short w_off, i_off, fc_off, row_off, xt_off, yt_off;
   unsigned short fact = xtile_pad >> 3;
   unsigned short out_size, weight_size;
   int out_offset;  
@@ -460,8 +465,6 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
     (outchannels / OCFACT);
   outer_iters_bw = (outchannels % OCBFACT != 0) ? (outchannels / OCBFACT) + 1 :
     (outchannels / OCBFACT);
-  //outer_iters = (outchannels % OCFACT != 0) ? (outchannels / OCFACT) + 1 : 
-  //  (outchannels / OCFACT);
 
   outer_iters = (backward_flag || fc) ? outer_iters_bw : outer_iters_fw;
 
@@ -518,7 +521,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                   out_size);
             }
           } else if ((offy == 0) && (image_off == 0)) {
-            for (int k = 0; k < OCFACT; ++k) {
+            for (int k = 0; k < OCBFACT; ++k) {
               if (fc) {
                 out_offset = (o * OCBFACT + k) * fact;
                 out_size = fact;
@@ -580,8 +583,8 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
           yt_off = 0;
           row_off = 0;
           iter = 0;
-          int fc_off = 0;
-          int i_off = 0;
+          fc_off = 0;
+          i_off = 0;
           MULTACCSTAGE: for (int i = 0; i < mac_iterations; ++i, ++iter,
             ++fc_off) {
           #pragma HLS DEPENDENCE variable=outbuf inter false
@@ -714,20 +717,29 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 otfc[k][fc_off] = ot_s4[k][0];
               }
 
-              for (int p = 0; p < 16; ++p)
-                if (backward_flag && k < OCBFACT) {
-                  if (fc) 
-                    otf[k][p] = otfc[k][p];
-                  else
-                    otf[k][p] = otb[k][p];
+              for (int p = 0; p < 16; ++p) {
+                if (backward_flag) {
+                  if (k < OCBFACT) {
+                    if (fc) 
+                      otf[k][p] = otfc[k][p];
+                    else
+                      otf[k][p] = otb[k][p];
+                  } else {
+                    otf[k][p] = 0;
+                  }
                 }
                 else {
-                  if (fc && k < OCBFACT) {
-                    otf[k][p] = otfc[k][p];
+                  if (fc) {
+                    if (k < OCBFACT) {
+                      otf[k][p] = otfc[k][p];
+                    } else {
+                      otf[k][p] = 0;
+                    }
                   } else {
                     otf[k][p] = ot_s1[k][p];
                   }
                 }
+              }
               if (acc_enable) {
                 outbuf[k][o_idx].s0 += otf[k][0];
                 outbuf[k][o_idx].s1 += otf[k][1];
@@ -771,11 +783,11 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
             } else {
               if (fc) {
                 out_offset = image_idx * outchannels * (numimages >> 4) +
-                  (o * OCBFACT + k) * (numimages >> 4);
+                  (oc_bw + k) * (numimages >> 4);
                 out_size = numimages >> 4;
               } else {
                 out_offset = (image_idx * numimages + image_off) * numgroups *
-                  outchannels * ydim * fact + ((o * OCFACT + k + outchannels *
+                  outchannels * ydim * fact + ((oc_fw + outchannels *
                   group_idx) * ydim + offy * burstydim) * fact;
                 out_size = fact * burstydim;
               }
