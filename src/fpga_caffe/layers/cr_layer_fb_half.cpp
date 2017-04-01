@@ -120,7 +120,7 @@ void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
     unsigned short xt_off, unsigned short xtile_pad, unsigned short yt_off, 
     unsigned short row_off, unsigned short ydim, unsigned short xdim, 
     unsigned short w_off, unsigned short burstchannels, int image_off,
-    int fc, int numimages, bool backward_flag, chalf it[16][3]) {
+    bool fc, int numimages, bool backward_flag, chalf it[16][3]) {
   unsigned short p, q, j, toff;
 
   chalf tempbuf[21];
@@ -208,12 +208,11 @@ void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
 
 void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3], 
     unsigned short w_off, unsigned short row_off, unsigned short ksize,
-    unsigned short xt_off, unsigned short xdim, bool backward_flag, int fc) {
+    unsigned short xt_off, unsigned short xdim, bool backward_flag, bool fc) {
   chalf wvals[16]; 
 #pragma HLS ARRAY_PARTITION variable=wvals complete dim=1
 
   chalf it[3];
-  chalf ot[3];
 
   for (int k = 0; k < OCFACT; ++k) {
     wvals[0] = wbuf[k][w_off].s0;
@@ -244,19 +243,18 @@ void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3],
 
     for (int p = 0; p < 16; ++p) {
       for (int q = 0; q < 3; ++q) {
-        if (backward_flag) {
-          if (fc) {
-            wt[k][p][q] = wvals[p];
-          } else {
-            if (p + xt_off * 16 < xdim)
-              wt[k][p][q] = wvals[p];
-            else
-              wt[k][p][q] = 0;
-          }
-        } else if (fc) {
+        if (fc) {
           wt[k][p][q] = wvals[p];
         } else {
-          wt[k][p][q] = it[q];
+          if (backward_flag) {
+            if (p + xt_off * 16 < xdim) {
+              wt[k][p][q] = wvals[p];
+            } else {
+              wt[k][p][q] = 0;
+            }
+          } else {
+            wt[k][p][q] = it[q];
+          }
         }
       }
     } 
@@ -417,7 +415,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
     (backward == 3));
 
   unsigned short w_off;
-  unsigned short row_off, xt_off, yt_off;
+  unsigned short row_off, xt_off, yt_off, fc_off, i_off;
   unsigned short fact = xtile_pad >> 3;
   unsigned short out_size, weight_size;
   int out_offset;  
@@ -426,6 +424,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   int in_off, inbuf_off, in_size;
   unsigned short iter, outer_iters;
   bool backward_flag = (backward == 1);
+  bool fc_flag = (fc == 1);
   unsigned short mod_channel;
   
   if (backward_flag) {
@@ -452,9 +451,9 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   int parallel_off = (backward_flag) ? (numimages >> 4) * xtile_pad * 2 :
     numimages * fact;
 
-  int mac_iterations = (fc) ? parallel_off : mod_channel * mod_ydim * fact *
-    ksize;
-  int numimages_iter = (fc) ? 1 : numimages; 
+  int mac_iterations = (fc_flag) ? parallel_off : mod_channel * mod_ydim *
+    fact * ksize;
+  int numimages_iter = (fc_flag) ? 1 : numimages; 
   outer_iters = (outchannels % OCFACT != 0) ? (outchannels / OCFACT) + 1 : 
     (outchannels / OCFACT);
 
@@ -475,7 +474,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
       for (int image_off = 0; image_off < numimages_iter; ++image_off) {
         for (int offy = 0; offy < rpofm; ++offy) {
           if (n == 0 && !backward_flag) {
-            out_size = (fc) ? (numimages >> 4) : burstydim * fact;
+            out_size = (fc_flag) ? (numimages >> 4) : burstydim * fact;
             for (int i = 0; i < out_size; ++i) {
             #pragma HLS pipeline
               for (int k = 0; k < OCFACT; ++k) {
@@ -499,7 +498,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 outbuf[k][i] = bias_;
               }
             } 
-          } else if (!backward_flag && !fc) {
+          } else if (!backward_flag && !fc_flag) {
             for (int k = 0; k < OCFACT; ++k) {
               out_offset = (image_idx * numimages + image_off) * numgroups *
                 outchannels * ydim * fact + ((o * OCFACT + k + outchannels *
@@ -544,7 +543,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               weight_size_f = weight_size_f << 1;
             }
             if (backward_flag) {
-              if (fc) {
+              if (fc_flag) {
                 weight_offset = weight_offset_fc_b;
                 weight_size = weight_size_fc_b;
               } else {
@@ -552,7 +551,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 weight_size = weight_size_b;
               }
             } else {
-              if (fc) {
+              if (fc_flag) {
                 weight_offset = weight_offset_fc_f;
                 weight_size = weight_size_fc_f;
               } else {
@@ -571,8 +570,8 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
           yt_off = 0;
           row_off = 0;
           iter = 0;
-          int fc_off = 0;
-          int i_off = 0;
+          fc_off = 0;
+          i_off = 0;
           MULTACCSTAGE: for (int i = 0; i < mac_iterations; ++i, ++iter,
             ++fc_off) {
           #pragma HLS DEPENDENCE variable=outbuf inter false
@@ -583,7 +582,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               fc_off = 0;
             }
             if (backward_flag) {
-              if (fc) {
+              if (fc_flag) {
                 if (iter == xtile_pad * 2) {
                   i_off++;
                   iter = 0;
@@ -610,7 +609,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 row_off = iter;
               }
             } else {
-              if (fc) {
+              if (fc_flag) {
                 if (iter == numimages) {
                   xt_off++;
                   iter = 0;
@@ -646,20 +645,20 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
             unsigned short conv_w_idx = (backward_flag) ? offset : w_off;
             unsigned short conv_o_idx = (backward_flag) ? w_off : offset;
-            unsigned short o_idx = (fc) ? fc_o_idx : conv_o_idx;
-            unsigned short w_idx = (fc) ? fc_w_idx : conv_w_idx;
+            unsigned short o_idx = (fc_flag) ? fc_o_idx : conv_o_idx;
+            unsigned short w_idx = (fc_flag) ? fc_w_idx : conv_w_idx;
 
-            unsigned short in_image_off = (fc) ? i_off : image_off;
+            unsigned short in_image_off = (fc_flag) ? i_off : image_off;
 
             bool acc_enable = (((backward_flag && (row_off == ksize - 1)) ||
-              !backward_flag) && !fc) || (fc && fc_off == 15);
+              !backward_flag) && !fc_flag) || (fc_flag && fc_off == 15);
 
             input_stage(inbuf, ksize, xt_off, xtile_pad, yt_off + offy *
               burstydim, row_off, ydim, xdim, w_off, burstchannels,
-              in_image_off, fc, numimages, backward_flag, it);
+              in_image_off, fc_flag, numimages, backward_flag, it);
             
             wt_set(wbuf, wt, w_idx, row_off, ksize, xt_off, xdim,
-              backward_flag, fc); 
+              backward_flag, fc_flag); 
 
             for (int k = 0; k < OCFACT; ++k) {
               for (int p = 0; p < 16; ++p) {
@@ -670,7 +669,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               for (int p = 0; p < 8; ++p) 
                 ot_s1[k][p + 2 * 8] = ot[k][p * 2][2] + ot[k][p * 2 + 1][2];
 
-              if (backward_flag || fc) {
+              if (backward_flag || fc_flag) {
                 for (int q = 0; q < 2; ++q) {
                   for (int p = 0; p < 8; ++p) 
                     ot_s1[k][p + q * 8] = ot[k][p * 2][q] +
@@ -698,20 +697,17 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
               otfc[k][fc_off] = ot_s4[k][0];
 
-              for (int p = 0; p < 16; ++p)
-                if (backward_flag) {
-                  if (fc) 
-                    otf[k][p] = otfc[k][p];
-                  else
+              for (int p = 0; p < 16; ++p) {
+                if (fc_flag) {
+                  otf[k][p] = otfc[k][p];
+                } else {
+                  if (backward_flag) {
                     otf[k][p] = otb[k][p];
-                }
-                else {
-                  if (fc) {
-                    otf[k][p] = otfc[k][p];
                   } else {
                     otf[k][p] = ot_s1[k][p];
                   }
                 }
+              }
               if (acc_enable) {
                 outbuf[k][o_idx].s0 += otf[k][0];
                 outbuf[k][o_idx].s1 += otf[k][1];
@@ -735,7 +731,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
           for (int k = 0; k < OCFACT; ++k) {
             if (backward_flag) {
-              if (fc) {
+              if (fc_flag) {
                 out_offset = (o * OCFACT + k) * fact;
                 out_size = fact;
               } else {
@@ -749,7 +745,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 }
               }
             } else {
-              if (fc) {
+              if (fc_flag) {
                 out_offset = image_idx * outchannels * (numimages >> 4) +
                   (o * OCFACT + k) * (numimages >> 4);
                 out_size = numimages >> 4;
