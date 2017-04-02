@@ -364,6 +364,56 @@ chalf operator*(chalf T, chalf U) {
   return chalf(res);
 }
 
+ap_uint<4> LZD(ap_uint<12> sum_cpath) {
+#pragma HLS INLINE 
+  ap_uint<4> Lshifter;
+  ap_uint<4> b_1_o, b_0_o;
+  ap_uint<1> a[12];
+  ap_uint<4> b_1[4];
+  ap_uint<4> b_0[4];
+  a[11] = (sum_cpath >> 11) & 0x1;
+  a[10] = (sum_cpath >> 10) & 0x1;
+  a[9] = (sum_cpath >> 9) & 0x1;
+  a[8] = (sum_cpath >> 8) & 0x1;
+  a[7] = (sum_cpath >> 7) & 0x1;
+  a[6] = (sum_cpath >> 6) & 0x1;
+  a[5] = (sum_cpath >> 5) & 0x1;
+  a[4] = (sum_cpath >> 4) & 0x1;
+  a[3] = (sum_cpath >> 3) & 0x1;
+  a[2] = (sum_cpath >> 2) & 0x1;
+  a[1] = (sum_cpath >> 1) & 0x1;
+  a[0] = (sum_cpath >> 0) & 0x1;
+
+  ap_uint<1> b_1_sel = a[11] | a[10] | a[9] | a[8] | a[7] | a[6];
+  ap_uint<1> b_0_sel = a[5] | a[4] | a[3] | a[2] | a[1] | a[0];
+
+  b_1[3] = 0;
+  b_1[2] = ~a[11] & ~a[10] & ~a[9] & ~a[8] & (a[7] | a[6]);
+  b_1[1] = ~a[11] & ~a[10] & (a[9] | a[8]);
+  b_1[0] = ~a[11] & (~a[9] & (~a[7] | a[8]) | a[10]);
+
+  b_1_o = ((b_1[3] & 0x1) << 3) | ((b_1[2] & 0x1) << 2) |
+    ((b_1[1] & 0x1) << 1) | (b_1[0] & 0x1);
+
+  b_0[3] = ~a[5] & ~a[4];
+  b_0[2] = a[5] | a[4];
+  b_0[1] = ~(~a[5] & ~a[4] & (a[3] | a[2]));
+  b_0[0] = ~a[5] & a[4] | (~a[5] & ~a[4] & ~a[3] & a[2]) |
+    (~a[5] & ~a[4] & ~a[3] & ~a[2] & ~a[1] & a[0]);
+
+  b_0_o = ((b_0[3] & 0x1) << 3) | ((b_0[2] & 0x1) << 2) |
+    ((b_0[1] & 0x1) << 1) | (b_0[0] & 0x1);
+
+  if (b_1_sel)
+    Lshifter = b_1_o;
+  else if (b_0_sel) 
+    Lshifter = b_0_o;
+  else 
+    Lshifter = 12;
+
+  return Lshifter;
+}
+
 chalf operator+(chalf T, chalf U) {
 #pragma HLS INLINE off
 #pragma HLS pipeline
@@ -437,31 +487,7 @@ chalf operator+(chalf T, chalf U) {
     sum_cpath_sign = sign1_s;
   }
 
-  Lshifter = 12;
-  if ((sum_cpath >> 11) & 0x1)
-    Lshifter = 0;
-  else if ((sum_cpath >> 10) & 0x1)
-    Lshifter = 1;
-  else if ((sum_cpath >> 9) & 0x1)
-    Lshifter = 2;
-  else if ((sum_cpath >> 8) & 0x1)
-    Lshifter = 3;
-  else if ((sum_cpath >> 7) & 0x1)
-    Lshifter = 4;
-  else if ((sum_cpath >> 6) & 0x1)
-    Lshifter = 5;
-  else if ((sum_cpath >> 5) & 0x1)
-    Lshifter = 6;
-  else if ((sum_cpath >> 4) & 0x1)
-    Lshifter = 7;
-  else if ((sum_cpath >> 3) & 0x1)
-    Lshifter = 8;
-  else if ((sum_cpath >> 2) & 0x1)
-    Lshifter = 9;
-  else if ((sum_cpath >> 1) & 0x1)
-    Lshifter = 10;
-  else if ((sum_cpath >> 0) & 0x1)
-    Lshifter = 11;
+  Lshifter = LZD(sum_cpath);
 
   ap_uint<10> sum_cpath_f = ((sum_cpath) << Lshifter) >> 1;
 
@@ -512,6 +538,8 @@ chalf operator+(chalf T, chalf U) {
   ap_uint<5> eres_cpath_f = eres - Lshifter;
 
   if (fpath_flag) {
+    eres_t = eres_fpath_f;
+    mantresf = sum_fpath_f;
     if (eres + Rshifter >= 0x1F) {
       eres_t = 0x1E;
       mantresf = 0x3FF;
@@ -520,8 +548,7 @@ chalf operator+(chalf T, chalf U) {
       mantresf = sum_fpath_f;
     }
   } else {
-    if (((e1 == 0) && (e2 == 0)) || ((eres - Lshifter < 1) ||
-      (Lshifter == 12))) {
+    if ((eres - Lshifter < 1) || (Lshifter == 12)) {
       eres_t = 0;
       mantresf = 0;
     } else {
