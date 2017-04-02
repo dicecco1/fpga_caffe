@@ -328,49 +328,39 @@ chalf operator*(chalf T, chalf U) {
 
   ap_uint<16> sign = sign_res;
 
+  ap_uint<4> off = 15;
   ap_uint<12> mantres;
   ap_uint<10> mantresf;
-  ap_uint<15> eresf;
+  uint16 eresf;
   ap_uint<22> product = mant1 * mant2; // 22 bits
   mantres = product >> 10; // 11 bits
-  ap_uint<1> guard = (product >> 9) & 0x1; // 1 bit
-  ap_uint<1> sticky = ((product & 0x1FF) > 0); // 1 bit
-  ap_int<7> eres = e1 + e2 - 15;
-  ap_uint<1> upper = (mantres >> 11) & 0x1;
+  ap_uint<6> eres = e1 + e2;
 
   // normalize
-  if (upper) {
-    sticky |= guard;
-    guard = (product >> 10) & 0x1;
+  if ((mantres >> 11) & 0x1) {
     mantres = (product >> 11);
+    eres++;
   }
 
-  eres += upper;
-
-  ap_uint<1> rnd = guard & sticky;
-
-  // Rounding
-  mantres |= rnd;
-
   ap_uint<5> eres_t;
-  eres_t = eres;
-  mantresf = mantres;
 
-  if (eres >= 0x1F) {
+  if (eres >= 0x2E) {
     // saturate results
     eres_t = 0x1E;
     mantresf = 0x3FF;
-  } else if ((e1 == 0) || (e2 == 0) || (eres < 0)) {
+  } else if ((e1 == 0) || (e2 == 0) || (eres < 16)) {
     // 0 * val, underflow
     eres_t = 0;
     mantresf = 0;
-  } 
+  } else {
+    eres_t = eres - off;
+    mantresf = mantres;
+  }
 
   eresf = eres_t;
 
   uint16 res;
-  res = ((sign << 15) & SIGN_MASK_HP) |
-    ((eresf << EXP_SHIFT_HP) & EXP_MASK_HP) | (mantresf & MANT_MASK_HP);
+  res = (sign << 15) | (eresf << EXP_SHIFT_HP) | (mantresf & MANT_MASK_HP);
   return chalf(res);
 }
 
@@ -391,9 +381,7 @@ chalf operator+(chalf T, chalf U) {
 
   // 1 if e1 is bigger, 0 if e2 is bigger
   ap_uint<1> exp_cmp = (e1 >= e2) ? 1 : 0;
-  ap_uint<5> eres = (exp_cmp) ? e1 : e2;
-  ap_uint<5> diff = (exp_cmp) ? e1 - e2 : e2 - e1;
-  ap_uint<1> guard, round, sticky, last, rnd_ovfl;
+  ap_uint<1> guard, round;
   ap_uint<10> mantresf;
   ap_uint<15> eresf;
 
@@ -403,21 +391,21 @@ chalf operator+(chalf T, chalf U) {
   ap_int<2> Rshifter = 0;
   ap_uint<4> Lshifter = 0;
  
-  ap_uint<1> fpath_flag = (diff > 1) || EOP;
-
   ap_uint<10> mant1_s, mant2_s;
   ap_uint<1> sign1_s, sign2_s;
-  if (!exp_cmp) {
-    mant2_s = mant1;
-    mant1_s = mant2;
-    sign2_s = sign1;
-    sign1_s = sign2; 
-  } else {
-    mant2_s = mant2;
-    mant1_s = mant1;
-    sign2_s = sign2;
-    sign1_s = sign1;
-  }
+  ap_uint<5> e1_s, e2_s;
+
+  mant1_s = (exp_cmp) ? mant1 : mant2;
+  mant2_s = (exp_cmp) ? mant2 : mant1;
+  e1_s = (exp_cmp) ? e1 : e2;
+  e2_s = (exp_cmp) ? e2 : e1;
+  sign1_s = (exp_cmp) ? sign1 : sign2;
+  sign2_s = (exp_cmp) ? sign2 : sign1;
+
+  ap_uint<5> eres = e1_s;
+  ap_uint<5> diff = e1_s - e2_s; 
+
+  ap_uint<1> fpath_flag = (diff > 1) || EOP;
 
   ap_uint<13> mant1_large = mant1_s | MANT_NORM_HP;
   ap_uint<22> mant2_large = mant2_s | MANT_NORM_HP;
@@ -489,10 +477,10 @@ chalf operator+(chalf T, chalf U) {
   ap_uint<13> mant2_fpath = (mant2_a >> 9);
  
   guard = (mant2_fpath >> 1) & 0x1;
-  last = (mant2_fpath >> 2) & 0x1;
   round = (mant2_fpath) & 0x1;
-  
-  ap_uint<1> rnd_flag = (guard & (round | last));
+  ap_uint<1> last = (mant2_fpath >> 2) & 0x1;
+
+  ap_uint<1> rnd_flag = guard & (round | last);
 
   ap_uint<3> off = (rnd_flag) ? 4 : 0;
 
@@ -501,7 +489,7 @@ chalf operator+(chalf T, chalf U) {
   else
     sum_fpath = mant1_fpath - mant2_fpath; 
 
-  ap_uint<12> sum_t = sum_fpath >> 2;
+  ap_uint<12> sum_t = (sum_fpath >> 2);
   guard = (sum_fpath >> 2) & 0x1;
   round = (sum_fpath >> 1) & 0x1;
   rnd_flag = (guard & round);
