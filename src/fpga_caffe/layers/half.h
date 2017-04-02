@@ -328,47 +328,43 @@ chalf operator*(chalf T, chalf U) {
 
   ap_uint<16> sign = sign_res;
 
-  ap_uint<4> off = 15;
   ap_uint<12> mantres;
   ap_uint<10> mantresf;
-  uint16 eresf;
+  ap_uint<15> eresf;
   ap_uint<22> product = mant1 * mant2; // 22 bits
   mantres = product >> 10; // 11 bits
-  ap_uint<1> last = (product >> 10) & 0x1;
   ap_uint<1> guard = (product >> 9) & 0x1; // 1 bit
   ap_uint<1> sticky = ((product & 0x1FF) > 0); // 1 bit
-  ap_uint<6> eres = e1 + e2;
+  ap_int<7> eres = e1 + e2 - 15;
+  ap_uint<1> upper = (mantres >> 11) & 0x1;
 
   // normalize
-  if ((mantres >> 11) & 0x1) {
-    last = (product >> 11) & 0x1;
+  if (upper) {
     sticky |= guard;
     guard = (product >> 10) & 0x1;
     mantres = (product >> 11);
-    eres++;
   }
+
+  eres += upper;
+
+  ap_uint<1> rnd = guard & sticky;
 
   // Rounding
-  if (guard & (sticky | last)) {
-    if (mantres == 0x7FF)
-      eres++;
-    mantres++;
-  }
+  mantres |= rnd;
 
   ap_uint<5> eres_t;
+  eres_t = eres;
+  mantresf = mantres;
 
-  if (eres >= 0x2E) {
+  if (eres >= 0x1F) {
     // saturate results
     eres_t = 0x1E;
     mantresf = 0x3FF;
-  } else if ((e1 == 0) || (e2 == 0) || (eres < 16)) {
+  } else if ((e1 == 0) || (e2 == 0) || (eres < 0)) {
     // 0 * val, underflow
     eres_t = 0;
     mantresf = 0;
-  } else {
-    eres_t = eres - off;
-    mantresf = mantres;
-  }
+  } 
 
   eresf = eres_t;
 
