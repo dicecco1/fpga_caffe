@@ -391,21 +391,9 @@ chalf operator+(chalf T, chalf U) {
 
   // 1 if e1 is bigger, 0 if e2 is bigger
   ap_uint<1> exp_cmp = (e1 >= e2) ? 1 : 0;
-  ap_uint<10> mant1_s, mant2_s;
-  ap_uint<1> sign1_s, sign2_s;
-  ap_uint<5> e1_s, e2_s;
-
-  mant2_s = (exp_cmp) ? mant2 : mant1;
-  mant1_s = (exp_cmp) ? mant1 : mant2;
-  sign2_s = (exp_cmp) ? sign2 : sign1;
-  sign1_s = (exp_cmp) ? sign1 : sign2;
-  e2_s = (exp_cmp) ? e2 : e1;
-  e1_s = (exp_cmp) ? e1 : e2;
-
-  ap_uint<5> eres = e1_s;
-  ap_uint<5> diff = e1_s - e2_s;
-
-  ap_uint<1> guard, round;
+  ap_uint<5> eres = (exp_cmp) ? e1 : e2;
+  ap_uint<5> diff = (exp_cmp) ? e1 - e2 : e2 - e1;
+  ap_uint<1> guard, round, sticky, last, rnd_ovfl;
   ap_uint<10> mantresf;
   ap_uint<15> eresf;
 
@@ -417,8 +405,22 @@ chalf operator+(chalf T, chalf U) {
  
   ap_uint<1> fpath_flag = (diff > 1) || EOP;
 
+  ap_uint<10> mant1_s, mant2_s;
+  ap_uint<1> sign1_s, sign2_s;
+  if (!exp_cmp) {
+    mant2_s = mant1;
+    mant1_s = mant2;
+    sign2_s = sign1;
+    sign1_s = sign2; 
+  } else {
+    mant2_s = mant2;
+    mant1_s = mant1;
+    sign2_s = sign2;
+    sign1_s = sign1;
+  }
+
   ap_uint<13> mant1_large = mant1_s | MANT_NORM_HP;
-  ap_uint<13> mant2_large = mant2_s | MANT_NORM_HP;
+  ap_uint<22> mant2_large = mant2_s | MANT_NORM_HP;
 
   // Close path, sub and (diff = 0 or diff = 1)
   ap_uint<12> mant1_cpath;
@@ -426,17 +428,18 @@ chalf operator+(chalf T, chalf U) {
 
   mant1_cpath = (mant1_large & 0x7FF) << 1;
 
-  mant2_cpath = mant2_large;
-  if (diff == 0)
+  if (diff == 1)
+    mant2_cpath = mant2_large;
+  else
     mant2_cpath = (mant2_large & 0x7FF) << 1;
 
-  ap_int<13> sum_cpath_t;
+  ap_int<14> sum_cpath_t;
  
   sum_cpath_t = mant1_cpath - mant2_cpath;
 
   ap_uint<1> sum_cpath_sign;
 
-  ap_uint<12> sum_cpath;
+  ap_uint<13> sum_cpath;
 
   if (sum_cpath_t < 0) {
     sum_cpath = -1 * sum_cpath_t;
@@ -477,37 +480,42 @@ chalf operator+(chalf T, chalf U) {
   // Far path
 
   // saturate difference at 11 bits
-  ap_uint<4> diff_sat;
 
-  if (diff >= 11)
-    diff_sat = 11;
-  else
-    diff_sat = diff;
+  ap_uint<5> diff_sat = (diff > 11) ? (ap_uint<5>)11 : diff;
+
+  ap_uint<22> mant2_a = (mant2_large & 0x7FF) << (11 - diff_sat);
 
   ap_uint<13> mant1_fpath = (mant1_large & 0x7FF) << 2;
-  ap_uint<13> mant2_fpath = (mant2_large & 0x7FF >> (diff_sat - 2));  
+  ap_uint<13> mant2_fpath = (mant2_a >> 9);
+ 
+  guard = (mant2_fpath >> 1) & 0x1;
+  last = (mant2_fpath >> 2) & 0x1;
+  round = (mant2_fpath) & 0x1;
+  
+  ap_uint<1> rnd_flag = (guard & (round | last));
+
+  ap_uint<3> off = (rnd_flag) ? 4 : 0;
 
   if (EOP) 
-    sum_fpath = mant1_fpath + mant2_fpath;
+    sum_fpath = mant1_fpath + mant2_fpath + off;
   else
     sum_fpath = mant1_fpath - mant2_fpath; 
 
-  ap_uint<10> sum_t = sum_fpath >> 2;
+  ap_uint<12> sum_t = sum_fpath >> 2;
   guard = (sum_fpath >> 2) & 0x1;
   round = (sum_fpath >> 1) & 0x1;
-  ap_uint<1> rnd_flag = (guard & round);
+  rnd_flag = (guard & round);
 
-  if ((sum_fpath >> 13) & 0x1) {
+  if ((sum_t >> 11) & 0x1) {
     Rshifter = 1;
     sum_t = (sum_fpath >> 3) | (rnd_flag);
-  } else if (((sum_fpath >> 12) & 0x1) == 0) {
+  } else if (((sum_t >> 10) & 0x1) == 0) {
     Rshifter = -1;
     sum_t = sum_fpath >> 1;
   }
 
   ap_uint<10> sum_fpath_f = sum_t;
 
-  // Result
   ap_uint<16> sign = (fpath_flag) ? sign1_s : sum_cpath_sign;
 
   ap_uint<5> eres_t;
@@ -516,25 +524,29 @@ chalf operator+(chalf T, chalf U) {
   ap_uint<5> eres_cpath_f = eres - Lshifter;
 
   if (fpath_flag) {
-    eres_t = eres_fpath_f;
-    mantresf = sum_fpath_f;
     if (eres + Rshifter >= 0x1F) {
       eres_t = 0x1E;
       mantresf = 0x3FF;
-    } 
+    } else {
+      eres_t = eres_fpath_f;
+      mantresf = sum_fpath_f;
+    }
   } else {
-    eres_t = eres_cpath_f;
-    mantresf = sum_cpath_f;
-    if (eres - Lshifter < 1) {
+    if (((e1 == 0) && (e2 == 0)) || ((eres - Lshifter < 1) ||
+      (Lshifter == 12))) {
       eres_t = 0;
       mantresf = 0;
-    } 
+    } else {
+      eres_t = eres_cpath_f;
+      mantresf = sum_cpath_f;
+    }
   }
 
   eresf = eres_t;
 
   uint16 res;
-  res = (sign << 15) | (eresf << EXP_SHIFT_HP) | mantresf;
+  res = ((sign << 15) & SIGN_MASK_HP) |
+    ((eresf << EXP_SHIFT_HP) & EXP_MASK_HP) | mantresf;
 
   return chalf(res);
 }
