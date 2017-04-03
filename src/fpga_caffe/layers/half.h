@@ -334,7 +334,7 @@ chalf operator*(chalf T, chalf U) {
   uint16 eresf;
   ap_uint<22> product = mant1 * mant2; // 22 bits
   mantres = product >> 10; // 11 bits
-  ap_uint<6> eres = e1 + e2;
+  ap_int<7> eres = e1 + e2 - 15;
 
   // normalize
   if ((mantres >> 11) & 0x1) {
@@ -344,23 +344,24 @@ chalf operator*(chalf T, chalf U) {
 
   ap_uint<5> eres_t;
 
-  if (eres >= 0x2E) {
+  eres_t = eres;
+  mantresf = mantres;
+  if (eres >= 0x1E) {
     // saturate results
     eres_t = 0x1E;
     mantresf = 0x3FF;
-  } else if ((e1 == 0) || (e2 == 0) || (eres < 16)) {
+  } else if ((e1 == 0) || (e2 == 0) || (eres < 0)) {
     // 0 * val, underflow
     eres_t = 0;
     mantresf = 0;
-  } else {
-    eres_t = eres - off;
-    mantresf = mantres;
   }
 
   eresf = eres_t;
 
   uint16 res;
-  res = (sign << 15) | (eresf << EXP_SHIFT_HP) | (mantresf & MANT_MASK_HP);
+  res = ((sign << 15) & SIGN_MASK_HP) |
+    ((eresf << EXP_SHIFT_HP) & EXP_MASK_HP) | mantresf;
+
   return chalf(res);
 }
 
