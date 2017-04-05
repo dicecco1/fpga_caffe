@@ -1,7 +1,8 @@
-#ifndef CONV_LAYER_HPP_
-#define CONV_LAYER_HPP_
+#ifndef LAYER_HPP_
+#define LAYER_HPP_
 
 #define FADD_LATENCY 13
+#define HADD_LATENCY 10
 
 typedef struct {
   int inchannels;
@@ -17,7 +18,8 @@ typedef struct {
   int numgroups;
   int numimages;
   int fc;
+  int relu;
   int backward;
 } kernel_params;
 
-#endif
+#endif  // LAYER_HPP_

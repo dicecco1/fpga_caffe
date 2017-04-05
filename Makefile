@@ -142,7 +142,7 @@ EXAMPLE_BINS := ${EXAMPLE_OBJS:.o=.bin}
 TOOL_BIN_LINKS := ${TOOL_BINS:.bin=}
 # Put the test binaries in build/test for convenience.
 TEST_BIN_DIR := $(BUILD_DIR)/test
-TEST_OCL_BIN_DIR := $(BUILD_DIR)/test_fpga
+TEST_OCL_BIN_DIR := $(BUILD_DIR)/testfpga
 TEST_CU_BINS := $(addsuffix .testbin,$(addprefix $(TEST_BIN_DIR)/, \
 		$(foreach obj,$(TEST_CU_OBJS),$(basename $(notdir $(obj))))))
 TEST_CXX_BINS := $(addsuffix .testbin,$(addprefix $(TEST_BIN_DIR)/, \

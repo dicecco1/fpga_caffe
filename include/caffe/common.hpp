@@ -19,6 +19,9 @@
 
 #include "caffe/util/device_alternate.hpp"
 
+#include "fpga_caffe/layers/half.hpp"
+#include "fpga_caffe/layers/layer.hpp"
+
 // Convert macro to string
 #define STRINGIFY(m) #m
 #define AS_STRING(m) STRINGIFY(m)

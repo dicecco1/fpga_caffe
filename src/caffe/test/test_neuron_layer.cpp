@@ -28,11 +28,6 @@
 #include "caffe/layers/cudnn_tanh_layer.hpp"
 #endif
 
-#ifdef USE_OCL
-#include "caffe/layers/ocl_relu_layer.hpp"
-#include "caffe/layers/XCL_program_layer.hpp"
-#endif
-
 #include "caffe/test/test_caffe_main.hpp"
 #include "caffe/test/test_gradient_check_util.hpp"
 
@@ -948,69 +943,4 @@ TYPED_TEST(CuDNNNeuronLayerTest, TestTanHGradientCuDNN) {
       this->blob_top_vec_);
 }
 #endif
-
-#ifdef USE_OCL
-template <typename TypeParam>
-class OCLNeuronLayerTest : public MultiDeviceTest<TypeParam> {
-  typedef typename TypeParam::Dtype Dtype;
- protected:
-  OCLNeuronLayerTest()
-      : blob_bottom_(new Blob<Dtype>(2, 8, 16, 16)),
-        blob_top_(new Blob<Dtype>()) {
-    Caffe::set_random_seed(1701);
-    // fill the values
-    FillerParameter filler_param;
-    GaussianFiller<Dtype> filler(filler_param);
-    filler.Fill(this->blob_bottom_);
-    blob_bottom_vec_.push_back(blob_bottom_);
-    blob_top_vec_.push_back(blob_top_);
-  }
-  virtual ~OCLNeuronLayerTest() { delete blob_bottom_; delete blob_top_; }
-  Blob<Dtype>* const blob_bottom_;
-  Blob<Dtype>* const blob_top_;
-  vector<Blob<Dtype>*> blob_bottom_vec_;
-  vector<Blob<Dtype>*> blob_top_vec_;
-  vector<Blob<Dtype>*> prog_bot_;
-  vector<Blob<Dtype>*> prog_top_;
-};
-
-TYPED_TEST_CASE(OCLNeuronLayerTest, TestDtypesAndDevices);
-
-TYPED_TEST(OCLNeuronLayerTest, TestReLUOCL) {
-  Caffe::set_mode(Caffe::OCL);
-  typedef typename TypeParam::Dtype Dtype;
-  LayerParameter layer_param;
-  layer_param.set_xcl_name("relu_layer.xclbin");
-  layer_param.set_kernel_name("relu_layer");
-  shared_ptr<Layer<Dtype> > programLayer(
-      new XCLProgramLayer<Dtype>(layer_param));
-  programLayer->SetUp(this->prog_bot_, this->prog_top_);
-  programLayer->Forward(this->prog_bot_, this->prog_top_);
-  layer_param.set_ocl_enable(true);
-  OCLReLULayer<Dtype> layer(layer_param);
-  layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
-  layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
-  // Now, check values
-  const Dtype* bottom_data = this->blob_bottom_->cpu_data();
-  const Dtype* top_data = this->blob_top_->cpu_data();
-  for (int i = 0; i < this->blob_bottom_->count(); ++i) {
-    EXPECT_GE(top_data[i], 0.);
-    if (bottom_data[i] < 0.0)
-      EXPECT_TRUE(top_data[i] == 0.0);
-    else
-      EXPECT_TRUE(top_data[i] == bottom_data[i]);
-  }
-}
-
-TYPED_TEST(NeuronLayerTest, TestReLUGradientOCL) {
-//  Caffe::set_mode(Caffe::OCL);
-  typedef typename TypeParam::Dtype Dtype;
-  LayerParameter layer_param;
-  ReLULayer<Dtype> layer(layer_param);
-  GradientChecker<Dtype> checker(1e-2, 1e-3, 1701, 0., 0.01);
-  checker.CheckGradientEltwise(&layer, this->blob_bottom_vec_,
-      this->blob_top_vec_);
-}
-#endif
-
 }  // namespace caffe

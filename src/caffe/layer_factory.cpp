@@ -30,9 +30,6 @@
 #ifdef USE_OCL
 #include "caffe/layers/ocl_conv_layer.hpp"
 #include "caffe/layers/ocl_inner_product_layer.hpp"
-#include "caffe/layers/ocl_lrn_layer.hpp"
-#include "caffe/layers/ocl_pooling_layer.hpp"
-#include "caffe/layers/ocl_relu_layer.hpp"
 #endif
 
 #ifdef WITH_PYTHON_LAYER
@@ -111,15 +108,6 @@ shared_ptr<Layer<Dtype> > GetPoolingLayer(const LayerParameter& param) {
     } else {
         return shared_ptr<Layer<Dtype> >(new CuDNNPoolingLayer<Dtype>(param));
     }
-#endif
-#ifdef USE_OCL
-  } else if (engine == PoolingParameter_Engine_OCL) {
-    if (param.top_size() > 1) {
-      LOG(INFO) << "OCL does not support multiple tops. "
-                << "Using Caffe's own pooling layer.";
-      return shared_ptr<Layer<Dtype> >(new PoolingLayer<Dtype>(param));
-    }
-    return shared_ptr<Layer<Dtype> >(new OCLPoolingLayer<Dtype>(param));
 #endif
   } else {
     LOG(FATAL) << "Layer " << param.name() << " has unknown engine.";
