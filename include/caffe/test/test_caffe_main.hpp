@@ -73,6 +73,22 @@ typedef ::testing::Types<CPUDevice<float>, CPUDevice<double>,
 
 #endif
 
+#ifdef USE_OCL
+
+template <typename TypeParam>
+struct OCLDevice {
+  typedef TypeParam Dtype;
+  static const Caffe::Brew device = Caffe::OCL;
+};
+
+template <typename Dtype>
+class OCLDeviceTest : public MultiDeviceTest<OCLDevice<Dtype> > {
+};
+
+typedef ::testing::Types<OCLDevice<float> > TestOCLDtypesAndDevices;
+
+#endif
+
 }  // namespace caffe
 
 #endif  // CAFFE_TEST_TEST_CAFFE_MAIN_HPP_

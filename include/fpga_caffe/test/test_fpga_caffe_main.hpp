@@ -6,6 +6,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <vector>
 #include <string>
 #include <boost/random/mersenne_twister.hpp>
@@ -13,7 +14,9 @@
 #include <CL/opencl.h>
 #include <fstream>
 #include <string>
-#include "fpga_caffe/layers/conv_layer.hpp"
+#include "time.h"
+#include "fpga_caffe/layers/layer.hpp"
+#include "fpga_caffe/layers/half.hpp"
 
 using std::cout;
 using std::endl;
@@ -50,11 +53,17 @@ class OCLUtil {
 
 int main(int argc, char** argv);
 
+void ref_relu_layer(std::vector<float>& output);
+
 void ref_conv_layer(std::vector<float> input, std::vector<float> weights,
     std::vector<float> bias, std::vector<float>& output, kernel_params params);
 
 void ref_fc_layer(std::vector<float> input, std::vector<float> weights,
     std::vector<float> bias, std::vector<float>& output, kernel_params params);
+
+void ref_backward_fc_layer(std::vector<float> input,
+    std::vector<float> weights, std::vector<float>& output,
+    kernel_params params);
 
 void ref_backward_conv_layer(std::vector<float> input, 
     std::vector<float> weights, std::vector<float>& output, 
@@ -62,11 +71,17 @@ void ref_backward_conv_layer(std::vector<float> input,
 
 void fillVector(std::vector<float>& input, float beg, float end);
 
+void fillVectorHalf(std::vector<float>& input, float beg, float end);
+
 void copyVector(std::vector<float> input, std::vector<float>& output, int xsize,
     int xsize_pad);
 
 void copyWeights(std::vector<float> w_input, std::vector<float>& w_output,
     int ksize, int padsize, int size);
+
+void toHalf(std::vector<float> input, std::vector<chalf>& output);
+
+void toFloat(std::vector<chalf> input, std::vector<float>& output);
 
 bool checkEQ(float expected, float result, float epsilon, float absError);
 

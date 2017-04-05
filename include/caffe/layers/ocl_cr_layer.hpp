@@ -1,5 +1,5 @@
-#ifndef CAFFE_OCL_CONV_LAYER_HPP_
-#define CAFFE_OCL_CONV_LAYER_HPP_
+#ifndef CAFFE_OCL_CR_LAYER_HPP_
+#define CAFFE_OCL_CR_LAYER_HPP_
 
 #include <vector>
 
@@ -29,7 +29,7 @@ namespace caffe {
  *   the output channel N' columns of the output matrix.
  */
 template <typename Dtype>
-class OCLConvolutionLayer : public ConvolutionLayer<Dtype> {
+class OCLCRLayer : public ConvolutionLayer<Dtype> {
  public:
   /**
    * @param param provides ConvolutionParameter convolution_param,
@@ -59,7 +59,7 @@ class OCLConvolutionLayer : public ConvolutionLayer<Dtype> {
    *  - engine: convolution has CAFFE (matrix multiplication) and CUDNN (library
    *    kernels + stream parallelism) engines.
    */
-  explicit OCLConvolutionLayer(const LayerParameter& param)
+  explicit OCLCRLayer(const LayerParameter& param)
       : ConvolutionLayer<Dtype>(param) {}
   virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
@@ -75,30 +75,22 @@ class OCLConvolutionLayer : public ConvolutionLayer<Dtype> {
       const vector<Blob<Dtype>*>& top);
   virtual void Backward_ocl(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
-  virtual void ocl_backward_conv(const vector<Blob<Dtype>*>& top,
-      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
-  void copyToHalf(const float *input, chalf *output, int size, int xdim,
+  void copyToHalf(const Dtype *input, chalf *output, int size, int xdim,
       int xdim_pad);
-  void copyToFloat(const chalf *input, float *output, int size, int xdim,
-      int xdim_pad);
-  void copyToHalfWeights(const float *input, chalf *output, int size,
+  void copyToHalfWeights(const Dtype *input, chalf *output, int size,
       int ksize, int ksize_pad);
-  void copyToFloatWeights(const chalf *input, float *output, int size,
+  void copyToFloatWeights(const chalf *input, Dtype *output, int size,
       int ksize, int ksize_pad);
-  void ocl_conv(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
 
  private:
   kernel_params ocl_params_;
   int batch_;
   Blob<char> relu_indices; 
-  Blob<chalf> input_pad_h;
   Blob<chalf> weights_pad_h;
-  Blob<chalf> output_pad_h;
   Blob<chalf> bias_h;
 };
 #endif
 
 }  // namespace caffe
 
-#endif  // CAFFE_OCL_CONV_LAYER_HPP_
+#endif  // CAFFE_OCL_CR_LAYER_HPP_

@@ -10,7 +10,7 @@ namespace caffe {
 template <>
 void OCLInnerProductLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
     const vector<Blob<float>*>& top) {
-  cl_event event;
+/*  cl_event event;
   const float* bottom_data = bottom[0]->ocl_data();
   float* top_data = top[0]->mutable_ocl_data();
   const float* weight = this->blobs_[0]->ocl_data();
@@ -33,7 +33,8 @@ void OCLInnerProductLayer<float>::Call_ocl(const vector<Blob<float>*>& bottom,
     const float *bias_vals = this->blobs_[1]->cpu_data();
     caffe_cpu_gemm(CblasNoTrans, CblasNoTrans, M_, N_, 1, float(1.0),
         bmult, bias_vals, float(1.0), top_data);
-  }
+  }*/
+  Forward_cpu(bottom, top);
 }
 
 template <>

@@ -217,20 +217,29 @@ class Blob {
   }
 
   const Dtype* cpu_data() const;
+  const Dtype* cpu_data(size_t size) const;
   void set_cpu_data(Dtype* data);
   const int* gpu_shape() const;
   const Dtype* gpu_data() const;
   const Dtype* ocl_data() const;
+  const Dtype* ocl_data(size_t size) const;
   const Dtype* cpu_diff() const;
+  const Dtype* cpu_diff(size_t size) const;
   const Dtype* gpu_diff() const;
   const Dtype* ocl_diff() const;
+  const Dtype* ocl_diff(size_t size) const;
   Dtype* mutable_cpu_data();
+  Dtype* mutable_cpu_data(size_t size);
   Dtype* mutable_gpu_data();
   Dtype* mutable_ocl_data();
   Dtype* mutable_ocl_data(int RW);
+  Dtype* mutable_ocl_data(int RW, size_t size);
   Dtype* mutable_cpu_diff();
+  Dtype* mutable_cpu_diff(size_t size);
   Dtype* mutable_gpu_diff();
   Dtype* mutable_ocl_diff();
+  Dtype* mutable_ocl_diff(int RW);
+  Dtype* mutable_ocl_diff(int RW, size_t size);
   void Update();
   void FromProto(const BlobProto& proto, bool reshape = true);
   void ToProto(BlobProto* proto, bool write_diff = false) const;

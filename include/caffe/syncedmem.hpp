@@ -55,14 +55,18 @@ class SyncedMemory {
 
   ~SyncedMemory();
   const void* cpu_data();
+  const void* cpu_data(size_t size);
   void set_cpu_data(void* data);
   const void* gpu_data();
   const void* ocl_data();
+  const void* ocl_data(size_t size);
   void set_gpu_data(void* data);
   void* mutable_cpu_data();
+  void* mutable_cpu_data(size_t size);
   void* mutable_gpu_data();
   void* mutable_ocl_data();
   void* mutable_ocl_data(int RW);
+  void* mutable_ocl_data(int RW, size_t size);
   enum SyncedHead { UNINITIALIZED, HEAD_AT_CPU, HEAD_AT_GPU, HEAD_AT_OCL,
     SYNCED };
   SyncedHead head() { return head_; }
@@ -72,9 +76,9 @@ class SyncedMemory {
 #endif
 
  private:
-  void to_cpu();
+  void to_cpu(size_t size);
   void to_gpu();
-  void to_ocl(int RW);
+  void to_ocl(int RW, size_t size);
   void* cpu_ptr_;
   void* gpu_ptr_;
   void* ocl_ptr_;

@@ -28,7 +28,12 @@ SyncedMemory::~SyncedMemory() {
 #endif
 }
 
-inline void SyncedMemory::to_cpu() {
+inline void SyncedMemory::to_cpu(size_t size) {
+  int tx_size_;
+  if (size != 0)
+    tx_size_ = size;
+  else
+    tx_size_ = size_;
   switch (head_) {
   case UNINITIALIZED:
     CaffeMallocHost(&cpu_ptr_, size_, &cpu_malloc_use_cuda_);
@@ -55,7 +60,7 @@ inline void SyncedMemory::to_cpu() {
       own_cpu_data_ = true;
     }
     clEnqueueReadBuffer(oclCommandQueue, (cl_mem)ocl_ptr_, CL_TRUE, 0,
-        size_, cpu_ptr_, 0, NULL, NULL);
+        tx_size_, cpu_ptr_, 0, NULL, NULL);
     head_ = SYNCED;
 #else
     NO_OCL;
@@ -96,31 +101,36 @@ inline void SyncedMemory::to_gpu() {
 #endif
 }
 
-inline void SyncedMemory::to_ocl(int RW) {
+inline void SyncedMemory::to_ocl(int RW, size_t size) {
 #ifdef USE_OCL
+  size_t tx_size_;
+  if (size != 0)
+    tx_size_ = size;
+  else
+    tx_size_ = size_;
   switch (head_) {
   case UNINITIALIZED:
     CaffeMallocHost(&cpu_ptr_, size_, &cpu_malloc_use_cuda_);
     caffe_memset(size_, 0, cpu_ptr_);
     own_cpu_data_ = true;
     ocl_ptr_ = reinterpret_cast<void *>(clCreateBuffer(oclContext,
-        CL_MEM_READ_WRITE, size_, NULL, NULL));
+        CL_MEM_READ_WRITE, tx_size_, NULL, NULL));
     if (RW)
       clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
-          size_, cpu_ptr_, 0, NULL, NULL);
+          tx_size_, cpu_ptr_, 0, NULL, NULL);
     head_ = HEAD_AT_OCL;
     break;
   case HEAD_AT_CPU:
     if (ocl_ptr_ == NULL) {
       ocl_ptr_ = reinterpret_cast<void *>(clCreateBuffer(oclContext,
-          CL_MEM_READ_WRITE, size_, NULL, NULL));
+          CL_MEM_READ_WRITE, tx_size_, NULL, NULL));
       if (RW)
         clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
-            size_, cpu_ptr_, 0, NULL, NULL);
+            tx_size_, cpu_ptr_, 0, NULL, NULL);
     } else {
       if (RW)
         clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
-            size_, cpu_ptr_, 0, NULL, NULL);
+            tx_size_, cpu_ptr_, 0, NULL, NULL);
     }
     head_ = SYNCED;
     break;
@@ -135,7 +145,12 @@ inline void SyncedMemory::to_ocl(int RW) {
 }
 
 const void* SyncedMemory::cpu_data() {
-  to_cpu();
+  to_cpu(0);
+  return (const void*)cpu_ptr_;
+}
+
+const void* SyncedMemory::cpu_data(size_t size) {
+  to_cpu(size);
   return (const void*)cpu_ptr_;
 }
 
@@ -161,7 +176,16 @@ const void* SyncedMemory::gpu_data() {
 
 const void* SyncedMemory::ocl_data() {
 #ifdef USE_OCL
-  to_ocl(1);
+  to_ocl(1, 0);
+  return (const void*)ocl_ptr_;
+#else
+  NO_OCL;
+#endif
+}
+
+const void* SyncedMemory::ocl_data(size_t size) {
+#ifdef USE_OCL
+  to_ocl(1, size);
   return (const void*)ocl_ptr_;
 #else
   NO_OCL;
@@ -189,7 +213,13 @@ void SyncedMemory::set_gpu_data(void* data) {
 }
 
 void* SyncedMemory::mutable_cpu_data() {
-  to_cpu();
+  to_cpu(0);
+  head_ = HEAD_AT_CPU;
+  return cpu_ptr_;
+}
+
+void* SyncedMemory::mutable_cpu_data(size_t size) {
+  to_cpu(size);
   head_ = HEAD_AT_CPU;
   return cpu_ptr_;
 }
@@ -207,7 +237,7 @@ void* SyncedMemory::mutable_gpu_data() {
 
 void* SyncedMemory::mutable_ocl_data() {
 #ifdef USE_OCL
-  to_ocl(1);
+  to_ocl(1, 0);
   head_ = HEAD_AT_OCL;
   return ocl_ptr_;
 #else
@@ -217,13 +247,24 @@ void* SyncedMemory::mutable_ocl_data() {
 
 void* SyncedMemory::mutable_ocl_data(int RW) {
 #ifdef USE_OCL
-  to_ocl(RW);
+  to_ocl(RW, 0);
   head_ = HEAD_AT_OCL;
   return ocl_ptr_;
 #else
   NO_OCL;
 #endif
 }
+
+void* SyncedMemory::mutable_ocl_data(int RW, size_t size) {
+#ifdef USE_OCL
+  to_ocl(RW, size);
+  head_ = HEAD_AT_OCL;
+  return ocl_ptr_;
+#else
+  NO_OCL;
+#endif
+}
+
 
 #ifndef CPU_ONLY
 void SyncedMemory::async_gpu_push(const cudaStream_t& stream) {

@@ -406,6 +406,7 @@ message LayerParameter {
   optional TileParameter tile_param = 138;
   optional WindowDataParameter window_data_param = 129;
   optional HalfConversionParameter half_conversion_param = 150;
+  optional PadParameter pad_param = 151;
 }
 
 // Message that stores parameters used to apply transformation
@@ -1414,5 +1415,13 @@ message HalfConversionParameter {
   // Half conversion specification parameter
   // convert_to = true: convert to half
   // convert_to = false: convert from half
-  optional bool convert_to = 1;
+  optional bool convert_to = 1 [default = true];
+}
+
+message PadParameter {
+  // Pad specification parameters
+  // pad = true: pad x-dimension
+  // pad = false: unpad x-dimension using y-dimension
+  optional bool pad = 1 [default = true];
+  optional uint32 pad_val = 2 [default = 16];
 }
