@@ -407,6 +407,7 @@ message LayerParameter {
   optional WindowDataParameter window_data_param = 129;
   optional HalfConversionParameter half_conversion_param = 150;
   optional PadParameter pad_param = 151;
+  optional CRParameter cr_param = 152;
 }
 
 // Message that stores parameters used to apply transformation
@@ -1424,4 +1425,11 @@ message PadParameter {
   // pad = false: unpad x-dimension using y-dimension
   optional bool pad = 1 [default = true];
   optional uint32 pad_val = 2 [default = 16];
+}
+
+message CRParameter {
+  // Conv-ReLU specification parameters
+  // relu = 1, enable relu
+  // relu = 0, disable relu
+  optional uint32 relu = 1 [default = 0];
 }

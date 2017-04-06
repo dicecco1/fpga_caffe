@@ -10,6 +10,7 @@ template <typename Dtype>
 void OCLCRLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
   BaseConvolutionLayer<Dtype>::LayerSetUp(bottom, top);
+  CRParameter cr_param = this->layer_param_.cr_param(); 
   kernel_params *params = &ocl_params_;
   params->ydim = bottom[0]->shape(2);
   params->xdim = bottom[0]->shape(3);
@@ -68,7 +69,7 @@ void OCLCRLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   params->rpo = params->inchannels / burstchannels_;
   params->numgroups = this->group_;
   params->fc = 0;
-  params->relu = 1;
+  params->relu = cr_param.relu();
   batch_ = num_ / params->numimages;
 }
 
@@ -164,77 +165,76 @@ void OCLCRLayer<Dtype>::copyToFloatWeights(const chalf *input,
 template <typename Dtype>
 void OCLCRLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
-  if (this->layer_param_.ocl_enable()) {
-    kernel_params *params = &ocl_params_;
-    int wsize = params->outchannels * params->numgroups * params->inchannels;
-    copyToHalfWeights(this->blobs_[0]->cpu_data(),
-        weights_pad_h.mutable_cpu_data(), wsize, params->ksize,
-        weights_pad_h.shape(3));
-    copyToHalf(this->blobs_[1]->mutable_cpu_data(), bias_h.mutable_cpu_data(),
-        params->outchannels, 1, 1);
-    const chalf *weight_data = weights_pad_h.ocl_data();
-    const chalf *bias_data = bias_h.ocl_data();
+  kernel_params *params = &ocl_params_;
+  int wsize = params->outchannels * params->numgroups * params->inchannels;
+  copyToHalfWeights(this->blobs_[0]->cpu_data(),
+      weights_pad_h.mutable_cpu_data(), wsize, params->ksize,
+      weights_pad_h.shape(3));
+  copyToHalf(this->blobs_[1]->mutable_cpu_data(), bias_h.mutable_cpu_data(),
+      params->outchannels, 1, 1);
+  const chalf *weight_data = weights_pad_h.ocl_data();
+  const chalf *bias_data = bias_h.ocl_data();
 
-    std::vector<cl_event> events(batch_ * this->group_);
+  params->backward = 0;
+  int numgroups_ = params->numgroups;
 
-    params->backward = 0;
-    int numgroups_ = params->numgroups;
+  vector<int> shape(4);
+  shape[0] = 1;
+  shape[1] = 1;
+  shape[2] = 1;
+  shape[3] = sizeof(kernel_params) / sizeof(int);
+  Blob<int> *param_vals = new Blob<int>(shape);
 
-    vector<int> shape(4);
-    shape[0] = 1;
-    shape[1] = 1;
-    shape[2] = 1;
-    shape[3] = sizeof(kernel_params) / sizeof(int);
-    Blob<int> *param_vals = new Blob<int>(shape);
+  int *conv_params = param_vals->mutable_cpu_data();
 
-    int *conv_params = param_vals->mutable_cpu_data();
+  for (int i = 0; i < shape[3]; ++i) {
+    conv_params[i] = ((int *)params)[i];
+    std::cout<<conv_params[i]<<std::endl;
+  }
+  std::cout<<batch_<<std::endl;
+  
+  const int* cr_params = param_vals->ocl_data();
 
-    for (int i = 0; i < shape[3]; ++i) {
-      conv_params[i] = ((int *)params)[i];
-      std::cout<<conv_params[i]<<std::endl;
-    }
+  size_t insize = sizeof(chalf) * bottom[0]->count();
+  size_t outsize = sizeof(chalf) * top[0]->count();
+  std::vector<cl_event> events;
 
-    const int* cr_params = param_vals->ocl_data();
+  int events_size = batch_ * numgroups_;
 
-    size_t insize = sizeof(chalf) * bottom[0]->count();
-    size_t outsize = sizeof(chalf) * top[0]->count();
+  chalf *top_data;
+  char *relu_vals;
+  for (int i = 0; i < bottom.size(); i++) {
+    events.resize(events_size, 0);
+    const chalf *bottom_data =
+      reinterpret_cast<const chalf *>(bottom[i]->ocl_data(insize));
+    top_data = reinterpret_cast<chalf *>(top[i]->mutable_ocl_data(0,
+          outsize));
+    relu_vals = relu_indices.mutable_ocl_data(0);
+    clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
+      (const void *)&bottom_data);
+    clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
+      (const void *)&weight_data);
+    clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
+      (const void *)&bias_data);
+    clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
+      (const void *)&top_data);
+    clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
+      (const void *)&relu_vals);
+    clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
+      (const void *)&cr_params);
 
-    chalf *top_data;
-    char *relu_vals;
-    for (int i = 0; i < bottom.size(); i++) {
-      const chalf *bottom_data =
-        reinterpret_cast<const chalf *>(bottom[i]->ocl_data(insize));
-      top_data = reinterpret_cast<chalf *>(top[i]->mutable_ocl_data(0,
-            outsize));
-      relu_vals = relu_indices.mutable_ocl_data(0);
-      clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
-        (const void *)&bottom_data);
-      clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
-        (const void *)&weight_data);
-      clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
-        (const void *)&bias_data);
-      clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
-        (const void *)&top_data);
-      clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
-        (const void *)&relu_vals);
-      clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
-        (const void *)&cr_params);
-
-      for (int n = 0; n < batch_; ++n) {
-        for (int g = 0; g < numgroups_; ++g) {
-          clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
-              (const void *)&g);
-          clSetKernelArg(this->ocl_kernel, 7, sizeof(cl_int),
-              (const void *)&n);
-          clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0,
-              NULL, &(events[n * numgroups_ + g]));
-        }
+    for (int n = 0; n < batch_; ++n) {
+      for (int g = 0; g < numgroups_; ++g) {
+        clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
+            (const void *)&g);
+        clSetKernelArg(this->ocl_kernel, 7, sizeof(cl_int),
+            (const void *)&n);
+        clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0,
+            NULL, &(events[n * numgroups_ + g]));
       }
-      clWaitForEvents(batch_ * numgroups_, events.data());
-      top[i]->cpu_data(outsize);
     }
-  } else {
-    Forward_cpu(bottom, top);
+    clWaitForEvents(events.size(), events.data());
+    top[i]->cpu_data(outsize);
   }
 }
 
