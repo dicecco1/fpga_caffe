@@ -320,15 +320,16 @@ chalf operator*(chalf T, chalf U) {
   uint16 Udata_ = U.data_;
   ap_uint<5> e1 = (Tdata_) >> EXP_SHIFT_HP;
   ap_uint<5> e2 = (Udata_) >> EXP_SHIFT_HP;
-  ap_uint<11> mant1 = Tdata_ | MANT_NORM_HP;// 11 bits
-  ap_uint<11> mant2 = Udata_ | MANT_NORM_HP;// 11 bits
+  ap_uint<11> mant1_u = Tdata_;
+  ap_uint<11> mant2_u = Udata_;
+  ap_uint<11> mant1 = mant1_u | MANT_NORM_HP;// 11 bits
+  ap_uint<11> mant2 = mant2_u | MANT_NORM_HP;// 11 bits
   ap_uint<1> sign1 = (Tdata_) >> 15;
   ap_uint<1> sign2 = (Udata_) >> 15;
   ap_uint<1> sign_res = sign1 ^ sign2;
 
   ap_uint<16> sign = sign_res;
 
-  ap_uint<4> off = 15;
   ap_uint<12> mantres;
   ap_uint<10> mantresf;
   uint16 eresf;
@@ -350,9 +351,12 @@ chalf operator*(chalf T, chalf U) {
     // saturate results
     eres_t = 0x1E;
     mantresf = 0x3FF;
-  } else if ((e1 == 0) || (e2 == 0) || (eres < 0)) {
+  } else if (((e1 == 0) && (mant1_u == 0)) || ((e2 == 0) && (mant2_u == 0))) {
     // 0 * val, underflow
     eres_t = 0;
+    mantresf = 0;
+  } else if (eres <= 0) {
+    eres_t = 1;
     mantresf = 0;
   }
 
@@ -541,7 +545,10 @@ chalf operator+(chalf T, chalf U) {
   if (fpath_flag) {
     eres_t = eres_fpath_f;
     mantresf = sum_fpath_f;
-    if (eres + Rshifter >= 0x1F) {
+    if ((e1 == 0) && (e2 == 0)) {
+      eres_t = 0;
+      mantresf = 0;
+    } else if (eres + Rshifter >= 0x1F) {
       eres_t = 0x1E;
       mantresf = 0x3FF;
     } else {
@@ -549,7 +556,7 @@ chalf operator+(chalf T, chalf U) {
       mantresf = sum_fpath_f;
     }
   } else {
-    if ((eres - Lshifter < 1) || (Lshifter == 12)) {
+    if (((e1 == 0) && (e2 == 0)) ||(eres - Lshifter < 1) || (Lshifter == 12)) {
       eres_t = 0;
       mantresf = 0;
     } else {
