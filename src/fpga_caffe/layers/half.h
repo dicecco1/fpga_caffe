@@ -418,7 +418,7 @@ chalf operator*(chalf T, chalf U) {
 
   eres_t = eres;
   mantresf = mantres;
-  if (eres >= 0x1E) {
+  if (eres >= 0x1F) {
     // saturate results
     eres_t = 0x1E;
     mantresf = 0x3FF;
