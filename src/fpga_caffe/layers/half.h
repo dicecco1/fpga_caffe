@@ -629,16 +629,14 @@ chalf operator+(chalf T, chalf U) {
 
   ap_uint<5> eres_t;
 
-  ap_uint<5> eres_fpath_f = eres + Rshifter;
-  ap_uint<5> eres_cpath_f = eres - Lshifter;
+  ap_int<6> eres_fpath_f = eres + Rshifter;
+  ap_int<6> eres_cpath_f = eres - Lshifter;
 
   if (fpath_flag) {
-    eres_t = eres_fpath_f;
-    mantresf = sum_fpath_f;
-    if (eres + Rshifter >= 0x1F) {
+    if (eres_fpath_f >= 0x1F) {
       eres_t = 0x1E;
       mantresf = 0x3FF;
-    } else if (((sum_t >> 10) & 0x1) == 0){
+    } else if ((((sum_t >> 10) & 0x1) == 0) || (eres_fpath_f <= 0)) {
       eres_t = 0;
       mantresf = sum_t >> 1;
     } else {
@@ -646,7 +644,7 @@ chalf operator+(chalf T, chalf U) {
       mantresf = sum_fpath_f;
     }
   } else {
-    if (eres - Lshifter < 1) {
+    if (eres_cpath_f < 1) {
       eres_t = 0;
       mantresf = sum_cpath_f >> 1;
     } else {
