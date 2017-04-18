@@ -330,13 +330,13 @@ chalf operator*(chalf T, chalf U) {
 
   if (denorm1) {
     e1 = 1;
-    mant1 = mant1_u;
+    mant1 = mant1_u & 0x3FF;
   } else {
     mant1 = mant1_u | MANT_NORM_HP;
   }
   if (denorm2) {
     e2 = 1;
-    mant2 = mant2_u;
+    mant2 = mant2_u & 0x3FF;
   } else {
     mant2 = mant2_u | MANT_NORM_HP;
   }
@@ -352,16 +352,12 @@ chalf operator*(chalf T, chalf U) {
   uint16 eresf;
   ap_uint<22> product = mant1 * mant2; // 22 bits
   //mantres = product >> 10; // 11 bits
-  ap_int<7> eres = e1 + e2 - 14;
-
-  ap_uint<23> prod_shift;
+  ap_int<6> eres = e1 + e2 - 14;
 
   ap_uint<5> shifter;
 
   // normalize
   if ((product >> 21) & 0x1) {
-    //mantres = (product >> 11);
-    //eres++;
     shifter = 0;
   } else if ((product >> 20) & 0x1) {
     shifter = 1;
@@ -413,11 +409,12 @@ chalf operator*(chalf T, chalf U) {
   if (shifter >= eres)
     shifter = eres;
 
+  if (eres <= 0)
+    shifter = 0;
+
   eres = eres - shifter;
 
-  prod_shift = product << shifter;
-
-  mantres = prod_shift >> 11;
+  mantres = (product << shifter) >> 11;
 
   ap_uint<5> eres_t;
 
@@ -503,8 +500,8 @@ chalf operator+(chalf T, chalf U) {
   uint16 Udata_ = U.data_;
   ap_uint<5> e1 = Tdata_ >> EXP_SHIFT_HP;
   ap_uint<5> e2 = Udata_ >> EXP_SHIFT_HP;
-  ap_uint<10> mant1 = Tdata_;
-  ap_uint<10> mant2 = Udata_;
+  ap_uint<11> mant1 = Tdata_;
+  ap_uint<11> mant2 = Udata_;
   ap_uint<1> sign1 = Tdata_ >> 15;
   ap_uint<1> sign2 = Udata_ >> 15;
 
@@ -523,7 +520,7 @@ chalf operator+(chalf T, chalf U) {
   ap_int<2> Rshifter = 0;
   ap_uint<4> Lshifter = 0;
  
-  ap_uint<10> mant1_s, mant2_s;
+  ap_uint<11> mant1_s, mant2_s;
   ap_uint<1> sign1_s, sign2_s;
   ap_uint<5> e1_s, e2_s;
 
@@ -541,7 +538,7 @@ chalf operator+(chalf T, chalf U) {
   
   if (denorm1) {
     e1_s = 1;
-    mant1_large = mant1_s;
+    mant1_large = mant1_s & 0x3FF;
   } else {
     mant1_large = mant1_s | MANT_NORM_HP;
   }
@@ -550,7 +547,7 @@ chalf operator+(chalf T, chalf U) {
  
   if (denorm2) {
     e2_s = 1;
-    mant2_large = mant2_s;
+    mant2_large = mant2_s & 0x3FF;
   } else {
     mant2_large = mant2_s | MANT_NORM_HP; 
   }
@@ -559,7 +556,6 @@ chalf operator+(chalf T, chalf U) {
   ap_uint<5> diff = e1_s - e2_s; 
 
   ap_uint<1> fpath_flag = (diff > 1) || EOP;
-
 
   // Close path, sub and (diff == 0 or diff == 1)
   ap_uint<12> mant1_cpath;
@@ -625,9 +621,11 @@ chalf operator+(chalf T, chalf U) {
   rnd_flag = (guard & round);
 
   if ((sum_t >> 11) & 0x1) {
+    // Right shift
     Rshifter = 1;
     sum_t = (sum_fpath >> 3) | (rnd_flag);
   } else if (((sum_t >> 10) & 0x1) == 0) {
+    // Left shift
     Rshifter = -1;
     sum_t = sum_fpath >> 1;
   }
@@ -645,7 +643,7 @@ chalf operator+(chalf T, chalf U) {
     if (eres_fpath_f >= 0x1F) {
       eres_t = 0x1E;
       mantresf = 0x3FF;
-    } else if ((((sum_t >> 10) & 0x1) == 0) || (eres_fpath_f <= 0)) {
+    } else if ((((sum_t >> 10) & 0x1) == 0) || (eres_fpath_f == 0)) {
       eres_t = 0;
       mantresf = sum_t >> 1;
     } else {
