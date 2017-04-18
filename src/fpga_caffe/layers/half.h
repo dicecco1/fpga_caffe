@@ -102,6 +102,7 @@ uint16 float2chalf_impl(float value)
     & (((((static_cast<uint32>(1)<<(shift_table[bits>>23]-1))-1)&bits)!=0)|hbits)
   #endif
   ;
+
   return hbits;
 }
 
@@ -584,6 +585,9 @@ chalf operator+(chalf T, chalf U) {
 
   Lshifter = LZD(sum_cpath);
 
+  if (Lshifter >= eres)
+    Lshifter = eres;
+
   ap_uint<10> sum_cpath_f = ((sum_cpath) << Lshifter) >> 1;
 
   // Far path
@@ -644,7 +648,7 @@ chalf operator+(chalf T, chalf U) {
       mantresf = sum_fpath_f;
     }
   } else {
-    if (eres_cpath_f < 1) {
+    if (eres_cpath_f == 0) {
       eres_t = 0;
       mantresf = sum_cpath_f >> 1;
     } else {
