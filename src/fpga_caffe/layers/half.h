@@ -352,59 +352,61 @@ chalf operator*(chalf T, chalf U) {
   uint16 eresf;
   ap_uint<22> product = mant1 * mant2; // 22 bits
   //mantres = product >> 10; // 11 bits
-  ap_int<7> eres = e1 + e2 - 15;
+  ap_int<7> eres = e1 + e2 - 14;
 
-  ap_int<6> shifter;
+  ap_uint<23> prod_shift;
+
+  ap_uint<5> shifter;
 
   // normalize
   if ((product >> 21) & 0x1) {
     //mantres = (product >> 11);
     //eres++;
-    shifter = -1;
-  } else if ((product >> 20) & 0x1) {
     shifter = 0;
-  } else if ((product >> 19) & 0x1) {
+  } else if ((product >> 20) & 0x1) {
     shifter = 1;
-  } else if ((product >> 18) & 0x1) {
+  } else if ((product >> 19) & 0x1) {
     shifter = 2;
-  } else if ((product >> 17) & 0x1) {
+  } else if ((product >> 18) & 0x1) {
     shifter = 3;
-  } else if ((product >> 16) & 0x1) {
+  } else if ((product >> 17) & 0x1) {
     shifter = 4;
-  } else if ((product >> 15) & 0x1) {
+  } else if ((product >> 16) & 0x1) {
     shifter = 5;
-  } else if ((product >> 14) & 0x1) {
+  } else if ((product >> 15) & 0x1) {
     shifter = 6;
-  } else if ((product >> 13) & 0x1) {
+  } else if ((product >> 14) & 0x1) {
     shifter = 7;
-  } else if ((product >> 12) & 0x1) {
+  } else if ((product >> 13) & 0x1) {
     shifter = 8;
-  } else if ((product >> 11) & 0x1) {
+  } else if ((product >> 12) & 0x1) {
     shifter = 9;
-  } else if ((product >> 10) & 0x1) {
+  } else if ((product >> 11) & 0x1) {
     shifter = 10;
-  } else if ((product >> 9) & 0x1) {
+  } else if ((product >> 10) & 0x1) {
     shifter = 11;
-  } else if ((product >> 8) & 0x1) {
+  } else if ((product >> 9) & 0x1) {
     shifter = 12;
-  } else if ((product >> 7) & 0x1) {
+  } else if ((product >> 8) & 0x1) {
     shifter = 13;
-  } else if ((product >> 6) & 0x1) {
+  } else if ((product >> 7) & 0x1) {
     shifter = 14;
-  }  else if ((product >> 5) & 0x1) {
+  } else if ((product >> 6) & 0x1) {
     shifter = 15;
-  } else if ((product >> 4) & 0x1) {
+  } else if ((product >> 5) & 0x1) {
     shifter = 16;
-  } else if ((product >> 3) & 0x1) {
+  } else if ((product >> 4) & 0x1) {
     shifter = 17;
-  } else if ((product >> 2) & 0x1) {
+  } else if ((product >> 3) & 0x1) {
     shifter = 18;
-  } else if ((product >> 1) & 0x1) {
+  } else if ((product >> 2) & 0x1) {
     shifter = 19;
-  } else if ((product >> 0) & 0x1) {
+  } else if ((product >> 1) & 0x1) {
     shifter = 20;
-  } else {
+  } else if ((product >> 0) & 0x1) {
     shifter = 21;
+  } else {
+    shifter = 22;
   }
 
   // shifter shouldn't be larger than the exponent
@@ -413,7 +415,9 @@ chalf operator*(chalf T, chalf U) {
 
   eres = eres - shifter;
 
-  mantres = (product << shifter) >> 10;
+  prod_shift = product << shifter;
+
+  mantres = prod_shift >> 11;
 
   ap_uint<5> eres_t;
 
@@ -423,11 +427,12 @@ chalf operator*(chalf T, chalf U) {
     // saturate results
     eres_t = 0x1E;
     mantresf = 0x3FF;
-  } else if (((e1 == 0) && (mant1_u == 0)) || ((e2 == 0) && (mant2_u == 0))) {
+  } else if (((e1 == 0) && (mant1_u == 0)) || ((e2 == 0) && (mant2_u == 0))
+      || (eres < 0)) {
     // 0 * val, underflow
     eres_t = 0;
     mantresf = 0;
-  } else if (eres <= 0) {
+  } else if (eres == 0) {
     eres_t = 0;
     mantresf = mantres >> 1;
   }
