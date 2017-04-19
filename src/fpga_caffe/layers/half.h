@@ -327,7 +327,6 @@ chalf operator*(chalf T, chalf U) {
   ap_uint<1> denorm2 = (e2 == 0) && (mant2_u != 0);
   ap_uint<11> mant1, mant2;
 
-
   if (denorm1) {
     e1 = 1;
     mant1 = mant1_u & 0x3FF;
@@ -351,8 +350,7 @@ chalf operator*(chalf T, chalf U) {
   ap_uint<10> mantresf;
   uint16 eresf;
   ap_uint<22> product = mant1 * mant2; // 22 bits
-  //mantres = product >> 10; // 11 bits
-  ap_int<6> eres = e1 + e2 - 14;
+  ap_int<7> eres = e1 + e2 - 14;
 
   ap_uint<5> shifter;
 
@@ -418,8 +416,6 @@ chalf operator*(chalf T, chalf U) {
 
   ap_uint<5> eres_t;
 
-  eres_t = eres;
-  mantresf = mantres;
   if (eres >= 0x1F) {
     // saturate results
     eres_t = 0x1E;
@@ -432,6 +428,9 @@ chalf operator*(chalf T, chalf U) {
   } else if (eres == 0) {
     eres_t = 0;
     mantresf = mantres >> 1;
+  } else {
+    eres_t = eres;
+    mantresf = mantres;
   }
 
   eresf = eres_t;
@@ -636,14 +635,14 @@ chalf operator+(chalf T, chalf U) {
 
   ap_uint<5> eres_t;
 
-  ap_int<6> eres_fpath_f = eres + Rshifter;
-  ap_int<6> eres_cpath_f = eres - Lshifter;
+  ap_int<7> eres_fpath_f = eres + Rshifter;
+  ap_int<7> eres_cpath_f = eres - Lshifter;
 
   if (fpath_flag) {
     if (eres_fpath_f >= 0x1F) {
       eres_t = 0x1E;
       mantresf = 0x3FF;
-    } else if ((((sum_t >> 10) & 0x1) == 0) || (eres_fpath_f == 0)) {
+    } else if ((((sum_t >> 10) & 0x1) == 0) || (eres_fpath_f <= 0)) {
       eres_t = 0;
       mantresf = sum_t >> 1;
     } else {
@@ -651,7 +650,7 @@ chalf operator+(chalf T, chalf U) {
       mantresf = sum_fpath_f;
     }
   } else {
-    if (eres_cpath_f == 0) {
+    if (eres_cpath_f <= 0) {
       eres_t = 0;
       mantresf = sum_cpath_f >> 1;
     } else {
