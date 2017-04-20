@@ -12,13 +12,13 @@
 #define EXP_SIZE 6 
 #define MANT_SIZE 9
 #define EXP_OFFSET ((1 << (EXP_SIZE - 1)) - 1)
-#define MAX_EXP (1 << EXP_SIZE) - 1
-#define MAX_MANT (1 << MANT_SIZE) - 1
+#define MAX_EXP ((1 << EXP_SIZE) - 1)
+#define MAX_MANT ((1 << MANT_SIZE) - 1)
 #define MANT_MASK_HP MAX_MANT
 #define MANT_NORM_HP (1 << MANT_SIZE)
 #define EXP_SHIFT_HP MANT_SIZE
 #define EXP_MASK_HP (MAX_EXP << MANT_SIZE)
-#define PRODUCT_SIZE (MANT_SIZE + 1) * 2
+#define PRODUCT_SIZE ((MANT_SIZE + 1) * 2)
 
 typedef uint16_t uint16;
 typedef uint32_t uint32;
@@ -82,7 +82,7 @@ inline float chalf2float_impl(uint16 value)
   uint16 mant = value & MANT_MASK_HP;
   uint16 exp = (value >> MANT_SIZE) & MAX_EXP;
   uint32 expf = (exp != 0) ? (exp + 127 - EXP_OFFSET) << 23 : 0;
-  uint32 mantf = (exp != 0) ? (value & 0x03FF) << (23 - MANT_SIZE) : 0;
+  uint32 mantf = (exp != 0) ? (mant) << (23 - MANT_SIZE) : 0;
   uint32 bits = sign | expf | mantf;
   uint32 *temp = &bits;
 
