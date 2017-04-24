@@ -20,7 +20,8 @@
 #define PRODUCT_SIZE ((MANT_SIZE + 1) * 2)
 #define SIGN_SHIFT (EXP_SIZE + MANT_SIZE)
 #define SIGN_MASK (1 << SIGN_SHIFT)
-#define ROUND_NEAREST 1 
+#define FP_WIDTH (EXP_SIZE + MANT_SIZE + 1)
+#define ROUND_NEAREST 0 
 
 typedef uint16_t uint16;
 typedef uint32_t uint32;
@@ -119,6 +120,8 @@ class chalf {
 
     chalf(uint32 rhs) : data_(rhs) {}
 
+    chalf(ap_uint<FP_WIDTH> rhs) : data_(rhs) {}
+
     operator float() const {
       return chalf2float(data_);
     }
@@ -138,7 +141,7 @@ class chalf {
     }
  
   private:
-#if ((EXP_SIZE + MANT_SIZE + 1) <= 16)
+#if FP_WIDTH <= 16
     uint16 data_;
 #else
     uint32 data_;
@@ -148,8 +151,8 @@ class chalf {
 chalf operator*(chalf T, chalf U) {
 #pragma HLS INLINE off
 #pragma HLS pipeline
-  uint32 Tdata_ = T.data_;
-  uint32 Udata_ = U.data_;
+  ap_uint<FP_WIDTH> Tdata_ = T.data_;
+  ap_uint<FP_WIDTH> Udata_ = U.data_;
   ap_uint<EXP_SIZE> e1 = (Tdata_) >> EXP_SHIFT;
   ap_uint<EXP_SIZE> e2 = (Udata_) >> EXP_SHIFT;
   ap_uint<MANT_SIZE + 1> mant1 = Tdata_ | MANT_NORM;// 11 bits
@@ -158,10 +161,10 @@ chalf operator*(chalf T, chalf U) {
   ap_uint<1> sign2 = (Udata_) >> SIGN_SHIFT;
   ap_uint<1> sign_res = sign1 ^ sign2;
 
-  uint32 sign = sign_res;
+  ap_uint<FP_WIDTH> sign = sign_res;
   ap_uint<MANT_SIZE + 2> mantres;
   ap_uint<MANT_SIZE> mantresf;
-  uint32 eresf;
+  ap_uint<FP_WIDTH> eresf;
   ap_uint<PRODUCT_SIZE> product = mant1 * mant2; // 22 bits
   mantres = product >> MANT_SIZE; // 11 bits
   ap_int<EXP_SIZE + 2> eres = e1 + e2 - EXP_OFFSET;
@@ -203,7 +206,7 @@ chalf operator*(chalf T, chalf U) {
 
   eresf = eres_t;
 
-  uint32 res;
+  ap_uint<FP_WIDTH> res;
 
   res = ((sign << SIGN_SHIFT) & SIGN_MASK) |
     ((eresf << EXP_SHIFT) & EXP_MASK) | mantresf;
@@ -348,8 +351,8 @@ ap_uint<5> LOD(ap_uint<24> sum_cpath) {
 chalf operator+(chalf T, chalf U) {
 #pragma HLS INLINE off
 #pragma HLS pipeline
-  uint32 Tdata_ = T.data_;
-  uint32 Udata_ = U.data_;
+  ap_uint<FP_WIDTH> Tdata_ = T.data_;
+  ap_uint<FP_WIDTH> Udata_ = U.data_;
   ap_uint<EXP_SIZE> e1 = Tdata_ >> EXP_SHIFT;
   ap_uint<EXP_SIZE> e2 = Udata_ >> EXP_SHIFT;
   ap_uint<MANT_SIZE> mant1 = Tdata_;
@@ -482,7 +485,7 @@ chalf operator+(chalf T, chalf U) {
 
   ap_uint<MANT_SIZE> sum_fpath_f = sum_t;
 
-  ap_uint<MANT_SIZE + EXP_SIZE + 1> sign = (fpath_flag) ? sign1_s :
+  ap_uint<FP_WIDTH> sign = (fpath_flag) ? sign1_s :
     sum_cpath_sign;
 
   ap_uint<EXP_SIZE> eres_t;
@@ -512,7 +515,7 @@ chalf operator+(chalf T, chalf U) {
 
   eresf = eres_t;
 
-  uint32 res;
+  ap_uint<FP_WIDTH> res;
   res = ((sign << SIGN_SHIFT) & SIGN_MASK) |
     ((eresf << EXP_SHIFT) & EXP_MASK) | mantresf;
 
@@ -520,15 +523,15 @@ chalf operator+(chalf T, chalf U) {
 }
 
 bool operator==(chalf T, chalf U) {
-  uint32 Tdata_ = T.data_;
-  uint32 Udata_ = U.data_;
+  ap_uint<FP_WIDTH> Tdata_ = T.data_;
+  ap_uint<FP_WIDTH> Udata_ = U.data_;
 
   return (Tdata_ == Udata_);
 }
 
 bool operator!=(chalf T, chalf U) {
-  uint32 Tdata_ = T.data_;
-  uint32 Udata_ = U.data_;
+  ap_uint<FP_WIDTH> Tdata_ = T.data_;
+  ap_uint<FP_WIDTH> Udata_ = U.data_;
 
   return (Tdata_ != Udata_);
 }
@@ -536,8 +539,8 @@ bool operator!=(chalf T, chalf U) {
 chalf max(chalf T, chalf U) {
 #pragma HLS INLINE off
 #pragma HLS pipeline
-  int32 Tdata_ = T.data_;
-  int32 Udata_ = U.data_;
+  ap_int<FP_WIDTH> Tdata_ = T.data_;
+  ap_int<FP_WIDTH> Udata_ = U.data_;
   chalf res;
 
   if (Tdata_ < Udata_)
@@ -551,7 +554,7 @@ chalf max(chalf T, chalf U) {
 chalf max(chalf T) {
 #pragma HLS INLINE off
 #pragma HLS pipeline
-  uint32 Tdata_ = T.data_;
+  ap_uint<FP_WIDTH> Tdata_ = T.data_;
   ap_uint<1> sign1 = Tdata_ >> SIGN_SHIFT;
 
   chalf res;
