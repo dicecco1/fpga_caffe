@@ -391,8 +391,10 @@ chalf operator+(chalf T, chalf U) {
 
   ap_uint<1> fpath_flag = (diff > 1) || EOP;
 
-  ap_uint<MANT_SIZE + 4> mant1_large = mant1_s | MANT_NORM;
-  ap_uint<PRODUCT_SIZE> mant2_large = mant2_s | MANT_NORM;
+  ap_uint<MANT_SIZE + 4> mant1_large = (e1_s != 0) ?
+    (ap_uint<MANT_SIZE + 4>)(mant1_s | MANT_NORM) : (ap_uint<MANT_SIZE + 4>)0;
+  ap_uint<PRODUCT_SIZE> mant2_large = (e2_s != 0) ?
+    (ap_uint<PRODUCT_SIZE>)(mant2_s | MANT_NORM) : (ap_uint<PRODUCT_SIZE>)0;
 
   // Close path, sub and (diff = 0 or diff = 1)
   ap_uint<MANT_SIZE + 2> mant1_cpath;
@@ -492,13 +494,15 @@ chalf operator+(chalf T, chalf U) {
 
   ap_uint<EXP_SIZE> eres_fpath_f = eres + Rshifter + rnd_ovfl;
   ap_uint<EXP_SIZE> eres_cpath_f = eres - Lshifter;
-
   if (fpath_flag) {
     eres_t = eres_fpath_f;
     mantresf = sum_fpath_f;
     if (eres + Rshifter + rnd_ovfl >= MAX_EXP) {
       eres_t = MAX_EXP - 1;
       mantresf = MAX_MANT;
+    } else if (eres + Rshifter <= 0) {
+      eres_t = 0;
+      mantresf = 0;
     } else {
       eres_t = eres_fpath_f;
       mantresf = sum_fpath_f;
