@@ -8,8 +8,8 @@
 #include <stdbool.h>
 #include "ap_int.h"
 
-#define EXP_SIZE 6
-#define MANT_SIZE 15
+#define EXP_SIZE 5
+#define MANT_SIZE 10 
 #define EXP_OFFSET ((1 << (EXP_SIZE - 1)) - 1)
 #define MAX_EXP ((1 << EXP_SIZE) - 1)
 #define MAX_MANT ((1 << MANT_SIZE) - 1)
@@ -504,7 +504,7 @@ chalf operator+(chalf T, chalf U) {
       mantresf = sum_fpath_f;
     }
   } else {
-    if ((eres - Lshifter < 1) || (Lshifter == 31)) {
+    if ((eres - Lshifter < 1) || (one_pos == 31)) {
       eres_t = 0;
       mantresf = 0;
     } else {
