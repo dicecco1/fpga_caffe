@@ -27,7 +27,7 @@ else ifeq (${SDA_FLOW}, hw)
 	XCLBIN = ${XCLBIN_NAME}.xclbin
 endif
 
-XCL_OPT += --platform ${DSA} --report estimate --nk ${KERNEL_NAME}:${NK} --kernel ${KERNEL_NAME} -I ${INCLUDE_DIR} -s -o ${XCLBIN}
+XCL_OPT += --platform ${DSA} --report estimate --nk ${KERNEL_NAME}:${NK} --kernel ${KERNEL_NAME} -I ${INCLUDE_DIR} -DSYNTHESIS -s -o ${XCLBIN}
 
 ${XCLBIN}: ${KERNEL_SRCS}
 	${XOCC} ${XCL_OPT} ${KERNEL_SRCS}

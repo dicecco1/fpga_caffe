@@ -16,29 +16,17 @@ class CRLayerFBHalfTest : public OCLDeviceTest<TypeParam> {
     params.resize(1);
     batch_size.resize(1);
     params[0].numgroups = 1;
-    params[0].inchannels = 512;
-    params[0].outchannels = 512;
-    params[0].burstchannels = 256;
-    params[0].rpo = 2;
+    params[0].inchannels = 32;
+    params[0].outchannels = 32;
+    params[0].burstchannels = 32;
+    params[0].rpo = 1;
     params[0].rpofm = 1;
-    params[0].burstydim = 14;
-    params[0].ydim = 14;
-    params[0].xdim = 14;
+    params[0].burstydim = 16;
+    params[0].ydim = 16;
+    params[0].xdim = 16;
     params[0].xtile_pad = 8;
-    params[0].numimages = 8;
-    batch_size[0] = 8;
-/*    params[1].numgroups = 1;
-    params[1].inchannels = 16;
-    params[1].outchannels = 16;
-    params[1].burstchannels = 16;
-    params[1].rpo = 1;
-    params[1].rpofm = 1;
-    params[1].burstydim = 28;
-    params[1].ydim = 28;
-    params[1].xdim = 28;
-    params[1].xtile_pad = 16;
-    params[1].numimages = 1;
-    batch_size[1] = 1;*/
+    params[0].numimages = 1;
+    batch_size[0] = 1;
   }
 
   virtual ~CRLayerFBHalfTest() {}
@@ -263,7 +251,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3F_HALF) {
     this->input.resize(insize, 0);
     this->input_pad.resize(insize_pad, 0);
     this->input_pad_half.resize(insize_pad, chalf(0));
-    this->weights.resize(wsize, 0);
+    this->weights.resize(wsize, 1);
     this->weights_pad.resize(wsize_pad, 0);
     this->weights_pad_half.resize(wsize_pad, chalf(0));
     this->bias.resize(bsize, 0);
@@ -274,7 +262,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3F_HALF) {
     this->relu_vals.resize(outsize_pad, 0);
     events.resize(events_size);
     // Populate vectors
-    fillVectorHalf(this->input, 0.0, 1.0);
+    fillVectorHalf(this->input, -1e-7, 1e-7);
     fillVectorHalf(this->weights, -1.0, 1.0);
     fillVectorHalf(this->bias, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
@@ -358,8 +346,9 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3F_HALF) {
     for (int j = 0; j < size; ++j) {
       for (int x = 0; x < params[i].xtile_pad * 2; ++x) {
         if (x < params[i].xdim) {
+          std::cout<<this->sw_results[j * params[i].xdim + x]<<" "<<this->hw_results[j * params[i].xtile_pad * 2 + x]<<std::endl;
           EXPECT_TRUE(checkEQ(this->sw_results[j * params[i].xdim + x],
-              this->hw_results[j * params[i].xtile_pad * 2 + x], 1e-1, 1e-1));
+              this->hw_results[j * params[i].xtile_pad * 2 + x], 1e-2, 1e-2));
         }
       }
     }
@@ -679,7 +668,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3B_HALF) {
   for (int i = 0; i < params.size(); ++i) {
     // Set sizes
     params[i].ksize = ksize;
-    params[i].relu = 0;//1;
+    params[i].relu = 1;
     params[i].backward = 1;
     int insize = params[i].numimages * params[i].inchannels * params[i].ydim *
       params[i].xdim * params[i].numgroups;
@@ -722,9 +711,9 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3B_HALF) {
     this->relu_vals.resize(insize_pad, 1);
     events.resize(events_size);
     // Populate vectors
-    fillVectorHalf(this->input, -1.0, 1.0);
+    //fillVectorHalf(this->input, 0, 0);
     fillVectorHalf(this->weights, 0.0, 1.0);
-    fillVectorHalf(this->bias, -1.0, 1.0);
+    //fillVectorHalf(this->bias, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyVector(this->weights, this->weights_pad, params[i].xdim,
@@ -801,8 +790,9 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3B_HALF) {
       params[i].inchannels;
     for (int j = 0; j < size; ++j) {
       for (int k = 0; k < ksize * ksize; ++k) {
+        std::cout<<this->sw_results[j * ksize * ksize + k]<<" "<<this->hw_results[j * ksize_pad + k]<<std::endl;
         EXPECT_TRUE(checkEQ(this->sw_results[j * ksize * ksize + k], 
-              this->hw_results[j * ksize_pad + k], 1e-1, 1e-1));
+              this->hw_results[j * ksize_pad + k], 1e-2, 1e-2));
       }
     }
     clReleaseMemObject(this->ocl_input);
@@ -826,7 +816,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR5x5B_HALF) {
   for (int i = 0; i < params.size(); ++i) {
     // Set sizes
     params[i].ksize = ksize;
-    params[i].relu = 1;
+    params[i].relu = 0;
     params[i].backward = 1;
     int insize = params[i].numimages * params[i].inchannels * params[i].ydim *
       params[i].xdim * params[i].numgroups;
@@ -866,12 +856,12 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR5x5B_HALF) {
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize_pad, 0);
     this->hw_results_half.resize(outsize_pad, chalf(0));
-    this->relu_vals.resize(insize_pad, 1);
+    this->relu_vals.resize(insize_pad, 0);
     events.resize(events_size);
     // Populate vectors
     fillVectorHalf(this->input, -1.0, 1.0);
-    fillVectorHalf(this->weights, 0.0, 1.0);
-    fillVectorHalf(this->bias, -1.0, 1.0);
+    fillVectorHalf(this->weights, 1e-7, 1e-5);
+    //fillVectorHalf(this->bias, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyVector(this->weights, this->weights_pad, params[i].xdim,
@@ -951,9 +941,11 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR5x5B_HALF) {
       int wtoff = j * ksize_pad;
       for (int k = 0; k < ksize; ++k) {
         for (int l = 0; l < 3; ++l) {
+          std::cout<<this->sw_results[woff + k * 5 + l]<<" "<<this->hw_results[wtoff + k * 3 + l]<<std::endl;
           EXPECT_TRUE(checkEQ(this->sw_results[woff + k * 5 + l], 
                 this->hw_results[wtoff + k * 3 + l], 1e-1, 1e-1));
           if (l < 2) {
+            std::cout<<this->sw_results[woff + k * 5 + l + 3]<<" "<<this->hw_results[wtoff + k * 3 + l + 16]<<std::endl;
             EXPECT_TRUE(checkEQ(this->sw_results[woff + k * 5 + l + 3], 
                   this->hw_results[wtoff + k * 3 + l + 16], 1e-1, 1e-1));
           }
@@ -968,7 +960,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR5x5B_HALF) {
     clReleaseMemObject(this->ocl_params);
   }
 }
-/*
+
 TYPED_TEST(CRLayerFBHalfTest, TestFCF_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
@@ -1435,4 +1427,4 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCB_HALF) {
   clReleaseMemObject(this->ocl_bias);
   clReleaseMemObject(this->ocl_relu_vals);
   clReleaseMemObject(this->ocl_params);
-}*/
+}

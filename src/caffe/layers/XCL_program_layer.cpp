@@ -7,29 +7,39 @@
 namespace caffe {
 
 template <typename Dtype>
+void XCLProgramLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+    const vector<Blob<Dtype>*>& top) {
+  program_ = true; 
+}
+
+template <typename Dtype>
 void XCLProgramLayer<Dtype>::Forward_ocl(const vector <Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top) {
+  XCLParameter xcl_param = this->layer_param_.xcl_param();
+  if (program_) {
+    cl_int error;
 
-  cl_int error;
+    string path(".build_release/opencl/src/caffe/layers/");
 
-  string path(".build_release/opencl/src/caffe/layers/");
+    const char *filename = (path + xcl_param.xcl_name()).c_str();
 
-  const char *filename = (path + this->layer_param_.xcl_name()).c_str();
+    char *sourceStr;
+    size_t sourceSize = caffe::convertToString(filename, &sourceStr);
 
-  char *sourceStr;
-  size_t sourceSize = caffe::convertToString(filename, &sourceStr);
+    clReleaseKernel(this->ocl_kernel);
+    clReleaseProgram(this->ocl_layer_program);
 
-  clReleaseKernel(this->ocl_kernel);
-  clReleaseProgram(this->ocl_layer_program);
+    this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1,
+        &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL,
+        &error);
+    clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, &error);
 
-  this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1,
-      &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL,
-      &error);
-  clBuildProgram(this->ocl_layer_program, 0, NULL, NULL, NULL, &error);
-
-  delete[] sourceStr;
-  this->ocl_kernel = clCreateKernel(this->ocl_layer_program,
-      this->layer_param_.kernel_name().c_str(), &error);
+    delete[] sourceStr;
+    this->ocl_kernel = clCreateKernel(this->ocl_layer_program,
+        xcl_param.kernel_name().c_str(), &error);
+    if (xcl_param.once())
+      program_ = false;
+  }
 }
 
 template <typename Dtype>

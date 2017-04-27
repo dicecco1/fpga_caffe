@@ -15,8 +15,8 @@
 #include <fstream>
 #include <string>
 #include "time.h"
-#include "fpga_caffe/layers/layer.hpp"
-#include "fpga_caffe/layers/half.hpp"
+#include "fpga_caffe/layer.hpp"
+#include "fpga_caffe/half.hpp"
 
 using std::cout;
 using std::endl;

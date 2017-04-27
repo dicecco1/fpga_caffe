@@ -75,19 +75,33 @@ class OCLCRLayer : public ConvolutionLayer<Dtype> {
       const vector<Blob<Dtype>*>& top);
   virtual void Backward_ocl(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+  void backward_bias(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+  virtual void backward_data(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+  void backward_weights(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   void copyToHalf(const Dtype *input, chalf *output, int size, int xdim,
       int xdim_pad);
   void copyToHalfWeights(const Dtype *input, chalf *output, int size,
       int ksize, int ksize_pad);
-  void copyToFloatWeights(const chalf *input, Dtype *output, int size,
-      int ksize, int ksize_pad);
-
+  void copyToFloatWeights(chalf *input, Dtype *output, const vector<int>,
+      int ksize_pad);
+  void RotateWeightsHalf(const Dtype *input, chalf *output, vector<int> shape,
+      int ksize_pad);
  private:
   kernel_params ocl_params_;
+  kernel_params ocl_params_bw_;
+  kernel_params ocl_params_bb_;
+  kernel_params ocl_params_bi_;
   int batch_;
+  int batch_bi_;
+  int batch_bw_;
+  int batch_bb_;
   Blob<char> relu_indices; 
   Blob<chalf> weights_pad_h;
-  Blob<chalf> bias_h;
+  Blob<chalf> weights_pad_h_r;
+  Blob<chalf> bias_h, bias_null;
 };
 #endif
 

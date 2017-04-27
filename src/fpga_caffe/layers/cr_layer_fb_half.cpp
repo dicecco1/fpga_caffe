@@ -3,10 +3,10 @@
 #include <string.h>
 #include <stdbool.h>
 
-#include "../../../include/fpga_caffe/layers/conv_layer.hpp"
-#include "half.h"
+#include "../../../include/fpga_caffe/layer.hpp"
+#include "../../../include/fpga_caffe/half.hpp"
 
-#define HADD_LATENCY 10 
+#define HADD_LATENCY 12 
 #define OCFACT 1 
 /* chalf16 data type definition */
 

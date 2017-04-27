@@ -50,7 +50,7 @@ template <typename Dtype>
 void HalfConversionLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down,
     const vector<Blob<Dtype>*>& bottom) {
-  for (int i = 0; i < bottom.size(); ++i) {
+  for (int i = 0; i < bottom.size(); ++i) {  
     const int count = bottom[i]->count();
     if (convert_to_) {
       Dtype *bottom_diff = bottom[i]->mutable_cpu_diff();
@@ -66,7 +66,7 @@ void HalfConversionLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       for (int j = 0; j < count; ++j) {
         bottom_diff[j] = chalf((float)top_diff[j]);
       }
-    }  
+    }
   }
 }
 

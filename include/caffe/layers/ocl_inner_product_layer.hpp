@@ -23,6 +23,10 @@ class OCLInnerProductLayer : public InnerProductLayer<Dtype> {
  public:
   explicit OCLInnerProductLayer(const LayerParameter& param)
       : InnerProductLayer<Dtype>(param) {}
+  virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+  virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
 
   virtual inline const char* type() const { return "InnerProduct"; }
   virtual inline int ExactNumBottomBlobs() const { return 1; }
@@ -31,8 +35,28 @@ class OCLInnerProductLayer : public InnerProductLayer<Dtype> {
  protected:
   virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
-  virtual void Call_ocl(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
+  virtual void Backward_ocl(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+  void backward_bias(Dtype* bias, const Dtype* input);
+  void backward_data(const Dtype* input, const Dtype* weights, Dtype* output);
+  void backward_weights(const Dtype* input, const Dtype* output, Dtype*
+      weights);
+  void copyToHalf(const Dtype *input, chalf *output, int size, int xdim,
+      int xdim_pad);
+  void copyToFloat(const chalf *input, Dtype *output, int size, int xdim,
+      int xdim_pad);
+
+ private:
+  kernel_params ocl_params_;
+  kernel_params ocl_params_bw_;
+  kernel_params ocl_params_bb_;
+  kernel_params ocl_params_bi_;
+  int batch_;
+  Blob<char> relu_indices;
+  Blob<chalf> top_data_h;
+  Blob<chalf> weights_pad_h;
+  Blob<chalf> weights_pad_h_t;
+  Blob<chalf> bias_h;
 };
 #endif
 

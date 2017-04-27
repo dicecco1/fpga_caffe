@@ -1,7 +1,7 @@
 #include <cstdio>
 #include <cstring>
 #include <stdint.h>
-#include "half.h"
+#include "../../../include/fpga_caffe/half.hpp"
 
 extern "C" {
 

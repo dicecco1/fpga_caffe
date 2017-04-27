@@ -68,15 +68,6 @@ TYPED_TEST(HalfTest, TestMult) {
     fillVector(this->input, -1.0, 1.0);
     fillVector(this->weights, -1.0, 1.0);
  
-    this->input[0] = std::numeric_limits<float>::infinity();
-    this->input[1] = -std::numeric_limits<float>::infinity();
-    this->input[2] = std::numeric_limits<float>::quiet_NaN();
-    this->input[3] = std::numeric_limits<float>::infinity();
-    this->weights[3] = std::numeric_limits<float>::infinity(); 
-    this->input[4] = 0;
-    this->weights[4] = std::numeric_limits<float>::infinity(); 
-    this->input[5] = std::numeric_limits<float>::infinity();
-    this->weights[5] = -std::numeric_limits<float>::infinity(); 
     this->input[6] = 0;
     this->weights[7] = 0;
     this->input[8] = 0.769412;
@@ -161,15 +152,6 @@ TYPED_TEST(HalfTest, TestAdd) {
     fillVector(this->input, -1.0, 1.0);
     fillVector(this->weights, -1.0, 1.0);
  
-    this->input[0] = std::numeric_limits<float>::infinity();
-    this->input[1] = -std::numeric_limits<float>::infinity();
-    this->input[2] = std::numeric_limits<float>::quiet_NaN();
-    this->input[3] = std::numeric_limits<float>::infinity();
-    this->weights[3] = std::numeric_limits<float>::infinity(); 
-    this->input[4] = 0;
-    this->weights[4] = std::numeric_limits<float>::infinity(); 
-    this->input[5] = std::numeric_limits<float>::infinity();
-    this->weights[5] = -std::numeric_limits<float>::infinity(); 
     this->input[6] = 0;
     this->weights[7] = 0;
     this->input[8] = 0.769412;

@@ -1,3 +1,6 @@
+#ifndef HALF_HPP_
+#define HALF_HPP_
+
 #include <algorithm>
 #include <iostream>
 #include <limits>
@@ -6,10 +9,13 @@
 #include <cstring>
 #include <stdint.h>
 #include <stdbool.h>
-#include "ap_int.h"
 
-#define EXP_SIZE 5
-#define MANT_SIZE 10 
+#ifdef SYNTHESIS
+#include "ap_int.h"
+#endif
+
+#define EXP_SIZE 6 
+#define MANT_SIZE 12 
 #define EXP_OFFSET ((1 << (EXP_SIZE - 1)) - 1)
 #define MAX_EXP ((1 << EXP_SIZE) - 1)
 #define MAX_MANT ((1 << MANT_SIZE) - 1)
@@ -45,7 +51,7 @@ chalf max(chalf T);
 /// \tparam R rounding mode to use, `std::round_indeterminate` for fastest rounding
 /// \param value single-precision value
 /// \return binary representation of chalf-precision value
-uint32 float2chalf_impl(float value)
+inline uint32 float2chalf_impl(float value)
 {
 #if HALF_ENABLE_CPP11_STATIC_ASSERT
   static_assert(std::numeric_limits<float>::is_iec559, "float to chalf conversion needs IEEE 754 conformant 'float' type");
@@ -66,7 +72,7 @@ uint32 float2chalf_impl(float value)
 /// Convert single-precision to chalf-precision.
 /// \param value single-precision value
 /// \return binary representation of chalf-precision value
-uint32 float2chalf(float value)
+inline uint32 float2chalf(float value)
 {
   return float2chalf_impl(value);
 }
@@ -120,7 +126,9 @@ class chalf {
 
     chalf(uint32 rhs) : data_(rhs) {}
 
+#ifdef SYNTHESIS
     chalf(ap_uint<FP_WIDTH> rhs) : data_(rhs) {}
+#endif
 
     operator float() const {
       return chalf2float(data_);
@@ -148,7 +156,11 @@ class chalf {
 #endif
 };
 
+#ifndef SYNTHESIS
+inline
+#endif
 chalf operator*(chalf T, chalf U) {
+#ifdef SYNTHESIS
 #pragma HLS INLINE off
 #pragma HLS pipeline
   ap_uint<FP_WIDTH> Tdata_ = T.data_;
@@ -212,8 +224,12 @@ chalf operator*(chalf T, chalf U) {
     ((eresf << EXP_SHIFT) & EXP_MASK) | mantresf;
 
   return chalf(res);
+#else
+  return chalf(float(T) * float(U));
+#endif
 }
 
+#ifdef SYNTHESIS
 ap_uint<5> LOD(ap_uint<24> sum_cpath) {
 #pragma HLS INLINE 
   ap_uint<5> one_pos;
@@ -347,8 +363,13 @@ ap_uint<5> LOD(ap_uint<24> sum_cpath) {
 
   return one_pos;
 }
+#endif
 
+#ifndef SYNTHESIS
+inline
+#endif
 chalf operator+(chalf T, chalf U) {
+#ifdef SYNTHESIS
 #pragma HLS INLINE off
 #pragma HLS pipeline
   ap_uint<FP_WIDTH> Tdata_ = T.data_;
@@ -524,23 +545,44 @@ chalf operator+(chalf T, chalf U) {
     ((eresf << EXP_SHIFT) & EXP_MASK) | mantresf;
 
   return chalf(res);
+#else
+  return chalf(float(T) + float(U));
+#endif
 }
 
+#ifndef SYNTHESIS
+inline
+#endif
 bool operator==(chalf T, chalf U) {
+#ifdef SYNTHESIS
   ap_uint<FP_WIDTH> Tdata_ = T.data_;
   ap_uint<FP_WIDTH> Udata_ = U.data_;
-
+#else
+  int32 Tdata_ = T.data_;
+  int32 Udata_ = U.data_;
+#endif
   return (Tdata_ == Udata_);
 }
 
+#ifndef SYNTHESIS
+inline
+#endif
 bool operator!=(chalf T, chalf U) {
+#ifdef SYNTHESIS
   ap_uint<FP_WIDTH> Tdata_ = T.data_;
   ap_uint<FP_WIDTH> Udata_ = U.data_;
-
+#else
+  uint32 Tdata_ = T.data_;
+  uint32 Udata_ = U.data_;
+#endif
   return (Tdata_ != Udata_);
 }
 
+#ifndef SYNTHESIS
+inline
+#endif
 chalf max(chalf T, chalf U) {
+#ifdef SYNTHESIS
 #pragma HLS INLINE off
 #pragma HLS pipeline
   ap_int<FP_WIDTH> Tdata_ = T.data_;
@@ -551,11 +593,29 @@ chalf max(chalf T, chalf U) {
     res = U;
   else
     res = T;  
+#else
+  chalf res;
+#if FP_WIDTH <= 16
+  int16 Tdata_ = T.data_;
+  int16 Udata_ = U.data_;
+#else
+  int32 Tdata_ = T.data_;
+  int32 Udata_ = U.data_;
+#endif
+  if (Tdata_ < Udata_)
+    res = U;
+  else
+    res = T;
+#endif
   return res;
 }
 
 // Compares T with 0
+#ifndef SYNTHESIS
+inline
+#endif
 chalf max(chalf T) {
+#ifdef SYNTHESIS
 #pragma HLS INLINE off
 #pragma HLS pipeline
   ap_uint<FP_WIDTH> Tdata_ = T.data_;
@@ -566,5 +626,15 @@ chalf max(chalf T) {
     res = chalf(0);
   else
     res = T;
+#else
+  chalf res;
+  uint32 sign = T.data_ >> SIGN_SHIFT;
+  if (sign == 1)
+    res = chalf(0);
+  else
+    res = T;
+#endif
   return res;
 }
+
+#endif  // HALF_HPP_

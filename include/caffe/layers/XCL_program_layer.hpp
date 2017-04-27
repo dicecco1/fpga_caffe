@@ -18,6 +18,8 @@ class XCLProgramLayer : public Layer<Dtype> {
  public:
   explicit XCLProgramLayer(const LayerParameter& param)
       : Layer<Dtype>(param) {}
+  virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
   virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {}
 
@@ -34,6 +36,7 @@ class XCLProgramLayer : public Layer<Dtype> {
   virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
 #endif
+  bool program_;
 };
 
 }  // namespace caffe

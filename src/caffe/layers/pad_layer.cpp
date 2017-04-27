@@ -50,7 +50,6 @@ void PadLayer<Dtype>::Forward_cpu(
   int size = bottom_shape_[0] * bottom_shape_[1] * bottom_shape_[2];
   int x_iters;
   int bottom_off, top_off;
-  std::cout<<"In forward pad"<<std::endl;
   if (pad_) {
     x_iters = xdim_pad_;
     top_off = xdim_pad_;

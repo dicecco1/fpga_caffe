@@ -39,17 +39,25 @@ void OCLUtil::Setup() {
   cl_program oclProgram = clCreateProgramWithBinary(oclContext, 1,
       &oclDevices, &sourceSize, (const unsigned char **)(&sourceStr), NULL,
       NULL);
-
   clBuildProgram(oclProgram, 0, NULL, NULL, NULL, NULL);
   oclKernel = clCreateKernel(oclProgram, kernel.c_str(), NULL);
 }
 
 void fillVector(std::vector<float>& input, float beg, float end) {
-  boost::random::mt19937 engine;
+  static boost::random::mt19937 engine(time(0));
   boost::random::uniform_real_distribution<float> dis(beg, end);
   std::vector<float>::iterator it;
   for (it = input.begin(); it < input.end(); ++it) {
     *it = dis(engine);
+  }
+}
+
+void fillVectorHalf(std::vector<float>& input, float beg, float end) {
+  static boost::random::mt19937 engine(time(0));
+  boost::random::uniform_real_distribution<float> dis(beg, end);
+  std::vector<float>::iterator it;
+  for (it = input.begin(); it < input.end(); ++it) {
+    *it = float(chalf(dis(engine)));
   }
 }
 
@@ -91,20 +99,56 @@ void copyWeights(std::vector<float> w_input, std::vector<float>& w_output,
   }
 }
 
+void toHalf(std::vector<float> input, std::vector<chalf>& output) {
+  for (int i = 0; i < input.size(); ++i) {
+    output[i] = chalf(input[i]);
+  } 
+}
+
+void toFloat(std::vector<chalf> input, std::vector<float>& output) {
+  for (int i = 0; i < input.size(); ++i) {
+    output[i] = float(input[i]);
+  }
+}
+
 void ref_fc_layer(std::vector<float> input, std::vector<float> weights,
     std::vector<float> bias, std::vector<float>& output,
     kernel_params params) {
-  int inchannels = params.inchannels;
+  int inchannels = params.xtile_pad * 2;
   int outchannels = params.outchannels;
 
-  for (int j = 0; j < outchannels; ++j)
-    output[j] = bias[j];
+  for (int n = 0; n < params.numimages; ++n) {
+    for (int j = 0; j < outchannels; ++j)
+      output[n * outchannels + j] = bias[j];
 
-  for (int i = 0; i < inchannels; ++i) {
-    for (int j = 0; j < outchannels; ++j) {
-      output[j] += input[i] * weights[i * outchannels + j];
+    for (int i = 0; i < inchannels; ++i) {
+      for (int j = 0; j < outchannels; ++j) {
+        output[n * outchannels + j] += input[n * inchannels + i] *
+          weights[j * inchannels + i];
+      }
     }
   }
+}
+
+void ref_backward_fc_layer(std::vector<float> input,
+    std::vector<float> weights, std::vector<float>& output,
+    kernel_params params) {
+  int inchannels = params.xtile_pad * 2;
+  int outchannels = params.outchannels;
+
+  for (int n = 0; n < params.numimages; ++n) {
+    for (int i = 0; i < inchannels; ++i) {
+      for (int j = 0; j < outchannels; ++j) {
+        output[j * inchannels + i] += input[i * params.numimages + n] *
+          weights[j * params.numimages + n];
+      }
+    }
+  }
+}
+
+void ref_relu_layer(std::vector<float>& output) {
+  for (int i = 0; i < output.size(); ++i)
+    output[i] = std::max((float)0.0, output[i]);
 }
 
 void ref_conv_layer(std::vector<float> input, std::vector<float> weights,
@@ -235,6 +279,10 @@ bool checkEQ(float expected, float result, float epsilon, float absError) {
   float absExpected = fabs(expected);
   float absResult = fabs(result);
   float diff = fabs(expected - result);
+
+
+  if ((isnan(expected) == 1) && isnan(expected) == isnan(result))
+    return true;
 
   if (expected == result) 
     return true;
