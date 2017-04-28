@@ -16,9 +16,9 @@ class CRLayerFBHalfTest : public OCLDeviceTest<TypeParam> {
     params.resize(1);
     batch_size.resize(1);
     params[0].numgroups = 1;
-    params[0].inchannels = 32;
-    params[0].outchannels = 32;
-    params[0].burstchannels = 32;
+    params[0].inchannels = 16;
+    params[0].outchannels = 16;
+    params[0].burstchannels = 16;
     params[0].rpo = 1;
     params[0].rpofm = 1;
     params[0].burstydim = 16;
@@ -346,7 +346,6 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3F_HALF) {
     for (int j = 0; j < size; ++j) {
       for (int x = 0; x < params[i].xtile_pad * 2; ++x) {
         if (x < params[i].xdim) {
-          std::cout<<this->sw_results[j * params[i].xdim + x]<<" "<<this->hw_results[j * params[i].xtile_pad * 2 + x]<<std::endl;
           EXPECT_TRUE(checkEQ(this->sw_results[j * params[i].xdim + x],
               this->hw_results[j * params[i].xtile_pad * 2 + x], 1e-2, 1e-2));
         }
@@ -790,7 +789,6 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3B_HALF) {
       params[i].inchannels;
     for (int j = 0; j < size; ++j) {
       for (int k = 0; k < ksize * ksize; ++k) {
-        std::cout<<this->sw_results[j * ksize * ksize + k]<<" "<<this->hw_results[j * ksize_pad + k]<<std::endl;
         EXPECT_TRUE(checkEQ(this->sw_results[j * ksize * ksize + k], 
               this->hw_results[j * ksize_pad + k], 1e-2, 1e-2));
       }
@@ -941,11 +939,9 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR5x5B_HALF) {
       int wtoff = j * ksize_pad;
       for (int k = 0; k < ksize; ++k) {
         for (int l = 0; l < 3; ++l) {
-          std::cout<<this->sw_results[woff + k * 5 + l]<<" "<<this->hw_results[wtoff + k * 3 + l]<<std::endl;
           EXPECT_TRUE(checkEQ(this->sw_results[woff + k * 5 + l], 
                 this->hw_results[wtoff + k * 3 + l], 1e-1, 1e-1));
           if (l < 2) {
-            std::cout<<this->sw_results[woff + k * 5 + l + 3]<<" "<<this->hw_results[wtoff + k * 3 + l + 16]<<std::endl;
             EXPECT_TRUE(checkEQ(this->sw_results[woff + k * 5 + l + 3], 
                   this->hw_results[wtoff + k * 3 + l + 16], 1e-1, 1e-1));
           }
@@ -1013,13 +1009,13 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCF_HALF) {
   this->relu_vals.clear();
   events.clear();
   // Resize vectors
-  this->input.resize(insize, 0);
+  this->input.resize(insize, 1.25);
   this->input_pad.resize(insize_pad, 0);
   this->input_pad_half.resize(insize_pad, chalf(0));
-  this->weights.resize(wsize, 0);
+  this->weights.resize(wsize, 0.25);
   this->weights_pad.resize(wsize_pad, 0);
   this->weights_pad_half.resize(wsize_pad, chalf(0));
-  this->bias.resize(bsize, 0);
+  this->bias.resize(bsize, 0.5);
   this->bias_half.resize(bsize, chalf(0));
   this->sw_results.resize(outsize, 0);
   this->hw_results.resize(outsize_pad, 0);
@@ -1028,9 +1024,9 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCF_HALF) {
   this->relu_vals.resize(outsize_pad, 0);
   events.resize(events_size);
   // Populate vectors
-  fillVectorHalf(this->input, 0.0, 1.0);
-  fillVectorHalf(this->weights, -1.0, 1.0);
-  fillVectorHalf(this->bias, 0.0, 1.0);
+  //fillVectorHalf(this->input, 0.0, 1.0);
+  //fillVectorHalf(this->weights, -1.0, 1.0);
+  //fillVectorHalf(this->bias, 0.0, 1.0);
   copyVector(this->input, this->input_pad, 1, 1);
   copyVector(this->weights, this->weights_pad, 1, 1);
 

@@ -289,10 +289,10 @@ void OCLCRLayer<Dtype>::copyToFloatWeights(chalf *input,
       } else if (ksize == 5) {
         for (int k = 0; k < 5; ++k) {
           for (int l = 0; l < 3; ++l) {
-            output[out_idx + k * 5 + l] =
+            output[out_idx + 24 - (k * 5 + l)] =
               (Dtype)(float(input[in_idx + k * 3 + l]));
             if (l < 2) {
-              output[out_idx + k * 5 + l + 3] =
+              output[out_idx + 21 - (k * 5 + l)] =
                 (Dtype)(float(input[in_idx + 16 + k * 3 + l]));
             }
           }
