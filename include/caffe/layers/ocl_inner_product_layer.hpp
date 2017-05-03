@@ -37,11 +37,15 @@ class OCLInnerProductLayer : public InnerProductLayer<Dtype> {
       const vector<Blob<Dtype>*>& top);
   virtual void Backward_ocl(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
-  void backward_bias(Dtype* bias, const Dtype* input);
-  void backward_data(const Dtype* input, const Dtype* weights, Dtype* output);
-  void backward_weights(const Dtype* input, const Dtype* output, Dtype*
-      weights);
+  virtual void backward_bias(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+  virtual void backward_data(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+  virtual void backward_weights(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   void copyToHalf(const Dtype *input, chalf *output, int size, int xdim,
+      int xdim_pad);
+  void copyPad(const chalf *input, chalf *output, int size, int xdim,
       int xdim_pad);
   void copyToFloat(const chalf *input, Dtype *output, int size, int xdim,
       int xdim_pad);
@@ -52,8 +56,14 @@ class OCLInnerProductLayer : public InnerProductLayer<Dtype> {
   kernel_params ocl_params_bb_;
   kernel_params ocl_params_bi_;
   int batch_;
+  int batch_bw_;
+  int batch_bb_;
+  int batch_bi_;
+  int pad_oc_;
+  bool swap_inputs_;
   Blob<char> relu_indices;
   Blob<chalf> top_data_h;
+  Blob<chalf> bottom_data_h;
   Blob<chalf> weights_pad_h;
   Blob<chalf> weights_pad_h_t;
   Blob<chalf> bias_h;

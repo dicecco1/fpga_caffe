@@ -221,8 +221,10 @@ TYPED_TEST(OCLCRLayerTest, TestForward1x1) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
 
-  layer_param.set_xcl_name("cr_layer_fb_half.xclbin");
-  layer_param.set_kernel_name("cr_layer_fb_half");
+  XCLParameter* xcl_param = layer_param.mutable_xcl_param();
+
+  xcl_param->set_xcl_name("cr_layer_fb_half.xclbin");
+  xcl_param->set_kernel_name("cr_layer_fb_half");
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
@@ -296,8 +298,10 @@ TYPED_TEST(OCLCRLayerTest, TestForward3x3) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
 
-  layer_param.set_xcl_name("cr_layer_fb_half.xclbin");
-  layer_param.set_kernel_name("cr_layer_fb_half");
+  XCLParameter* xcl_param = layer_param.mutable_xcl_param();
+
+  xcl_param->set_xcl_name("cr_layer_fb_half.xclbin");
+  xcl_param->set_kernel_name("cr_layer_fb_half");
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
@@ -371,8 +375,10 @@ TYPED_TEST(OCLCRLayerTest, TestForward5x5) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
 
-  layer_param.set_xcl_name("cr_layer_fb_half.xclbin");
-  layer_param.set_kernel_name("cr_layer_fb_half");
+  XCLParameter* xcl_param = layer_param.mutable_xcl_param();
+
+  xcl_param->set_xcl_name("cr_layer_fb_half.xclbin");
+  xcl_param->set_kernel_name("cr_layer_fb_half");
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);

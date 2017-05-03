@@ -1421,16 +1421,21 @@ message HalfConversionParameter {
 message PadParameter {
   // Pad specification parameters
   // pad = true: pad x-dimension
-  // pad = false: unpad x-dimension using y-dimension
+  // pad = false: unpad x-dimension using pad_to value or y-dimension if unset
   optional bool pad = 1 [default = true];
   optional uint32 pad_val = 2 [default = 16];
+  optional uint32 pad_to = 3 [default = 0];
 }
 
 message CRParameter {
   // Conv-ReLU specification parameters
   // relu = 1, enable relu
   // relu = 0, disable relu
+  // swap_inputs = true swaps the top_diff with the bottom_data for the
+  // backward pass w.r.t. weights
+
   optional uint32 relu = 1 [default = 0];
+  optional bool swap_inputs = 2 [default = false];
 }
 message XCLParameter {
   optional bool once = 1 [default = true];

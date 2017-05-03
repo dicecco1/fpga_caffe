@@ -1090,7 +1090,7 @@ TYPED_TEST(CuDNNConvolutionLayerTest, TestGradientGroupCuDNN) {
 
 #ifdef USE_OCL
 template <typename TypeParam>
-class oclConvolutionLayerTest : public MultiDeviceTest<TypeParam> {
+class oclConvolutionLayerTest : public OCLDeviceTest<TypeParam> {
   typedef typename TypeParam::Dtype Dtype;
 
  protected:
@@ -1130,7 +1130,7 @@ class oclConvolutionLayerTest : public MultiDeviceTest<TypeParam> {
   vector<Blob<Dtype>*> prog_top_;
 };
 
-TYPED_TEST_CASE(oclConvolutionLayerTest, TestDtypesAndDevices);
+TYPED_TEST_CASE(oclConvolutionLayerTest, TestOCLDtypesAndDevices);
 /*
 TYPED_TEST(oclConvolutionLayerTest, TestWinogradConv3x3) {
   Caffe::set_mode(Caffe::OCL);
@@ -1256,15 +1256,16 @@ TYPED_TEST(oclConvolutionLayerTest, TestWinogradConv1x1) {
 }
 */
 TYPED_TEST(oclConvolutionLayerTest, TestDirectConv3x3) {
-  Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
   this->blob_bottom_vec_.clear();
   this->blob_top_vec_.clear();
   this->blob_bottom_vec_.push_back(this->blob_bottom_);
   this->blob_top_vec_.push_back(this->blob_top_);
   LayerParameter layer_param;
-  layer_param.set_xcl_name("direct_conv.xclbin");
-  layer_param.set_kernel_name("direct_conv");
+  XCLParameter* xcl_param = layer_param.mutable_xcl_param();
+
+  xcl_param->set_xcl_name("cr_layer_fb_half.xclbin");
+  xcl_param->set_kernel_name("cr_layer_fb_half");
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
@@ -1292,20 +1293,22 @@ TYPED_TEST(oclConvolutionLayerTest, TestDirectConv3x3) {
   top_data = this->blob_top_->cpu_data();
   ref_top_data = this->ref_blob_top_->cpu_data();
   for (int i = 0; i < this->blob_top_->count(); ++i) {
-    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-3);
+    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-2);
   }
 }
 
 TYPED_TEST(oclConvolutionLayerTest, TestDirectConv5x5) {
-  Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
   this->blob_bottom_vec_.clear();
   this->blob_top_vec_.clear();
   this->blob_bottom_vec_.push_back(this->blob_bottom_);
   this->blob_top_vec_.push_back(this->blob_top_);
   LayerParameter layer_param;
-  layer_param.set_xcl_name("direct_conv.xclbin");
-  layer_param.set_kernel_name("direct_conv");
+  XCLParameter* xcl_param = layer_param.mutable_xcl_param();
+
+  xcl_param->set_xcl_name("cr_layer_fb_half.xclbin");
+  xcl_param->set_kernel_name("cr_layer_fb_half");
+
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
@@ -1333,20 +1336,22 @@ TYPED_TEST(oclConvolutionLayerTest, TestDirectConv5x5) {
   top_data = this->blob_top_->cpu_data();
   ref_top_data = this->ref_blob_top_->cpu_data();
   for (int i = 0; i < this->blob_top_->count(); ++i) {
-    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-3);
+    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-2);
   }
 }
 
 TYPED_TEST(oclConvolutionLayerTest, TestDirectConv1x1) {
-  Caffe::set_mode(Caffe::OCL);
   typedef typename TypeParam::Dtype Dtype;
   this->blob_bottom_vec_.clear();
   this->blob_top_vec_.clear();
   this->blob_bottom_vec_.push_back(this->blob_bottom_);
   this->blob_top_vec_.push_back(this->blob_top_);
   LayerParameter layer_param;
-  layer_param.set_xcl_name("direct_conv.xclbin");
-  layer_param.set_kernel_name("direct_conv");
+  XCLParameter* xcl_param = layer_param.mutable_xcl_param();
+
+  xcl_param->set_xcl_name("cr_layer_fb_half.xclbin");
+  xcl_param->set_kernel_name("cr_layer_fb_half");
+
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
@@ -1374,7 +1379,7 @@ TYPED_TEST(oclConvolutionLayerTest, TestDirectConv1x1) {
   top_data = this->blob_top_->cpu_data();
   ref_top_data = this->ref_blob_top_->cpu_data();
   for (int i = 0; i < this->blob_top_->count(); ++i) {
-    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-3);
+    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-2); 
   }
 }
 /*

@@ -65,7 +65,7 @@ inline uint32 float2chalf_impl(float value)
   uint32 mant = (bits & 0x7FFFFF);
   uint32 expf = (exp < (-1 * EXP_OFFSET + 1)) ? 0 : (exp <= EXP_OFFSET) ? (exp + EXP_OFFSET) << MANT_SIZE : (MAX_EXP - 1) << MANT_SIZE;
   uint32 mantf = (exp < (-1 * EXP_OFFSET + 1)) ? 0 : (exp <= EXP_OFFSET) ? (mant >> (23 - MANT_SIZE)) : MAX_MANT;
-  uint32 hbits = (sign | expf | mantf) & ((1 << (EXP_SIZE + MANT_SIZE + 1)) - 1);
+  uint32 hbits = (sign | expf | mantf);
   return hbits;
 }
 
@@ -234,13 +234,11 @@ ap_uint<5> LOD(ap_uint<24> sum_cpath) {
 #pragma HLS INLINE 
   ap_uint<5> one_pos;
   ap_uint<5> b_3_o, b_2_o, b_1_o, b_0_o;
-  ap_uint<1> a[24];
+  ap_uint<1> a[24] = {0};
   ap_uint<5> b_3[5];
   ap_uint<5> b_2[5];
   ap_uint<5> b_1[5];
   ap_uint<5> b_0[5];
-  for (int i = 0; i < 24; ++i)
-    a[i] = 0;
 #if MANT_SIZE >= 22
   a[23] = (sum_cpath >> 23) & 0x1;
 #endif

@@ -40,6 +40,7 @@ class PadLayer : public Layer<Dtype> {
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   vector<int> bottom_shape_;
   bool pad_;
+  int pad_to_;
   int pad_val_;
   int xdim_;
   int xdim_pad_;

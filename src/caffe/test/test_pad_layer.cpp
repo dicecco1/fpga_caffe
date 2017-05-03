@@ -77,6 +77,35 @@ TYPED_TEST(PadLayerTest, TestForwardPad) {
   }
 }
 
+TYPED_TEST(PadLayerTest, TestForwardPadTo) {
+  typedef typename TypeParam::Dtype Dtype;
+  LayerParameter layer_param;
+  PadParameter* pad_param =
+      layer_param.mutable_pad_param();
+  pad_param->set_pad(true);
+  pad_param->set_pad_to(21);
+  shared_ptr<Layer<Dtype> > layer(
+      new PadLayer<Dtype>(layer_param));
+  layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
+  layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
+
+  int xdim_ = this->blob_bottom_->shape(3);
+  int xdim_pad_ = this->blob_top_->shape(3);
+
+  const Dtype *bottom_data = this->blob_bottom_->cpu_data();
+  const Dtype *top_data = this->blob_top_->cpu_data();
+
+  for (int i = 0; i < this->blob_top_->count() / xdim_pad_; ++i) {
+    for (int x = 0; x < xdim_pad_; ++x) {
+      if (x < xdim_) 
+        EXPECT_NEAR(bottom_data[i * xdim_ + x], top_data[i * xdim_pad_ + x],
+            1e-3);
+      else
+        EXPECT_NEAR(top_data[i * xdim_pad_ + x], 0, 1e-3);
+    }
+  }
+}
+
 TYPED_TEST(PadLayerTest, TestForwardUnpad) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
@@ -106,6 +135,40 @@ TYPED_TEST(PadLayerTest, TestForwardUnpad) {
       if (x < xdim_) 
         EXPECT_NEAR(bottom_data[i * xdim_pad_ + x], top_data[i * xdim_ + x],
             1e-3);
+    }
+  }
+}
+
+TYPED_TEST(PadLayerTest, TestForwardUnpadTo) {
+  typedef typename TypeParam::Dtype Dtype;
+  LayerParameter layer_param;
+  PadParameter* pad_param =
+      layer_param.mutable_pad_param();
+  pad_param->set_pad(false);
+  pad_param->set_pad_to(11);
+  shared_ptr<Layer<Dtype> > layer(
+      new PadLayer<Dtype>(layer_param));
+
+  this->blob_bottom_vec_.clear();
+  this->blob_top_vec_.clear();
+
+  this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
+  this->blob_top_vec_.push_back(this->blob_top_2_);
+
+  layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
+  layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
+
+  int xdim_pad_ = this->blob_bottom_2_->shape(3);
+  int xdim_ = pad_param->pad_to();
+  const Dtype *bottom_data = this->blob_bottom_2_->cpu_data();
+  const Dtype *top_data = this->blob_top_2_->cpu_data();
+
+  for (int i = 0; i < this->blob_top_2_->count() / xdim_; ++i) {
+    for (int x = 0; x < xdim_pad_; ++x) {
+      if (x < xdim_) { 
+        EXPECT_NEAR(bottom_data[i * xdim_pad_ + x], top_data[i * xdim_ + x],
+            1e-3);
+      }
     }
   }
 }

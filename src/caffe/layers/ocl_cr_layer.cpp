@@ -414,7 +414,7 @@ void OCLCRLayer<Dtype>::backward_data(const vector<Blob<Dtype>*>& top,
 
   const chalf *bias_data = bias->ocl_data();
 
-  params->backward = 0;
+  params->backward = 2;
   int numgroups_ = params->numgroups;
 
   shape[0] = 1;
@@ -612,7 +612,7 @@ void OCLCRLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
       reinterpret_cast<const chalf *>(bottom[i]->ocl_data());
 
     top_data = reinterpret_cast<chalf *>(top[i]->mutable_ocl_data());
-    relu_vals = relu_indices.mutable_ocl_data(0);
+    relu_vals = relu_indices.mutable_ocl_data();
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
       (const void *)&bottom_data);
     clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
@@ -638,6 +638,7 @@ void OCLCRLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
     }
     clWaitForEvents(events.size(), events.data());
   }
+  relu_vals = relu_indices.mutable_cpu_data();
 }
 
 template <typename Dtype>
