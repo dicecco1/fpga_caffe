@@ -29,19 +29,31 @@
 #define FP_WIDTH (EXP_SIZE + MANT_SIZE + 1)
 #define ROUND_NEAREST 0 
 
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef int16_t int16;
-typedef int32_t int32;
+#if (EXP_SIZE + MANT_SIZE + 1) > 16
+  #define DIFF_SIZE (32 - EXP_SIZE - MANT_SIZE - 1)
+#else
+  #define DIFF_SIZE (16 - EXP_SIZE - MANT_SIZE - 1)
+#endif
 
 #ifndef HALF_ROUND_STYLE
 	#define HALF_ROUND_STYLE	1			// = std::round_indeterminate
 #endif
 
+typedef uint16_t uint16;
+typedef uint32_t uint32;
+typedef int16_t int16;
+typedef int32_t int32;
+
 class chalf;
 
 chalf operator*(chalf T, chalf U);
 chalf operator+(chalf T, chalf U);
+chalf operator/(chalf T, chalf U);
+chalf operator/(chalf T, int U);
+bool operator<(chalf T, chalf U);
+bool operator<=(chalf T, chalf U);
+bool operator>(chalf T, chalf U);
+bool operator>=(chalf T, chalf U);
 bool operator==(chalf T, chalf U);
 bool operator!=(chalf T, chalf U);
 chalf max(chalf T, chalf U);
@@ -63,9 +75,17 @@ inline uint32 float2chalf_impl(float value)
   int32 exp = ((bits >> 23) & 0xFF) - 127;
   uint32 sign = (bits >> (31 - SIGN_SHIFT)) & SIGN_MASK;
   uint32 mant = (bits & 0x7FFFFF);
-  uint32 expf = (exp < (-1 * EXP_OFFSET + 1)) ? 0 : (exp <= EXP_OFFSET) ? (exp + EXP_OFFSET) << MANT_SIZE : (MAX_EXP - 1) << MANT_SIZE;
-  uint32 mantf = (exp < (-1 * EXP_OFFSET + 1)) ? 0 : (exp <= EXP_OFFSET) ? (mant >> (23 - MANT_SIZE)) : MAX_MANT;
-  uint32 hbits = (sign | expf | mantf) & ((1 << (EXP_SIZE + MANT_SIZE + 1)) - 1);
+  uint32 guard = (mant >> (22 - MANT_SIZE)) & 0x1;
+  uint32 round = (mant >> (21 - MANT_SIZE)) & 0x1;
+  uint32 mant_noround = mant >> (23 - MANT_SIZE);
+  uint32 last = mant_noround & 0x1;
+  uint32 sticky = (mant & (~(MAX_MANT << (23 - MANT_SIZE))) & (~(MAX_MANT << (21 - MANT_SIZE)))) > 0;
+  uint32 rnd_val = guard & (round | sticky | last);
+  uint32 mant_round = (mant_noround != MAX_MANT) ? mant_noround + rnd_val : ((exp < EXP_OFFSET) && rnd_val) ? 0 : mant_noround;
+  uint32 exp_add = (mant_noround != MAX_MANT) ? 0 : ((exp < EXP_OFFSET) && rnd_val) ? 1 : 0;
+  uint32 expf = (exp < (-1 * EXP_OFFSET + 1)) ? 0 : (exp <= EXP_OFFSET) ? ((exp + EXP_OFFSET) + exp_add) << MANT_SIZE : (MAX_EXP - 1) << MANT_SIZE;
+  uint32 mantf = (exp < (-1 * EXP_OFFSET + 1)) ? 0 : (exp <= EXP_OFFSET) ? mant_round : MAX_MANT;
+  uint32 hbits = (sign | expf | mantf);
   return hbits;
 }
 
@@ -113,6 +133,12 @@ class chalf {
   friend chalf operator+(chalf T, chalf U);
   friend chalf max(chalf T, chalf U);
   friend chalf max(chalf T);
+  friend chalf operator/(chalf T, chalf U);
+  friend chalf operator/(chalf T, int U);
+  friend bool operator<(chalf T, chalf U);
+  friend bool operator<=(chalf T, chalf U);
+  friend bool operator>(chalf T, chalf U);
+  friend bool operator>=(chalf T, chalf U);
   friend bool operator==(chalf T, chalf U);
   friend bool operator!=(chalf T, chalf U);
   public:
@@ -145,6 +171,16 @@ class chalf {
 
     chalf& operator+=(const chalf& rhs) {
       *this = *this + rhs;
+      return *this;
+    }
+
+    chalf& operator/=(const chalf& rhs) {
+      *this = *this / rhs;
+      return *this;
+    }
+
+    chalf& operator/=(const int& rhs) {
+      *this = *this / rhs;
       return *this;
     }
  
@@ -635,6 +671,58 @@ chalf max(chalf T) {
     res = T;
 #endif
   return res;
+}
+
+inline chalf operator/(chalf T, chalf U) {
+  return chalf(float(T) / float(U));
+}
+
+inline chalf operator/(chalf T, int U) {
+  return chalf(float(T) / U);
+}
+
+inline bool operator>(chalf T, chalf U) {
+#if (EXP_SIZE + MANT_SIZE + 1) > 16
+  int32 Tdata, Udata;
+#else
+  int16 Tdata, Udata;
+#endif
+  Tdata = T.data_ << DIFF_SIZE;
+  Udata = U.data_ << DIFF_SIZE;
+  return Tdata > Udata;
+}
+
+inline bool operator>=(chalf T, chalf U) {
+#if (EXP_SIZE + MANT_SIZE + 1) > 16
+  int32 Tdata, Udata;
+#else
+  int16 Tdata, Udata;
+#endif
+  Tdata = T.data_ << DIFF_SIZE;
+  Udata = U.data_ << DIFF_SIZE;
+  return Tdata >= Udata;
+}
+
+inline bool operator<(chalf T, chalf U) {
+#if (EXP_SIZE + MANT_SIZE + 1) > 16
+  int32 Tdata, Udata;
+#else
+  int16 Tdata, Udata;
+#endif
+  Tdata = T.data_ << DIFF_SIZE;
+  Udata = U.data_ << DIFF_SIZE;
+  return Tdata < Udata;
+}
+
+inline bool operator<=(chalf T, chalf U) {
+#if (EXP_SIZE + MANT_SIZE + 1) > 16
+  int32 Tdata, Udata;
+#else
+  int16 Tdata, Udata;
+#endif
+  Tdata = T.data_ << DIFF_SIZE;
+  Udata = U.data_ << DIFF_SIZE;
+  return Tdata <= Udata;
 }
 
 #endif  // HALF_HPP_

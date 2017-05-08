@@ -127,8 +127,15 @@ void PoolingLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
 template <typename Dtype>
 void PoolingLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
+#ifndef USE_CFP
   const Dtype* bottom_data = bottom[0]->cpu_data();
   Dtype* top_data = top[0]->mutable_cpu_data();
+#else
+  size_t insize = sizeof(chalf) * bottom[0]->count();
+  const chalf* bottom_data =
+    reinterpret_cast<const chalf *>(bottom[0]->cpu_data(insize));
+  chalf* top_data = reinterpret_cast<chalf *>(top[0]->mutable_cpu_data());
+#endif
   const int top_count = top[0]->count();
   // We'll output the mask to top[1] if it's of size >1.
   const bool use_top_mask = top.size() > 1;
@@ -146,7 +153,12 @@ void PoolingLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       mask = max_idx_.mutable_cpu_data();
       caffe_set(top_count, -1, mask);
     }
+#ifndef USE_CFP
     caffe_set(top_count, Dtype(-FLT_MAX), top_data);
+#else
+    for (int i = 0; i < top_count; ++i)
+      top_data[i] = chalf(float(-FLT_MAX));
+#endif
     // The main loop
     for (int n = 0; n < bottom[0]->num(); ++n) {
       for (int c = 0; c < channels_; ++c) {
@@ -232,11 +244,20 @@ void PoolingLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   if (!propagate_down[0]) {
     return;
   }
-  const Dtype* top_diff = top[0]->cpu_diff();
+#ifndef USE_CFP
+  size_t outsize = sizeof(chalf) * top[0]->count();
+  const Dtype* top_diff = top[0]->cpu_diff(outsize);
   Dtype* bottom_diff = bottom[0]->mutable_cpu_diff();
   // Different pooling methods. We explicitly do the switch outside the for
   // loop to save time, although this results in more codes.
   caffe_set(bottom[0]->count(), Dtype(0), bottom_diff);
+#else
+  const chalf* top_diff = reinterpret_cast<const chalf*>(top[0]->cpu_diff());
+  chalf* bottom_diff = reinterpret_cast<chalf*>(bottom[0]->mutable_cpu_diff());
+
+  for (int i = 0; i < bottom[0]->count(); ++i)
+    bottom_diff[i] = 0;
+#endif
   // We'll output the mask to top[1] if it's of size >1.
   const bool use_top_mask = top.size() > 1;
   const int* mask = NULL;  // suppress warnings about uninitialized variables

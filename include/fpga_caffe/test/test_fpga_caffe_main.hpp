@@ -55,6 +55,8 @@ int main(int argc, char** argv);
 
 void ref_relu_layer(std::vector<float>& output);
 
+void ref_pool_layer(std::vector<float>& output, kernel_params params);
+
 void ref_conv_layer(std::vector<float> input, std::vector<float> weights,
     std::vector<float> bias, std::vector<float>& output, kernel_params params);
 

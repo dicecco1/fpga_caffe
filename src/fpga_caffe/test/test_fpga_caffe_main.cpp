@@ -79,7 +79,9 @@ void copyWeights(std::vector<float> w_input, std::vector<float>& w_output,
     int out_idx = i * padsize;
     int in_idx = i * ksize * ksize;
     if (ksize == 1) {
-      w_output[out_idx] = w_input[in_idx];
+      w_output[out_idx] = w_input[in_idx * 2 + 0];
+      w_output[out_idx + 1] = w_input[in_idx * 2 + 1];
+      std::cout<<w_output[out_idx]<<" "<<w_output[out_idx + 1]<<std::endl;
     } else if (ksize == 3) {
       for (int j = 0; j < ksize * ksize; ++j) {
         w_output[out_idx + j] = w_input[in_idx + j];

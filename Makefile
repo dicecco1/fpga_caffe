@@ -347,7 +347,9 @@ ifeq ($(USE_CUDNN), 1)
 	LIBRARIES += cudnn
 	COMMON_FLAGS += -DUSE_CUDNN
 endif
-
+ifeq ($(USE_CFP), 1)
+	COMMON_FLAGS += -DUSE_CFP
+endif
 ifeq ($(USE_OCL), 1)
 	LIBRARIES += xilinxopencl lmx6.0
 	COMMON_FLAGS += -DUSE_OCL

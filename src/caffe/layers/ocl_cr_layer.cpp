@@ -358,7 +358,7 @@ void OCLCRLayer<Dtype>::backward_bias(const vector<Blob<Dtype>*>& top,
   const char *relu_vals;
   for (int i = 0; i < bottom.size(); i++) {
     events.resize(events_size, 0);
-    top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff());
+    top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff(outsize));
     relu_vals = relu_indices.ocl_data();
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
       (const void *)&top_diff);
@@ -443,8 +443,8 @@ void OCLCRLayer<Dtype>::backward_data(const vector<Blob<Dtype>*>& top,
   for (int i = 0; i < bottom.size(); i++) {
     events.resize(events_size, 0);
     bottom_diff =
-      reinterpret_cast<chalf *>(bottom[i]->mutable_ocl_diff());
-    top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff());
+      reinterpret_cast<chalf *>(bottom[i]->mutable_ocl_diff(0));
+    top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff(outsize));
     relu_vals = relu_indices.ocl_data();
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
       (const void *)&top_diff);
@@ -470,7 +470,6 @@ void OCLCRLayer<Dtype>::backward_data(const vector<Blob<Dtype>*>& top,
       }
     }
     clWaitForEvents(events.size(), events.data());
-    bottom_diff = reinterpret_cast<chalf *>(bottom[i]->mutable_cpu_diff());
   }
 }
 
@@ -522,13 +521,11 @@ void OCLCRLayer<Dtype>::backward_weights(const vector<Blob<Dtype>*>& top,
   const chalf *top_diff;
   const char *relu_vals;
   const chalf *bottom_data;
-  bottom_data = reinterpret_cast<const chalf *>(bottom[0]->cpu_data());
-  top_diff = reinterpret_cast<const chalf *>(top[0]->cpu_diff());
   for (int i = 0; i < bottom.size(); i++) {
     events.resize(events_size, 0);
     bottom_data =
-      reinterpret_cast<const chalf *>(bottom[i]->ocl_data());
-    top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff());
+      reinterpret_cast<const chalf *>(bottom[i]->ocl_data(insize));
+    top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff(outsize));
     relu_vals = relu_indices.ocl_data();
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
       (const void *)&top_diff);
@@ -598,20 +595,15 @@ void OCLCRLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
   size_t insize = sizeof(chalf) * bottom[0]->count();
   size_t outsize = sizeof(chalf) * top[0]->count();
   std::vector<cl_event> events;
-
   int events_size = batch_ * numgroups_;
 
   chalf *top_data;
   char *relu_vals;
   for (int i = 0; i < bottom.size(); i++) {
     events.resize(events_size, 0);
-    const chalf *bottom_data =
-      reinterpret_cast<const chalf *>(bottom[i]->cpu_data());
-
-    bottom_data =
-      reinterpret_cast<const chalf *>(bottom[i]->ocl_data());
-
-    top_data = reinterpret_cast<chalf *>(top[i]->mutable_ocl_data());
+    const chalf* bottom_data =
+      reinterpret_cast<const chalf *>(bottom[i]->ocl_data(insize));
+    top_data = reinterpret_cast<chalf *>(top[i]->mutable_ocl_data(0));
     relu_vals = relu_indices.mutable_ocl_data();
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
       (const void *)&bottom_data);
@@ -638,7 +630,6 @@ void OCLCRLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
     }
     clWaitForEvents(events.size(), events.data());
   }
-  relu_vals = relu_indices.mutable_cpu_data();
 }
 
 template <typename Dtype>
@@ -649,9 +640,6 @@ void OCLCRLayer<Dtype>::Backward_ocl(const vector<Blob<Dtype>*>& top,
   
   if (this->param_propagate_down_[0])
     backward_weights(top, propagate_down, bottom);
-
-  for (int i = 0; i < bottom[0]->count(); ++i)
-    (bottom[0]->mutable_cpu_diff())[i] = 0;
 
   if (propagate_down[0])
     backward_data(top, propagate_down, bottom);
