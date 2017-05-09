@@ -238,27 +238,34 @@ void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3],
 #pragma HLS ARRAY_PARTITION variable=wvals complete dim=1
 
   chalf it[3];
-
+  unsigned short weight_idx = (ksize == 1 && !backward_flag) ? w_off >> 3 :
+    w_off;
   for (int k = 0; k < OCFACT; ++k) {
-    wvals[0] = wbuf[k][w_off].s0;
-    wvals[1] = wbuf[k][w_off].s1;
-    wvals[2] = wbuf[k][w_off].s2;
-    wvals[3] = wbuf[k][w_off].s3;
-    wvals[4] = wbuf[k][w_off].s4;
-    wvals[5] = wbuf[k][w_off].s5;
-    wvals[6] = wbuf[k][w_off].s6;
-    wvals[7] = wbuf[k][w_off].s7;
-    wvals[8] = wbuf[k][w_off].s8;
-    wvals[9] = wbuf[k][w_off].s9;
-    wvals[10] = wbuf[k][w_off].sa;
-    wvals[11] = wbuf[k][w_off].sb;
-    wvals[12] = wbuf[k][w_off].sc;
-    wvals[13] = wbuf[k][w_off].sd;
-    wvals[14] = wbuf[k][w_off].se;
-    wvals[15] = wbuf[k][w_off].sf;
-    it[0] = wvals[row_off * 3 + 0];
-    it[1] = wvals[row_off * 3 + 1];
-    it[2] = wvals[row_off * 3 + 2];
+    wvals[0] = wbuf[k][weight_idx].s0;
+    wvals[1] = wbuf[k][weight_idx].s1;
+    wvals[2] = wbuf[k][weight_idx].s2;
+    wvals[3] = wbuf[k][weight_idx].s3;
+    wvals[4] = wbuf[k][weight_idx].s4;
+    wvals[5] = wbuf[k][weight_idx].s5;
+    wvals[6] = wbuf[k][weight_idx].s6;
+    wvals[7] = wbuf[k][weight_idx].s7;
+    wvals[8] = wbuf[k][weight_idx].s8;
+    wvals[9] = wbuf[k][weight_idx].s9;
+    wvals[10] = wbuf[k][weight_idx].sa;
+    wvals[11] = wbuf[k][weight_idx].sb;
+    wvals[12] = wbuf[k][weight_idx].sc;
+    wvals[13] = wbuf[k][weight_idx].sd;
+    wvals[14] = wbuf[k][weight_idx].se;
+    wvals[15] = wbuf[k][weight_idx].sf;
+    if (ksize != 1) {
+      it[0] = wvals[row_off * 3 + 0];
+      it[1] = wvals[row_off * 3 + 1];
+      it[2] = wvals[row_off * 3 + 2];
+    } else {
+      it[0] = wvals[(w_off & 0x7) * 2];
+      it[1] = wvals[(w_off & 0x7) * 2 + 1];
+      it[2] = 0;
+    }
     for (int p = 0; p < 16; ++p) {
       for (int q = 0; q < 3; ++q) {
         if (fc) {
@@ -444,7 +451,8 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   bool backward_flag = (backward == 1);
   bool fc_flag = (fc == 1);
   unsigned short mod_channel;
-  unsigned short temp_inchannels = (ksize != 1) ? inchannels : inchannels >> 1;
+  unsigned short temp_inchannels = (ksize != 1) ? inchannels :
+    (inchannels % 16 == 0) ? inchannels >> 4 : (inchannels >> 4) + 1;
 
   if (backward_flag) {
     if (ksize == 5) {
@@ -555,7 +563,8 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               outchannels * group_idx) * ydim + offy * burstydim) * fact;
             int weight_size_b = fact * burstydim;
             int weight_size_f = (ksize != 1) ? burstchannels :
-              burstchannels >> 1;
+              (burstchannels % 16 == 0) ? burstchannels >> 4 :
+              (burstchannels >> 4) + 1;
             int weight_offset_f = (o * OCFACT + k + outchannels * group_idx) *
               temp_inchannels + n * weight_size_f;
             int weight_offset_fc_f = (o * OCFACT + k) * fact;
