@@ -452,7 +452,8 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   bool fc_flag = (fc == 1);
   unsigned short mod_channel;
   unsigned short temp_inchannels = (ksize != 1) ? inchannels :
-    (inchannels % 16 == 0) ? inchannels >> 4 : (inchannels >> 4) + 1;
+    (backward_flag) ? inchannels >> 1 : (inchannels % 16 == 0) ?
+    inchannels >> 4 : (inchannels >> 4) + 1;
 
   if (backward_flag) {
     if (ksize == 5) {
