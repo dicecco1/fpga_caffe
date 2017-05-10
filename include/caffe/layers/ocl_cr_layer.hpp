@@ -83,12 +83,12 @@ class OCLCRLayer : public ConvolutionLayer<Dtype> {
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   void copyToHalf(const Dtype *input, chalf *output, int size, int xdim,
       int xdim_pad);
-  void copyToHalfWeights(const Dtype *input, chalf *output, int size,
-      int ksize, int ksize_pad);
+  void copyToHalfWeights(const Dtype *input, chalf *output, int ksize,
+      int ksize_pad, kernel_params params);
   void copyToFloatWeights(chalf *input, Dtype *output, const vector<int>,
-      int ksize_pad);
+      int ksize_pad, kernel_params params);
   void RotateWeightsHalf(const Dtype *input, chalf *output, vector<int> shape,
-      int ksize_pad);
+      int ksize_pad, kernel_params params);
  private:
   kernel_params ocl_params_;
   kernel_params ocl_params_bw_;

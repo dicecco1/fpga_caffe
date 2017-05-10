@@ -79,7 +79,7 @@ void copyVector(std::vector<float> input, std::vector<float>& output, int xsize,
     int xsize_pad);
 
 void copyWeights(std::vector<float> w_input, std::vector<float>& w_output,
-    int ksize, int padsize, int size);
+    int ksize, int padsize, kernel_params params);
 
 void toHalf(std::vector<float> input, std::vector<chalf>& output);
 

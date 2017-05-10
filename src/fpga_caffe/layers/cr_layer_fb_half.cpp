@@ -238,8 +238,8 @@ void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3],
 #pragma HLS ARRAY_PARTITION variable=wvals complete dim=1
 
   chalf it[3];
-  unsigned short weight_idx = (ksize == 1 && !backward_flag) ? w_off >> 3 :
-    w_off;
+  unsigned short weight_idx = (ksize == 1 && !backward_flag && !fc) ?
+    w_off >> 3 : w_off;
   for (int k = 0; k < OCFACT; ++k) {
     wvals[0] = wbuf[k][weight_idx].s0;
     wvals[1] = wbuf[k][weight_idx].s1;

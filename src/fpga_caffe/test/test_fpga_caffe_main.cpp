@@ -74,29 +74,37 @@ void copyVector(std::vector<float> input, std::vector<float>& output,
 }
 
 void copyWeights(std::vector<float> w_input, std::vector<float>& w_output,
-    int ksize, int padsize, int size) {
-  for (int i = 0; i < size; ++i) {
-    int out_idx = i * padsize;
-    int in_idx = i * ksize * ksize;
-    if (ksize == 1) {
-      w_output[out_idx] = w_input[in_idx * 2 + 0];
-      w_output[out_idx + 1] = w_input[in_idx * 2 + 1];
-      std::cout<<w_output[out_idx]<<" "<<w_output[out_idx + 1]<<std::endl;
-    } else if (ksize == 3) {
-      for (int j = 0; j < ksize * ksize; ++j) {
-        w_output[out_idx + j] = w_input[in_idx + j];
-      }
-    } else if (ksize == 5) {
-      for (int j = 0; j < 5; ++j) {
-        for (int k = 0; k < 3; ++k) {
-          w_output[out_idx + j * 3 + k] = w_input[in_idx + j * 5 + k];
-          if (k < 2) 
-            w_output[out_idx + 16 + j * 3 + k] =
-              w_input[in_idx + j * 5 + 3 + k];
-          else
-            w_output[out_idx + 16 + j * 3 + k] = 0;
+    int ksize, int padsize, kernel_params params) {
+  int oc = params.outchannels * params.numgroups;
+  int ic = params.inchannels;
+  int bc = params.burstchannels;
+  for (int i = 0; i < oc; ++i) {
+    for (int n = 0; n < ic / bc; ++n) {
+      for (int m = 0; m < bc; ++m) {
+        int out_idx = (i * ic + n * bc + m) * padsize;
+        int in_idx = (i * ic + n * bc + m) * ksize * ksize;
+        if (ksize == 1) {
+          int bc_mod = (bc % 16 == 0) ? bc : (bc / 16 + 1) * 16;
+          out_idx = (i * bc_mod * (ic / bc) + n * bc_mod + m) * padsize;
+          in_idx = (i * ic + n * bc + m) * ksize * ksize;
+          w_output[out_idx] = w_input[in_idx];
+        } else if (ksize == 3) {
+          for (int j = 0; j < ksize * ksize; ++j) {
+            w_output[out_idx + j] = w_input[in_idx + j];
+          }
+        } else if (ksize == 5) {
+          for (int j = 0; j < 5; ++j) {
+            for (int k = 0; k < 3; ++k) {
+              w_output[out_idx + j * 3 + k] = w_input[in_idx + j * 5 + k];
+              if (k < 2) 
+                w_output[out_idx + 16 + j * 3 + k] =
+                  w_input[in_idx + j * 5 + 3 + k];
+              else
+                w_output[out_idx + 16 + j * 3 + k] = 0;
+            }
+          } 
         }
-      } 
+      }
     }
   }
 }
