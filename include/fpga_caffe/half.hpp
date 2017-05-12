@@ -14,8 +14,8 @@
 #include "ap_int.h"
 #endif
 
-#define EXP_SIZE 6 
-#define MANT_SIZE 7 
+#define EXP_SIZE 5 
+#define MANT_SIZE 10 
 #define EXP_OFFSET ((1 << (EXP_SIZE - 1)) - 1)
 #define MAX_EXP ((1 << EXP_SIZE) - 1)
 #define MAX_MANT ((1 << MANT_SIZE) - 1)
@@ -28,6 +28,8 @@
 #define SIGN_MASK (1 << SIGN_SHIFT)
 #define FP_WIDTH (EXP_SIZE + MANT_SIZE + 1)
 #define ROUND_NEAREST 0 
+#define SHIFT_SIZE (MANT_SIZE + 6 + (MAX_EXP - 2))
+
 
 #if (EXP_SIZE + MANT_SIZE + 1) > 16
   #define DIFF_SIZE (32 - EXP_SIZE - MANT_SIZE - 1)
@@ -46,6 +48,8 @@ typedef int32_t int32;
 
 class chalf;
 
+chalf operator*(chalf T, float U);
+chalf operator*(chalf T, int U);
 chalf operator*(chalf T, chalf U);
 chalf operator+(chalf T, chalf U);
 chalf operator/(chalf T, chalf U);
@@ -58,6 +62,10 @@ bool operator==(chalf T, chalf U);
 bool operator!=(chalf T, chalf U);
 chalf max(chalf T, chalf U);
 chalf max(chalf T);
+#ifdef SYNTHESIS
+ap_int<SHIFT_SIZE> shifter(chalf T);
+chalf operator+(chalf T, ap_int<SHIFT_SIZE> U);
+#endif
 /// Convert IEEE single-precision to chalf-precision.
 /// Credit for this goes to [Jeroen van der Zijp](ftp://ftp.fox-toolkit.org/pub/fastchalffloatconversion.pdf).
 /// \tparam R rounding mode to use, `std::round_indeterminate` for fastest rounding
@@ -129,6 +137,8 @@ inline float chalf2float(uint32 value)
 }
 
 class chalf {
+  friend chalf operator*(chalf T, float U);
+  friend chalf operator*(chalf T, int U);
   friend chalf operator*(chalf T, chalf U);
   friend chalf operator+(chalf T, chalf U);
   friend chalf max(chalf T, chalf U);
@@ -141,6 +151,10 @@ class chalf {
   friend bool operator>=(chalf T, chalf U);
   friend bool operator==(chalf T, chalf U);
   friend bool operator!=(chalf T, chalf U);
+#ifdef SYNTHESIS
+  friend ap_int<SHIFT_SIZE> shifter(chalf T);
+  friend chalf operator+(chalf T, ap_int<SHIFT_SIZE> U);
+#endif
   public:
     chalf() : data_() {}
 
@@ -173,6 +187,13 @@ class chalf {
       *this = *this + rhs;
       return *this;
     }
+
+#ifdef SYNTHESIS
+    chalf& operator+=(const ap_int<SHIFT_SIZE>& rhs) {
+      *this = *this + rhs;
+      return *this;
+    }
+#endif
 
     chalf& operator/=(const chalf& rhs) {
       *this = *this / rhs;
@@ -673,6 +694,14 @@ chalf max(chalf T) {
   return res;
 }
 
+inline chalf operator*(chalf T, float U) {
+  return chalf(float(T) * U);
+}
+
+inline chalf operator*(chalf T, int U) {
+  return chalf(float(T) * U);
+}
+
 inline chalf operator/(chalf T, chalf U) {
   return chalf(float(T) / float(U));
 }
@@ -724,5 +753,55 @@ inline bool operator<=(chalf T, chalf U) {
   Udata = U.data_ << DIFF_SIZE;
   return Tdata <= Udata;
 }
+
+#ifdef SYNTHESIS
+ap_int<SHIFT_SIZE> shifter(chalf T) {
+  ap_int<SHIFT_SIZE> Tdata = T.data_;
+  ap_uint<EXP_SIZE> exp = Tdata >> EXP_SHIFT;
+  ap_uint<1> sign = Tdata >> SIGN_SHIFT;
+  ap_int<SHIFT_SIZE> res = (exp != 0) ?
+    (ap_int<SHIFT_SIZE>) ((Tdata & MANT_MASK) | MANT_NORM) << (exp - 1) :
+    (ap_int<SHIFT_SIZE>) 0;
+  if (sign)
+    res = res * -1;
+  return res;
+}
+
+chalf operator+(chalf T, ap_int<SHIFT_SIZE> U) {
+  ap_uint<FP_WIDTH> sign;
+  ap_uint<SHIFT_SIZE - 1> Udata;
+  if (U < 0) {
+    sign = 1;
+    Udata = U * -1;
+  } else {
+    sign = 0;
+    Udata = U;
+  }
+
+  ap_uint<FP_WIDTH - 1> exp = 0;
+
+  ap_uint<MANT_SIZE> mant;
+
+  for (int i = MANT_SIZE; i < SHIFT_SIZE - 1; ++i) {
+    if ((Udata >> i) & 0x1) {
+      exp = i - MANT_SIZE + 1;
+    }
+  }
+  if (exp != 0)
+    mant = Udata >> (exp - 1);
+  else
+    mant = 0;
+
+  if (exp == MAX_EXP) {
+    exp = MAX_EXP - 1;
+    mant = MAX_MANT;
+  } 
+
+  ap_uint<FP_WIDTH> res;
+  res = ((sign << SIGN_SHIFT) & SIGN_MASK) |
+    ((exp << EXP_SHIFT) & EXP_MASK) | mant;
+  return chalf(res) + T;
+}
+#endif
 
 #endif  // HALF_HPP_

@@ -347,7 +347,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS ARRAY_PARTITION variable=it complete dim=2
 
   // Temporary output tile registers
-  chalf ot[OCFACT][16][3];
+  ap_int<SHIFT_SIZE> ot[OCFACT][16][3];
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=2
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=3
@@ -358,33 +358,33 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS ARRAY_PARTITION variable=wt complete dim=3
 
   // Ouput tile transform stage 1 output
-  chalf ot_s1[OCFACT][24];
+  ap_int<SHIFT_SIZE> ot_s1[OCFACT][24];
 #pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=2
 
-  chalf ot_s2[OCFACT][3][4];
+  ap_int<SHIFT_SIZE> ot_s2[OCFACT][3][4];
 #pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=2
 #pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=3
 
-  chalf ot_s3[OCFACT][3][2];
+  ap_int<SHIFT_SIZE> ot_s3[OCFACT][3][2];
 #pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=2
 #pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=3
 
-  chalf ot_s4[OCFACT][3];
+  ap_int<SHIFT_SIZE> ot_s4[OCFACT][3];
 #pragma HLS ARRAY_PARTITION variable=ot_s4 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s4 complete dim=2
  
-  chalf otf[OCFACT][16];
+  ap_int<SHIFT_SIZE> otf[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=2
 
-  chalf otfc[OCFACT][16];
+  ap_int<SHIFT_SIZE> otfc[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otfc complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otfc complete dim=2
 
-  chalf otb[OCFACT][16];
+  ap_int<SHIFT_SIZE> otb[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otb complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otb complete dim=2
 
@@ -697,33 +697,43 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
             for (int k = 0; k < OCFACT; ++k) {
               for (int p = 0; p < 16; ++p) {
                 for (int q = 0; q < 3; ++q) {
-                  ot[k][p][q] = it[p][q] * wt[k][p][q];
+                  ot[k][p][q] = shifter(it[p][q] * wt[k][p][q]);
                 }
               }
-              for (int p = 0; p < 8; ++p) 
+              for (int p = 0; p < 8; ++p) { 
                 ot_s1[k][p + 2 * 8] = ot[k][p * 2][2] + ot[k][p * 2 + 1][2];
+#pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP
+              }
 
               if (backward_flag || fc_flag) {
                 for (int q = 0; q < 2; ++q) {
-                  for (int p = 0; p < 8; ++p) 
+                  for (int p = 0; p < 8; ++p) { 
                     ot_s1[k][p + q * 8] = ot[k][p * 2][q] +
                       ot[k][p * 2 + 1][q];
+#pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP
+                  }
                 }
                 for (int q = 0; q < 3; ++q) {
-                  for (int p = 0; p < 4; ++p)
+                  for (int p = 0; p < 4; ++p) {
                     ot_s2[k][q][p] = ot_s1[k][p * 2 + q * 8] +
                       ot_s1[k][p * 2 + 1 + q * 8];
+#pragma HLS RESOURCE variable=ot_s2 core=AddSub_DSP
+                  }
                 }
               } else {
                 for (int p = 0; p < 16; ++p) {
                   ot_s1[k][p] = ot[k][p][0] + ot[k][p][1] + ot[k][p][2];
+#pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP                 
                 }
               }
 
               for (int q = 0; q < 3; ++q) {
-                for (int p = 0; p < 2; ++p)
+                for (int p = 0; p < 2; ++p) {
                   ot_s3[k][q][p] = ot_s2[k][q][p * 2] + ot_s2[k][q][p * 2 + 1];
+#pragma HLS RESOURCE variable=ot_s3 core=AddSub_DSP
+                }
                 ot_s4[k][q] = ot_s3[k][q][0] + ot_s3[k][q][1];
+#pragma HLS RESOURCE variable=ot_s4 core=AddSub_DSP
               }
                
               for (int p = 0; p < 3; ++p)
