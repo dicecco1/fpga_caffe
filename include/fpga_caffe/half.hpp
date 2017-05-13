@@ -28,7 +28,7 @@
 #define SIGN_MASK (1 << SIGN_SHIFT)
 #define FP_WIDTH (EXP_SIZE + MANT_SIZE + 1)
 #define ROUND_NEAREST 0 
-#define SHIFT_SIZE (MANT_SIZE + 6 + (MAX_EXP - 2))
+#define SHIFT_SIZE ((MANT_SIZE + 1) * 2 + 5) 
 
 
 #if (EXP_SIZE + MANT_SIZE + 1) > 16
@@ -63,8 +63,6 @@ bool operator!=(chalf T, chalf U);
 chalf max(chalf T, chalf U);
 chalf max(chalf T);
 #ifdef SYNTHESIS
-ap_int<SHIFT_SIZE> shifter(chalf T);
-chalf operator+(chalf T, ap_int<SHIFT_SIZE> U);
 #endif
 /// Convert IEEE single-precision to chalf-precision.
 /// Credit for this goes to [Jeroen van der Zijp](ftp://ftp.fox-toolkit.org/pub/fastchalffloatconversion.pdf).
@@ -91,9 +89,9 @@ inline uint32 float2chalf_impl(float value)
   uint32 rnd_val = guard & (round | sticky | last);
   uint32 mant_round = (mant_noround != MAX_MANT) ? mant_noround + rnd_val : ((exp < EXP_OFFSET) && rnd_val) ? 0 : mant_noround;
   uint32 exp_add = (mant_noround != MAX_MANT) ? 0 : ((exp < EXP_OFFSET) && rnd_val) ? 1 : 0;
-  uint32 expf = (exp < (-1 * EXP_OFFSET + 1)) ? 0 : (exp <= EXP_OFFSET) ? ((exp + EXP_OFFSET) + exp_add) << MANT_SIZE : (MAX_EXP - 1) << MANT_SIZE;
+  uint32 eresf = (exp < (-1 * EXP_OFFSET + 1)) ? 0 : (exp <= EXP_OFFSET) ? ((exp + EXP_OFFSET) + exp_add) << MANT_SIZE : (MAX_EXP - 1) << MANT_SIZE;
   uint32 mantf = (exp < (-1 * EXP_OFFSET + 1)) ? 0 : (exp <= EXP_OFFSET) ? mant_round : MAX_MANT;
-  uint32 hbits = (sign | expf | mantf);
+  uint32 hbits = (sign | eresf | mantf);
   return hbits;
 }
 
@@ -119,9 +117,9 @@ inline float chalf2float_impl(uint32 value)
   uint32 sign = (value & SIGN_MASK) << (31 - SIGN_SHIFT);
   uint32 mant = value & MANT_MASK;
   uint32 exp = (value >> MANT_SIZE) & MAX_EXP;
-  uint32 expf = (exp != 0) ? (exp + 127 - EXP_OFFSET) << 23 : 0;
+  uint32 eresf = (exp != 0) ? (exp + 127 - EXP_OFFSET) << 23 : 0;
   uint32 mantf = (exp != 0) ? (mant) << (23 - MANT_SIZE) : 0;
-  uint32 bits = sign | expf | mantf;
+  uint32 bits = sign | eresf | mantf;
   uint32 *temp = &bits;
 
   out = *((float *)temp);
@@ -152,8 +150,6 @@ class chalf {
   friend bool operator==(chalf T, chalf U);
   friend bool operator!=(chalf T, chalf U);
 #ifdef SYNTHESIS
-  friend ap_int<SHIFT_SIZE> shifter(chalf T);
-  friend chalf operator+(chalf T, ap_int<SHIFT_SIZE> U);
 #endif
   public:
     chalf() : data_() {}
@@ -170,8 +166,18 @@ class chalf {
     chalf(ap_uint<FP_WIDTH> rhs) : data_(rhs) {}
 #endif
 
+#ifdef SYNTHESIS
+    ap_uint<FP_WIDTH> getdata() const {
+      return data_;
+    }
+#endif
+
     operator float() const {
       return chalf2float(data_);
+    }
+
+    operator uint32() const {
+      return data_;
     }
 
     operator uint16() const {
@@ -187,13 +193,6 @@ class chalf {
       *this = *this + rhs;
       return *this;
     }
-
-#ifdef SYNTHESIS
-    chalf& operator+=(const ap_int<SHIFT_SIZE>& rhs) {
-      *this = *this + rhs;
-      return *this;
-    }
-#endif
 
     chalf& operator/=(const chalf& rhs) {
       *this = *this / rhs;
@@ -755,52 +754,50 @@ inline bool operator<=(chalf T, chalf U) {
 }
 
 #ifdef SYNTHESIS
-ap_int<SHIFT_SIZE> shifter(chalf T) {
-  ap_int<SHIFT_SIZE> Tdata = T.data_;
-  ap_uint<EXP_SIZE> exp = Tdata >> EXP_SHIFT;
-  ap_uint<1> sign = Tdata >> SIGN_SHIFT;
-  ap_int<SHIFT_SIZE> res = (exp != 0) ?
-    (ap_int<SHIFT_SIZE>) ((Tdata & MANT_MASK) | MANT_NORM) << (exp - 1) :
-    (ap_int<SHIFT_SIZE>) 0;
-  if (sign)
-    res = res * -1;
-  return res;
-}
-
-chalf operator+(chalf T, ap_int<SHIFT_SIZE> U) {
+chalf tocfp(ap_int<SHIFT_SIZE> data, ap_uint<EXP_SIZE> exp) {
   ap_uint<FP_WIDTH> sign;
-  ap_uint<SHIFT_SIZE - 1> Udata;
-  if (U < 0) {
+  ap_uint<SHIFT_SIZE - 1> udata;
+  if (data < 0) {
     sign = 1;
-    Udata = U * -1;
+    udata = data * -1;
   } else {
     sign = 0;
-    Udata = U;
+    udata = data;
   }
 
-  ap_uint<FP_WIDTH - 1> exp = 0;
-
-  ap_uint<MANT_SIZE> mant;
-
-  for (int i = MANT_SIZE; i < SHIFT_SIZE - 1; ++i) {
-    if ((Udata >> i) & 0x1) {
-      exp = i - MANT_SIZE + 1;
-    }
+  ap_uint<EXP_SIZE> lop;
+  for (int i = 0; i < SHIFT_SIZE - 1; ++i) {
+    if ((udata >> i) & 0x1)
+      lop = i;
   }
-  if (exp != 0)
-    mant = Udata >> (exp - 1);
-  else
-    mant = 0;
 
-  if (exp == MAX_EXP) {
-    exp = MAX_EXP - 1;
-    mant = MAX_MANT;
-  } 
+  ap_uint<3> exp_p = 0;
+  ap_uint<6> exp_m = 0;
+  if (lop >= SHIFT_SIZE - 6) {
+    exp_p = lop - SHIFT_SIZE + 6;
+  } else {
+    exp_m = SHIFT_SIZE - 6 - lop;
+  }
 
+  ap_uint<FP_WIDTH - 1> eresf;
+  ap_uint<MANT_SIZE> mantresf;
+
+  if (exp + exp_p - exp_m >= MAX_EXP) {
+    eresf = MAX_EXP - 1;
+    mantresf = MAX_MANT;
+  } else if (exp + exp_p - exp_m <= 0) {
+    eresf = 0;
+    mantresf = 0;
+  } else {
+    eresf = exp + exp_p - exp_m;
+    mantresf = (udata << (exp_m - exp_p)) >> (MANT_SIZE + 1);
+  }
   ap_uint<FP_WIDTH> res;
   res = ((sign << SIGN_SHIFT) & SIGN_MASK) |
-    ((exp << EXP_SHIFT) & EXP_MASK) | mant;
-  return chalf(res) + T;
+    ((eresf << EXP_SHIFT) & EXP_MASK) | mantresf;
+
+  return chalf(res);
+
 }
 #endif
 
