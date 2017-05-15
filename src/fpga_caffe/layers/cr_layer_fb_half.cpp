@@ -329,7 +329,6 @@ void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
 	ap_uint<EXP_SIZE> exp_r3[2];
 #pragma HLS ARRAY_PARTITION variable=exp_r3 complete dim=1
 
-
 	for (int i = 0; i < 3; ++i) {
 		for (int j = 0; j < 8; ++j) {
 			if (exp_array[j * 2 + 0][i] > exp_array[j * 2 + 1][i])
@@ -349,7 +348,7 @@ void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
 			else
 				exp_r3[j] = exp_r2[j * 2 + 1];
 		}
-		if (exp_r3[0] >= exp_r3[1])
+		if (exp_r3[0] > exp_r3[1])
 			exp_out_b[i] = exp_r3[0];
 		else
 			exp_out_b[i] = exp_r3[1];
@@ -371,7 +370,8 @@ void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
 			else
 				diff_sat = diff;
 			if (sign_array[i][j])
-				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff_sat) * -1;
+				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff_sat) *
+          -1;
 			else
 				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff_sat);
 		}
@@ -481,21 +481,29 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS ARRAY_PARTITION variable=ot_s4 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s4 complete dim=2
  
-  chalf ot_s4_cfp[OCFACT][3];
-#pragma HLS ARRAY_PARTITION variable=ot_s4_cfp complete dim=1
-#pragma HLS ARRAY_PARTITION variable=ot_s4_cfp complete dim=2
-
-  chalf otf[OCFACT][16];
+  ap_int<SHIFT_SIZE> otf[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=2
 
-  chalf otfc[OCFACT][16];
+  ap_int<SHIFT_SIZE> otfc[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otfc complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otfc complete dim=2
 
-  chalf otb[OCFACT][16];
+  ap_int<SHIFT_SIZE> otb[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otb complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otb complete dim=2
+
+  ap_uint<EXP_SIZE> expf[OCFACT][16];
+#pragma HLS ARRAY_PARTITION variable=expf complete dim=1
+#pragma HLS ARRAY_PARTITION variable=expf complete dim=2
+
+  ap_uint<EXP_SIZE> expfc[OCFACT][16];
+#pragma HLS ARRAY_PARTITION variable=expfc complete dim=1
+#pragma HLS ARRAY_PARTITION variable=expfc complete dim=2
+
+  ap_uint<EXP_SIZE> expb[OCFACT][16];
+#pragma HLS ARRAY_PARTITION variable=expb complete dim=1
+#pragma HLS ARRAY_PARTITION variable=expb complete dim=2
 
   int inchannels = params[0];
   int outchannels = params[1];
@@ -834,8 +842,10 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 }
               } else {
                 for (int p = 0; p < 16; ++p) {
-                  ot_s1[k][p] = ot[k][p][0] + ot[k][p][1] + ot[k][p][2];
-#pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP                 
+                  ap_int<SHIFT_SIZE> temp = ot[k][p][1] + ot[k][p][2];
+#pragma HLS RESOURCE variable=temp core=AddSub_DSP
+                  ot_s1[k][p] = ot[k][p][0] + temp;;
+#pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP
                 }
               }
 
@@ -846,43 +856,48 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 }
                 ot_s4[k][q] = ot_s3[k][q][0] + ot_s3[k][q][1];
 #pragma HLS RESOURCE variable=ot_s4 core=AddSub_DSP
-                ot_s4_cfp[k][q] = tocfp(ot_s4[k][q], exp_out_b[k][q]);
               }
                
-              for (int p = 0; p < 3; ++p)
-                otb[k][row_off * 3 + p] = ot_s4_cfp[k][p];
+              for (int p = 0; p < 3; ++p) {
+                otb[k][row_off * 3 + p] = ot_s4[k][p];
+                expb[k][row_off * 3 + p] = exp_out_b[k][p];
+              }
 
-              otfc[k][fc_off] = ot_s4_cfp[k][0];
+              otfc[k][fc_off] = ot_s4[k][0];
+              expfc[k][fc_off] = exp_out_b[k][0];
 
               for (int p = 0; p < 16; ++p) {
                 if (fc_flag) {
                   otf[k][p] = otfc[k][p];
+                  expf[k][p] = expfc[k][p];
                 } else {
                   if (backward_flag) {
                     otf[k][p] = otb[k][p];
+                    expf[k][p] = expb[k][p];
                   } else {
-                    otf[k][p] = tocfp(ot_s1[k][p], exp_out_f[k][p]);
+                    otf[k][p] = ot_s1[k][p];
+                    expf[k][p] = exp_out_f[k][p];
                   }
                 }
               }
 
               if (acc_enable) {
-                outbuf[k][o_idx].s0 += otf[k][0];
-                outbuf[k][o_idx].s1 += otf[k][1];
-                outbuf[k][o_idx].s2 += otf[k][2];
-                outbuf[k][o_idx].s3 += otf[k][3];
-                outbuf[k][o_idx].s4 += otf[k][4];
-                outbuf[k][o_idx].s5 += otf[k][5];
-                outbuf[k][o_idx].s6 += otf[k][6];
-                outbuf[k][o_idx].s7 += otf[k][7];
-                outbuf[k][o_idx].s8 += otf[k][8];
-                outbuf[k][o_idx].s9 += otf[k][9];
-                outbuf[k][o_idx].sa += otf[k][10];
-                outbuf[k][o_idx].sb += otf[k][11];
-                outbuf[k][o_idx].sc += otf[k][12];
-                outbuf[k][o_idx].sd += otf[k][13];
-                outbuf[k][o_idx].se += otf[k][14];
-                outbuf[k][o_idx].sf += otf[k][15];
+                outbuf[k][o_idx].s0 += tocfp(otf[k][0], expf[k][0]);
+                outbuf[k][o_idx].s1 += tocfp(otf[k][1], expf[k][1]);
+                outbuf[k][o_idx].s2 += tocfp(otf[k][2], expf[k][2]);
+                outbuf[k][o_idx].s3 += tocfp(otf[k][3], expf[k][3]);
+                outbuf[k][o_idx].s4 += tocfp(otf[k][4], expf[k][4]);
+                outbuf[k][o_idx].s5 += tocfp(otf[k][5], expf[k][5]);
+                outbuf[k][o_idx].s6 += tocfp(otf[k][6], expf[k][6]);
+                outbuf[k][o_idx].s7 += tocfp(otf[k][7], expf[k][7]);
+                outbuf[k][o_idx].s8 += tocfp(otf[k][8], expf[k][8]);
+                outbuf[k][o_idx].s9 += tocfp(otf[k][9], expf[k][9]);
+                outbuf[k][o_idx].sa += tocfp(otf[k][10], expf[k][10]);
+                outbuf[k][o_idx].sb += tocfp(otf[k][11], expf[k][11]);
+                outbuf[k][o_idx].sc += tocfp(otf[k][12], expf[k][12]);
+                outbuf[k][o_idx].sd += tocfp(otf[k][13], expf[k][13]);
+                outbuf[k][o_idx].se += tocfp(otf[k][14], expf[k][14]);
+                outbuf[k][o_idx].sf += tocfp(otf[k][15], expf[k][15]);
               }
             }
           }
