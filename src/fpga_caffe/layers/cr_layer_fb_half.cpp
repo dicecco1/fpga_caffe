@@ -309,10 +309,7 @@ void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
 				mant_array[i][j] = 0;
 			sign_array[i][j] = ot[i][j].getdata() >> SIGN_SHIFT;
 		}
-	}
-
-	ap_uint<EXP_SIZE> temp_exp;
-	for (int i = 0; i < 16; ++i) {
+    ap_uint<EXP_SIZE> temp_exp;
 		if (exp_array[i][0] > exp_array[i][1])
 			temp_exp = exp_array[i][0];
 		else
@@ -356,8 +353,7 @@ void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
 
 	for (int i = 0; i < 16; ++i) {
 		for (int j = 0; j < 3; ++j) {
-			ap_uint<EXP_SIZE> diff;
-			ap_uint<6> diff_sat;
+			ap_uint<6> diff;
 			if (mode) {
 // backward mode
 				diff = exp_out_b[j] - exp_array[i][j];
@@ -365,15 +361,10 @@ void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
 // forward mode
 				diff = exp_out_f[i] - exp_array[i][j];
 			}
-			if (diff >= (MANT_SIZE + 1) * 2)
-				diff_sat = (MANT_SIZE + 1) * 2;
-			else
-				diff_sat = diff;
 			if (sign_array[i][j])
-				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff_sat) *
-          -1;
+				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff) * -1;
 			else
-				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff_sat);
+				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff);
 		}
 	}
 }
@@ -504,6 +495,10 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   ap_uint<EXP_SIZE> expb[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=expb complete dim=1
 #pragma HLS ARRAY_PARTITION variable=expb complete dim=2
+
+  chalf otcfp[OCFACT][16];
+#pragma HLS ARRAY_PARTITION variable=otcfp complete dim=1
+#pragma HLS ARRAY_PARTITION variable=otcfp complete dim=2
 
   int inchannels = params[0];
   int outchannels = params[1];
@@ -820,35 +815,34 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               cfp_convert(fc || backward_flag, otm[k], exp_out_f[k],
                 exp_out_b[k], ot[k]);
 
+              for (int q = 0; q < 2; ++q) {
+                for (int p = 0; p < 8; ++p) {
+                  ap_int<SHIFT_SIZE> temp1, temp2;
+                  if (backward_flag || fc_flag) { 
+                    temp1 = ot[k][p * 2][q];
+                    temp2 = ot[k][p * 2 + 1][q];
+                  } else {
+                    temp1 = ot[k][p + q * 8][0];
+                    temp2 = ot[k][p + q * 8][1] + ot[k][p + q * 8][2];
+#pragma HLS RESOURCE variable=temp2 core=AddSub_DSP
+                  }
+                  ot_s1[k][p + q * 8] = temp1 + temp2;
+#pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP
+                }
+              }
+
               for (int p = 0; p < 8; ++p) { 
                 ot_s1[k][p + 2 * 8] = ot[k][p * 2][2] + ot[k][p * 2 + 1][2];
 #pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP
               }
 
-              if (backward_flag || fc_flag) {
-                for (int q = 0; q < 2; ++q) {
-                  for (int p = 0; p < 8; ++p) { 
-                    ot_s1[k][p + q * 8] = ot[k][p * 2][q] +
-                      ot[k][p * 2 + 1][q];
-#pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP
-                  }
-                }
-                for (int q = 0; q < 3; ++q) {
-                  for (int p = 0; p < 4; ++p) {
-                    ot_s2[k][q][p] = ot_s1[k][p * 2 + q * 8] +
-                      ot_s1[k][p * 2 + 1 + q * 8];
+              for (int q = 0; q < 3; ++q) {
+                for (int p = 0; p < 4; ++p) {
+                  ot_s2[k][q][p] = ot_s1[k][p * 2 + q * 8] +
+                    ot_s1[k][p * 2 + 1 + q * 8];
 #pragma HLS RESOURCE variable=ot_s2 core=AddSub_DSP
-                  }
-                }
-              } else {
-                for (int p = 0; p < 16; ++p) {
-                  ap_int<SHIFT_SIZE> temp = ot[k][p][1] + ot[k][p][2];
-#pragma HLS RESOURCE variable=temp core=AddSub_DSP
-                  ot_s1[k][p] = ot[k][p][0] + temp;;
-#pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP
                 }
               }
-
               for (int q = 0; q < 3; ++q) {
                 for (int p = 0; p < 2; ++p) {
                   ot_s3[k][q][p] = ot_s2[k][q][p * 2] + ot_s2[k][q][p * 2 + 1];
@@ -858,9 +852,9 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS RESOURCE variable=ot_s4 core=AddSub_DSP
               }
                
-              for (int p = 0; p < 3; ++p) {
-                otb[k][row_off * 3 + p] = ot_s4[k][p];
-                expb[k][row_off * 3 + p] = exp_out_b[k][p];
+              for (int q = 0; q < 3; ++q) {
+                otb[k][row_off * 3 + q] = ot_s4[k][q];
+                expb[k][row_off * 3 + q] = exp_out_b[k][q];
               }
 
               otfc[k][fc_off] = ot_s4[k][0];
@@ -879,25 +873,26 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                     expf[k][p] = exp_out_f[k][p];
                   }
                 }
+                otcfp[k][p] = tocfp(otf[k][p], expf[k][p]);
               }
 
               if (acc_enable) {
-                outbuf[k][o_idx].s0 += tocfp(otf[k][0], expf[k][0]);
-                outbuf[k][o_idx].s1 += tocfp(otf[k][1], expf[k][1]);
-                outbuf[k][o_idx].s2 += tocfp(otf[k][2], expf[k][2]);
-                outbuf[k][o_idx].s3 += tocfp(otf[k][3], expf[k][3]);
-                outbuf[k][o_idx].s4 += tocfp(otf[k][4], expf[k][4]);
-                outbuf[k][o_idx].s5 += tocfp(otf[k][5], expf[k][5]);
-                outbuf[k][o_idx].s6 += tocfp(otf[k][6], expf[k][6]);
-                outbuf[k][o_idx].s7 += tocfp(otf[k][7], expf[k][7]);
-                outbuf[k][o_idx].s8 += tocfp(otf[k][8], expf[k][8]);
-                outbuf[k][o_idx].s9 += tocfp(otf[k][9], expf[k][9]);
-                outbuf[k][o_idx].sa += tocfp(otf[k][10], expf[k][10]);
-                outbuf[k][o_idx].sb += tocfp(otf[k][11], expf[k][11]);
-                outbuf[k][o_idx].sc += tocfp(otf[k][12], expf[k][12]);
-                outbuf[k][o_idx].sd += tocfp(otf[k][13], expf[k][13]);
-                outbuf[k][o_idx].se += tocfp(otf[k][14], expf[k][14]);
-                outbuf[k][o_idx].sf += tocfp(otf[k][15], expf[k][15]);
+                outbuf[k][o_idx].s0 += otcfp[k][0]; 
+                outbuf[k][o_idx].s1 += otcfp[k][1]; 
+                outbuf[k][o_idx].s2 += otcfp[k][2]; 
+                outbuf[k][o_idx].s3 += otcfp[k][3]; 
+                outbuf[k][o_idx].s4 += otcfp[k][4]; 
+                outbuf[k][o_idx].s5 += otcfp[k][5]; 
+                outbuf[k][o_idx].s6 += otcfp[k][6]; 
+                outbuf[k][o_idx].s7 += otcfp[k][7]; 
+                outbuf[k][o_idx].s8 += otcfp[k][8]; 
+                outbuf[k][o_idx].s9 += otcfp[k][9]; 
+                outbuf[k][o_idx].sa += otcfp[k][10];
+                outbuf[k][o_idx].sb += otcfp[k][11];
+                outbuf[k][o_idx].sc += otcfp[k][12];
+                outbuf[k][o_idx].sd += otcfp[k][13];
+                outbuf[k][o_idx].se += otcfp[k][14];
+                outbuf[k][o_idx].sf += otcfp[k][15];
               }
             }
           }

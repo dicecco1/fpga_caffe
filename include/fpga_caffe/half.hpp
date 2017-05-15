@@ -14,8 +14,8 @@
 #include "ap_int.h"
 #endif
 
-#define EXP_SIZE 5 
-#define MANT_SIZE 10 
+#define EXP_SIZE 6 
+#define MANT_SIZE 9 
 #define EXP_OFFSET ((1 << (EXP_SIZE - 1)) - 1)
 #define MAX_EXP ((1 << EXP_SIZE) - 1)
 #define MAX_MANT ((1 << MANT_SIZE) - 1)
@@ -28,7 +28,8 @@
 #define SIGN_MASK (1 << SIGN_SHIFT)
 #define FP_WIDTH (EXP_SIZE + MANT_SIZE + 1)
 #define ROUND_NEAREST 0 
-#define SHIFT_SIZE ((MANT_SIZE + 1) * 2 + 5) 
+#define OVFL_ROOM 4
+#define SHIFT_SIZE ((MANT_SIZE + 1) * 2 + 1 + OVFL_ROOM) 
 
 
 #if (EXP_SIZE + MANT_SIZE + 1) > 16
@@ -766,36 +767,33 @@ chalf tocfp(ap_int<SHIFT_SIZE> data, ap_uint<EXP_SIZE> exp) {
   }
 
   ap_uint<EXP_SIZE> lop;
+  lop = SHIFT_SIZE - 1;
+
   for (int i = 0; i < SHIFT_SIZE - 1; ++i) {
     if ((udata >> i) & 0x1)
       lop = i;
   }
 
-  ap_uint<3> exp_p = 0;
-  ap_uint<6> exp_m = 0;
-  if (lop >= SHIFT_SIZE - 6) {
-    exp_p = lop - SHIFT_SIZE + 6;
-  } else {
-    exp_m = SHIFT_SIZE - 6 - lop;
-  }
+  ap_int<7> exp_shift = 0;
+  exp_shift = lop - SHIFT_SIZE + 6;
 
   ap_uint<FP_WIDTH - 1> eresf;
   ap_uint<MANT_SIZE> mantresf;
 
-  if (exp + exp_p - exp_m >= MAX_EXP) {
+  eresf = exp + exp_shift;
+  mantresf = (udata >> ((MANT_SIZE + 1) + exp_shift));
+
+  if (exp + exp_shift >= MAX_EXP) {
     eresf = MAX_EXP - 1;
     mantresf = MAX_MANT;
-  } else if (exp + exp_p - exp_m <= 0) {
+  } else if ((exp + exp_shift <= 0) || (lop == SHIFT_SIZE - 1)) {
     eresf = 0;
     mantresf = 0;
-  } else {
-    eresf = exp + exp_p - exp_m;
-    mantresf = (udata << (exp_m - exp_p)) >> (MANT_SIZE + 1);
   }
+
   ap_uint<FP_WIDTH> res;
   res = ((sign << SIGN_SHIFT) & SIGN_MASK) |
     ((eresf << EXP_SHIFT) & EXP_MASK) | mantresf;
-
   return chalf(res);
 
 }
