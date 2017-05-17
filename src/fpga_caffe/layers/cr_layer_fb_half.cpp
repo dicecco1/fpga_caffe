@@ -289,7 +289,6 @@ void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3],
 void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
     ap_uint<EXP_SIZE> exp_out_b[3], ap_int<SHIFT_SIZE> out_vals[16][3]) {
 #pragma HLS pipeline
-
 	ap_uint<EXP_SIZE> exp_array[16][3];
 #pragma HLS ARRAY_PARTITION variable=exp_array complete dim=1
 #pragma HLS ARRAY_PARTITION variable=exp_array complete dim=2
@@ -367,6 +366,68 @@ void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
 				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff);
 		}
 	}
+}
+void adder_tree(bool mode, ap_int<SHIFT_SIZE> ot[16][3],
+    ap_int<SHIFT_SIZE> otForward[16], ap_int<SHIFT_SIZE> otBackward[3]) {
+  
+  ap_int<SHIFT_SIZE> ot_s1[8][3];
+#pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
+#pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=2
+
+  ap_int<SHIFT_SIZE> ot_s2[4][3];
+#pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=1
+#pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=2
+  ap_int<SHIFT_SIZE> ot_s3[2][3];
+#pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=1
+#pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=2
+ 
+#pragma HLS pipeline
+  ap_int<SHIFT_SIZE> temp, temp1, temp2;
+  for (int q = 0; q < 2; ++q) {
+    for (int p = 0; p < 8; ++p) {
+      if (mode) {
+        temp1 = ot[p][q];
+        temp2 = ot[p + 8][q];
+      } else {
+        temp1 = ot[p + q * 8][0];
+        temp2 = ot[p + q * 8][1] + ot[p + q * 8][2];
+#pragma HLS RESOURCE variable=temp2 core=AddSub_DSP
+      }
+      temp = temp1 + temp2;
+#pragma HLS RESOURCE variable=temp core=AddSub_DSP
+      if (mode)
+        ot_s1[p][q] = temp;
+      else
+        otForward[p + q * 8] = temp;
+    }
+  }
+  for (int p = 0; p < 8; ++p) {
+    temp = ot[p][2] + ot[p + 8][2];
+    ot_s1[p][2] = temp;
+#pragma HLS RESOURCE variable=temp core=AddSub_DSP
+  }
+
+  for (int q = 0; q < 3; ++q) {
+    for (int p = 0; p < 4; ++p) {
+      temp = ot_s1[p][q] + ot_s1[p + 4][q];
+      ot_s2[p][q] = temp;
+#pragma HLS RESOURCE variable=temp core=AddSub_DSP
+    }
+  }
+
+  for (int q = 0; q < 3; ++q) {
+    for (int p = 0; p < 2; ++p) {
+      temp = ot_s2[p][q] + ot_s2[p + 2][q];
+      ot_s3[p][q] = temp;
+#pragma HLS RESOURCE variable=temp core=AddSub_DSP
+    }
+  }
+
+  for (int q = 0; q < 3; ++q) {
+    temp = ot_s3[0][q] + ot_s3[1][q];
+    otBackward[q] = temp;
+#pragma HLS RESOURCE variable=temp core=AddSub_DSP
+  }
 }
 
 /* Kernel used for computing direct convolution forward and backward. 
@@ -454,23 +515,13 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS ARRAY_PARTITION variable=wt complete dim=3
 
   // Ouput tile transform stage 1 output
-  ap_int<SHIFT_SIZE> ot_s1[OCFACT][24];
-#pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=2
+  ap_int<SHIFT_SIZE> otForward[OCFACT][16];
+#pragma HLS ARRAY_PARTITION variable=otForward complete dim=1
+#pragma HLS ARRAY_PARTITION variable=otForward complete dim=2
 
-  ap_int<SHIFT_SIZE> ot_s2[OCFACT][3][4];
-#pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=2
-#pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=3
-
-  ap_int<SHIFT_SIZE> ot_s3[OCFACT][3][2];
-#pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=2
-#pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=3
-
-  ap_int<SHIFT_SIZE> ot_s4[OCFACT][3];
-#pragma HLS ARRAY_PARTITION variable=ot_s4 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=ot_s4 complete dim=2
+  ap_int<SHIFT_SIZE> otBackward[OCFACT][3];
+#pragma HLS ARRAY_PARTITION variable=otBackward complete dim=1
+#pragma HLS ARRAY_PARTITION variable=otBackward complete dim=2
  
   ap_int<SHIFT_SIZE> otf[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=1
@@ -815,49 +866,15 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               cfp_convert(fc || backward_flag, otm[k], exp_out_f[k],
                 exp_out_b[k], ot[k]);
 
-              for (int q = 0; q < 2; ++q) {
-                for (int p = 0; p < 8; ++p) {
-                  ap_int<SHIFT_SIZE> temp1, temp2;
-                  if (backward_flag || fc_flag) { 
-                    temp1 = ot[k][p * 2][q];
-                    temp2 = ot[k][p * 2 + 1][q];
-                  } else {
-                    temp1 = ot[k][p + q * 8][0];
-                    temp2 = ot[k][p + q * 8][1] + ot[k][p + q * 8][2];
-#pragma HLS RESOURCE variable=temp2 core=AddSub_DSP
-                  }
-                  ot_s1[k][p + q * 8] = temp1 + temp2;
-#pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP
-                }
-              }
-
-              for (int p = 0; p < 8; ++p) { 
-                ot_s1[k][p + 2 * 8] = ot[k][p * 2][2] + ot[k][p * 2 + 1][2];
-#pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP
-              }
+              adder_tree(fc || backward_flag, ot[k], otForward[k],
+                  otBackward[k]);
 
               for (int q = 0; q < 3; ++q) {
-                for (int p = 0; p < 4; ++p) {
-                  ot_s2[k][q][p] = ot_s1[k][p * 2 + q * 8] +
-                    ot_s1[k][p * 2 + 1 + q * 8];
-#pragma HLS RESOURCE variable=ot_s2 core=AddSub_DSP
-                }
-              }
-              for (int q = 0; q < 3; ++q) {
-                for (int p = 0; p < 2; ++p) {
-                  ot_s3[k][q][p] = ot_s2[k][q][p * 2] + ot_s2[k][q][p * 2 + 1];
-#pragma HLS RESOURCE variable=ot_s3 core=AddSub_DSP
-                }
-                ot_s4[k][q] = ot_s3[k][q][0] + ot_s3[k][q][1];
-#pragma HLS RESOURCE variable=ot_s4 core=AddSub_DSP
-              }
-               
-              for (int q = 0; q < 3; ++q) {
-                otb[k][row_off * 3 + q] = ot_s4[k][q];
+                otb[k][row_off * 3 + q] = otBackward[k][q];
                 expb[k][row_off * 3 + q] = exp_out_b[k][q];
               }
 
-              otfc[k][fc_off] = ot_s4[k][0];
+              otfc[k][fc_off] = otBackward[k][0];
               expfc[k][fc_off] = exp_out_b[k][0];
 
               for (int p = 0; p < 16; ++p) {
@@ -869,7 +886,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                     otf[k][p] = otb[k][p];
                     expf[k][p] = expb[k][p];
                   } else {
-                    otf[k][p] = ot_s1[k][p];
+                    otf[k][p] = otForward[k][p];
                     expf[k][p] = exp_out_f[k][p];
                   }
                 }
