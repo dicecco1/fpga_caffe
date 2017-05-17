@@ -7,7 +7,7 @@
 #include "../../../include/fpga_caffe/half.hpp"
 
 #define HADD_LATENCY 12 
-#define OCFACT 1 
+#define OCFACT 2 
 /* chalf16 data type definition */
 
 typedef struct {
@@ -367,8 +367,9 @@ void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
 		}
 	}
 }
-void adder_tree(bool mode, ap_int<SHIFT_SIZE> ot[16][3],
-    ap_int<SHIFT_SIZE> otForward[16], ap_int<SHIFT_SIZE> otBackward[3]) {
+void adder_tree(bool mode, ap_int<SHIFT_SIZE> ot[OCFACT][16][3],
+    ap_int<SHIFT_SIZE> otForward[OCFACT][16],
+    ap_int<SHIFT_SIZE> otBackward[OCFACT][3]) {
   
   ap_int<SHIFT_SIZE> ot_s1[8][3];
 #pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
@@ -383,50 +384,50 @@ void adder_tree(bool mode, ap_int<SHIFT_SIZE> ot[16][3],
  
 #pragma HLS pipeline
   ap_int<SHIFT_SIZE> temp, temp1, temp2;
-  for (int q = 0; q < 2; ++q) {
-    for (int p = 0; p < 8; ++p) {
-      if (mode) {
-        temp1 = ot[p][q];
-        temp2 = ot[p + 8][q];
-      } else {
-        temp1 = ot[p + q * 8][0];
-        temp2 = ot[p + q * 8][1] + ot[p + q * 8][2];
+  for (int k = 0; k < OCFACT; ++k) {
+    for (int q = 0; q < 2; ++q) {
+      for (int p = 0; p < 8; ++p) {
+        if (mode) {
+          temp1 = ot[k][p][q];
+          temp2 = ot[k][p + 8][q];
+        } else {
+          temp1 = ot[k][p + q * 8][0];
+          temp2 = ot[k][p + q * 8][1] + ot[k][p + q * 8][2];
 #pragma HLS RESOURCE variable=temp2 core=AddSub_DSP
-      }
-      temp = temp1 + temp2;
+        }
+        temp = temp1 + temp2;
 #pragma HLS RESOURCE variable=temp core=AddSub_DSP
-      if (mode)
         ot_s1[p][q] = temp;
-      else
-        otForward[p + q * 8] = temp;
+        otForward[k][p + q * 8] = temp;
+      }
     }
-  }
-  for (int p = 0; p < 8; ++p) {
-    temp = ot[p][2] + ot[p + 8][2];
-    ot_s1[p][2] = temp;
-#pragma HLS RESOURCE variable=temp core=AddSub_DSP
-  }
-
-  for (int q = 0; q < 3; ++q) {
-    for (int p = 0; p < 4; ++p) {
-      temp = ot_s1[p][q] + ot_s1[p + 4][q];
-      ot_s2[p][q] = temp;
+    for (int p = 0; p < 8; ++p) {
+      temp = ot[k][p][2] + ot[k][p + 8][2];
+      ot_s1[p][2] = temp;
 #pragma HLS RESOURCE variable=temp core=AddSub_DSP
     }
-  }
 
-  for (int q = 0; q < 3; ++q) {
-    for (int p = 0; p < 2; ++p) {
-      temp = ot_s2[p][q] + ot_s2[p + 2][q];
-      ot_s3[p][q] = temp;
+    for (int q = 0; q < 3; ++q) {
+      for (int p = 0; p < 4; ++p) {
+        temp = ot_s1[p][q] + ot_s1[p + 4][q];
+        ot_s2[p][q] = temp;
+#pragma HLS RESOURCE variable=temp core=AddSub_DSP
+      }
+    }
+
+    for (int q = 0; q < 3; ++q) {
+      for (int p = 0; p < 2; ++p) {
+        temp = ot_s2[p][q] + ot_s2[p + 2][q];
+        ot_s3[p][q] = temp;
+#pragma HLS RESOURCE variable=temp core=AddSub_DSP
+      }
+    }
+
+    for (int q = 0; q < 3; ++q) {
+      temp = ot_s3[0][q] + ot_s3[1][q];
+      otBackward[k][q] = temp;
 #pragma HLS RESOURCE variable=temp core=AddSub_DSP
     }
-  }
-
-  for (int q = 0; q < 3; ++q) {
-    temp = ot_s3[0][q] + ot_s3[1][q];
-    otBackward[q] = temp;
-#pragma HLS RESOURCE variable=temp core=AddSub_DSP
   }
 }
 
@@ -774,6 +775,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
           #pragma HLS DEPENDENCE variable=outbuf inter false
           #pragma HLS DEPENDENCE variable=wbuf inter false
           #pragma HLS DEPENDENCE variable=otb inter false
+          #pragma HLS DEPENDENCE variable=otf inter false
           #pragma HLS pipeline        
             if (fc_off == 16) {
               fc_off = 0;
@@ -865,10 +867,10 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               }
               cfp_convert(fc || backward_flag, otm[k], exp_out_f[k],
                 exp_out_b[k], ot[k]);
+            }
+            adder_tree(fc || backward_flag, ot, otForward, otBackward);
 
-              adder_tree(fc || backward_flag, ot[k], otForward[k],
-                  otBackward[k]);
-
+            for (int k = 0; k < OCFACT; ++k) {
               for (int q = 0; q < 3; ++q) {
                 otb[k][row_off * 3 + q] = otBackward[k][q];
                 expb[k][row_off * 3 + q] = exp_out_b[k][q];
