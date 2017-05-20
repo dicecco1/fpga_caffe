@@ -285,6 +285,8 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
   int ydim_out = xdim_out;
 
   memcpy(biasbuf, bias, sizeof(chalf) * outchannels);
+  int ofm_iters = (outchannels % OCFACT == 0) ? outchannels / OCFACT :
+    (outchannels / OCFACT) + 1;
 
   for (int y = 0; y < ydim_out; ++y) {
     for (int x = 0; x < xdim_out; ++x) {
@@ -295,223 +297,236 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
             int in_x = x * stride - pad + q;
             int in_idx = ((in_y * xdim + in_x) * inchannels +
                 n * burstchannels) * (numimages >> 4);
+            int inbuf_idx = (p * ksize + q) * burstchannels * (numimages >> 4);
+            int in_size = burstchannels * (numimages >> 4);
             if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
-              memcpy(inbuf, input + in_idx,
-                  sizeof(chalf16) * burstchannels * (numimages >> 4));
+              memcpy(inbuf + inbuf_idx, input + in_idx, sizeof(chalf16) *
+                  in_size);
             } else {
-              for (int i = 0; i < burstchannels * (numimages >> 4); ++i) {
-                inbuf[i].s0 = 0;
-                inbuf[i].s1 = 0;
-                inbuf[i].s2 = 0;
-                inbuf[i].s3 = 0;
-                inbuf[i].s4 = 0;
-                inbuf[i].s5 = 0;
-                inbuf[i].s6 = 0;
-                inbuf[i].s7 = 0;
-                inbuf[i].s8 = 0;
-                inbuf[i].s9 = 0;
-                inbuf[i].sa = 0;
-                inbuf[i].sb = 0;
-                inbuf[i].sc = 0;
-                inbuf[i].sd = 0;
-                inbuf[i].se = 0;
-                inbuf[i].sf = 0;
+              for (int i = 0; i < in_size; ++i) {
+#pragma HLS pipeline
+                inbuf[i + inbuf_idx].s0 = 0;
+                inbuf[i + inbuf_idx].s1 = 0;
+                inbuf[i + inbuf_idx].s2 = 0;
+                inbuf[i + inbuf_idx].s3 = 0;
+                inbuf[i + inbuf_idx].s4 = 0;
+                inbuf[i + inbuf_idx].s5 = 0;
+                inbuf[i + inbuf_idx].s6 = 0;
+                inbuf[i + inbuf_idx].s7 = 0;
+                inbuf[i + inbuf_idx].s8 = 0;
+                inbuf[i + inbuf_idx].s9 = 0;
+                inbuf[i + inbuf_idx].sa = 0;
+                inbuf[i + inbuf_idx].sb = 0;
+                inbuf[i + inbuf_idx].sc = 0;
+                inbuf[i + inbuf_idx].sd = 0;
+                inbuf[i + inbuf_idx].se = 0;
+                inbuf[i + inbuf_idx].sf = 0;
               }
             }
+          }
+        }
 
-            int ofm_iters = (outchannels % OCFACT == 0) ?
-              outchannels / OCFACT : (outchannels / OCFACT) + 1;
-            for (int o = 0; o < ofm_iters; ++o) {
-              if (n == 0 && !mode && p == 0 && q == 0) {
-                for (int i = 0; i < (numimages >> 4); ++i) {
-                  for (int k = 0; k < OCFACT; ++k) {
-                    outbuf[k][i].s0 = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].s1 = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].s2 = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].s3 = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].s4 = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].s5 = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].s6 = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].s7 = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].s8 = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].s9 = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].sa = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].sb = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].sc = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].sd = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].se = biasbuf[o * OCFACT + k];
-                    outbuf[k][i].sf = biasbuf[o * OCFACT + k];
-                  }
-                }
-              } else {
-                int out_idx;
-                int out_size;
-                for (int k = 0; k < OCFACT; ++k) {
-                  if (mode) {
-                    out_idx = ((p * ksize + q) * outchannels +
-                      (o * OCFACT + k)) * (inchannels >> 4) +
-                      n * (burstchannels >> 4);
-                    out_size = burstchannels >> 4;
-                  } else {
-                    out_idx = ((y * xdim + x) * outchannels +
-                        (o * OCFACT) + k) * (numimages >> 4);
-                    out_size = numimages >> 4;
-                  }
-                  memcpy(outbuf[k], output + out_idx,
-                      sizeof(chalf16) * out_size);
-                }
-              } 
-              
+        for (int o = 0; o < ofm_iters; ++o) {
+          if (n == 0 && !mode) {
+            for (int i = 0; i < (numimages >> 4); ++i) {
               for (int k = 0; k < OCFACT; ++k) {
-                int w_idx, w_size;
-                if (mode) {
-                  w_idx = ((y * xdim + x) * outchannels +
-                    (o * OCFACT + k)) * (numimages >> 4);
-                  w_size = numimages >> 4;
-                } else {
-                  w_idx = ((p * ksize + q) * outchannels +
-                    (o * OCFACT + k)) * (inchannels >> 4) +
-                    n * (burstchannels >> 4);
-                  w_size = burstchannels >> 4;
-                }
-                memcpy(wbuf[k], weights + w_idx, sizeof(chalf16) * w_size);
+                outbuf[k][i].s0 = biasbuf[o * OCFACT + k];
+                outbuf[k][i].s1 = biasbuf[o * OCFACT + k];
+                outbuf[k][i].s2 = biasbuf[o * OCFACT + k];
+                outbuf[k][i].s3 = biasbuf[o * OCFACT + k];
+                outbuf[k][i].s4 = biasbuf[o * OCFACT + k];
+                outbuf[k][i].s5 = biasbuf[o * OCFACT + k];
+                outbuf[k][i].s6 = biasbuf[o * OCFACT + k];
+                outbuf[k][i].s7 = biasbuf[o * OCFACT + k];
+                outbuf[k][i].s8 = biasbuf[o * OCFACT + k];
+                outbuf[k][i].s9 = biasbuf[o * OCFACT + k];
+                outbuf[k][i].sa = biasbuf[o * OCFACT + k];
+                outbuf[k][i].sb = biasbuf[o * OCFACT + k];
+                outbuf[k][i].sc = biasbuf[o * OCFACT + k];
+                outbuf[k][i].sd = biasbuf[o * OCFACT + k];
+                outbuf[k][i].se = biasbuf[o * OCFACT + k];
+                outbuf[k][i].sf = biasbuf[o * OCFACT + k];
               }
+            }
+          } else {
+            int out_idx;
+            int out_size;
+            for (int k = 0; k < OCFACT; ++k) {
+              if (mode) {
+                out_idx = (o * OCFACT + k) * ksize * ksize *
+                  (inchannels >> 4) + n * (burstchannels >> 4);
+                out_size = ksize * ksize * (burstchannels >> 4);
+              } else {
+                out_idx = ((y * xdim + x) * outchannels +
+                    (o * OCFACT) + k) * (numimages >> 4);
+                out_size = numimages >> 4;
+              }
+              memcpy(outbuf[k], output + out_idx,
+                  sizeof(chalf16) * out_size);
+            }
+          } 
+          
+          for (int k = 0; k < OCFACT; ++k) {
+            int w_idx, w_size;
+            if (mode) {
+              w_idx = ((y * xdim + x) * outchannels +
+                (o * OCFACT + k)) * (numimages >> 4);
+              w_size = numimages >> 4;
+            } else {
+              w_idx = (o * OCFACT + k) * ksize * ksize *
+                (inchannels >> 4) + n * (burstchannels >> 4);
+              w_size = ksize * ksize * (burstchannels >> 4);
+            }
+            memcpy(wbuf[k], weights + w_idx, sizeof(chalf16) * w_size);
+          }
 
-              short w_off = 0;
-              short img_off = 0;
-              short iter = 0;
-              for (int i = 0; i < (numimages >> 4) * burstchannels; ++i,
-                  ++iter) {
+          short w_off = 0;
+          short img_off = 0;
+          short iter = 0;
+          short kdim_off = 0;
+          int mac_iterations = ksize * ksize * (numimages >> 4) *
+            burstchannels;
+          for (int i = 0; i < mac_iterations; ++i, ++iter) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable outbuf inter false
-                if (!mode) {
-                  if (iter == (numimages >> 4)) {
-                    w_off++;
-                    iter = 0;
-                  }
-                  img_off = iter;
+            if (!mode) {
+              if (iter == (numimages >> 4)) {
+                if (w_off == burstchannels - 1) {
+                  w_off = 0;
+                  kdim_off++;       
                 } else {
-                  if (iter == burstchannels) {
-                    img_off++;
-                    iter = 0;
-                  }
-                  w_off = iter;
+                  w_off++;
                 }
-
-                for (int k = 0; k < OCFACT; ++k) {
-                  if (!mode) {
-                    weight_fw[0] = wbuf[k][w_off >> 4].s0;
-                    weight_fw[1] = wbuf[k][w_off >> 4].s1;
-                    weight_fw[2] = wbuf[k][w_off >> 4].s2;
-                    weight_fw[3] = wbuf[k][w_off >> 4].s3;
-                    weight_fw[4] = wbuf[k][w_off >> 4].s4;
-                    weight_fw[5] = wbuf[k][w_off >> 4].s5;
-                    weight_fw[6] = wbuf[k][w_off >> 4].s6;
-                    weight_fw[7] = wbuf[k][w_off >> 4].s7;
-                    weight_fw[8] = wbuf[k][w_off >> 4].s8;
-                    weight_fw[9] = wbuf[k][w_off >> 4].s9;
-                    weight_fw[10] = wbuf[k][w_off >> 4].sa;
-                    weight_fw[11] = wbuf[k][w_off >> 4].sb;
-                    weight_fw[12] = wbuf[k][w_off >> 4].sc;
-                    weight_fw[13] = wbuf[k][w_off >> 4].sd;
-                    weight_fw[14] = wbuf[k][w_off >> 4].se;
-                    weight_fw[15] = wbuf[k][w_off >> 4].sf;
-                    for (int j = 0; j < 16; ++j)
-                      weight_val[j] = weight_fw[w_off & 0xF];
-                  } else {
-                    weight_val[0] = wbuf[k][img_off].s0;
-                    weight_val[1] = wbuf[k][img_off].s1;
-                    weight_val[2] = wbuf[k][img_off].s2;
-                    weight_val[3] = wbuf[k][img_off].s3;
-                    weight_val[4] = wbuf[k][img_off].s4;
-                    weight_val[5] = wbuf[k][img_off].s5;
-                    weight_val[6] = wbuf[k][img_off].s6;
-                    weight_val[7] = wbuf[k][img_off].s7;
-                    weight_val[8] = wbuf[k][img_off].s8;
-                    weight_val[9] = wbuf[k][img_off].s9;
-                    weight_val[10] = wbuf[k][img_off].sa;
-                    weight_val[11] = wbuf[k][img_off].sb;
-                    weight_val[12] = wbuf[k][img_off].sc;
-                    weight_val[13] = wbuf[k][img_off].sd;
-                    weight_val[14] = wbuf[k][img_off].se;
-                    weight_val[15] = wbuf[k][img_off].sf;
-                  }
-                  short in_idx = w_off * (numimages >> 4) + img_off;
-                  multres[k][0] = inbuf[in_idx].s0 * weight_val[0];
-                  multres[k][1] = inbuf[in_idx].s1 * weight_val[1];
-                  multres[k][2] = inbuf[in_idx].s2 * weight_val[2];
-                  multres[k][3] = inbuf[in_idx].s3 * weight_val[3];
-                  multres[k][4] = inbuf[in_idx].s4 * weight_val[4];
-                  multres[k][5] = inbuf[in_idx].s5 * weight_val[5];
-                  multres[k][6] = inbuf[in_idx].s6 * weight_val[6];
-                  multres[k][7] = inbuf[in_idx].s7 * weight_val[7];
-                  multres[k][8] = inbuf[in_idx].s8 * weight_val[8];
-                  multres[k][9] = inbuf[in_idx].s9 * weight_val[9];
-                  multres[k][10] = inbuf[in_idx].sa * weight_val[10];
-                  multres[k][11] = inbuf[in_idx].sb * weight_val[11];
-                  multres[k][12] = inbuf[in_idx].sc * weight_val[12];
-                  multres[k][13] = inbuf[in_idx].sd * weight_val[13];
-                  multres[k][14] = inbuf[in_idx].se * weight_val[14];
-                  multres[k][15] = inbuf[in_idx].sf * weight_val[15];
-
-                  for (int j = 0; j < 8; ++j)
-                    addres_s1[j] = multres[k][j * 2] + multres[k][j * 2 + 1];
-                  for (int j = 0; j < 4; ++j)
-                    addres_s2[j] = addres_s1[j * 2] + addres_s1[j * 2 + 1];
-                  for (int j = 0; j < 2; ++j)
-                    addres_s3[j] = addres_s2[j * 2] + addres_s2[j * 2 + 1];
-                  addres_s4 = addres_s3[0] + addres_s3[1];
-
-                  short out_idx = (mode) ? (w_off >> 4) :
-                    img_off;
-
-                  bool acc_enable = (mode) ? ((w_off & 0xF) == 15) : true;
-
-                  if (!mode) {
-                    for (int j = 0; j < 16; ++j)
-                      finalOut[k][j] = multres[k][j];
-                  } else {
-                      finalOut[k][w_off & 0xF] = addres_s4;
-                  }
-
-                  if (acc_enable) {
-                    outbuf[k][out_idx].s0 += finalOut[k][0];
-                    outbuf[k][out_idx].s1 += finalOut[k][1];
-                    outbuf[k][out_idx].s2 += finalOut[k][2];
-                    outbuf[k][out_idx].s3 += finalOut[k][3];
-                    outbuf[k][out_idx].s4 += finalOut[k][4];
-                    outbuf[k][out_idx].s5 += finalOut[k][5];
-                    outbuf[k][out_idx].s6 += finalOut[k][6];
-                    outbuf[k][out_idx].s7 += finalOut[k][7];
-                    outbuf[k][out_idx].s8 += finalOut[k][8];
-                    outbuf[k][out_idx].s9 += finalOut[k][9];
-                    outbuf[k][out_idx].sa += finalOut[k][10];
-                    outbuf[k][out_idx].sb += finalOut[k][11];
-                    outbuf[k][out_idx].sc += finalOut[k][12];
-                    outbuf[k][out_idx].sd += finalOut[k][13];
-                    outbuf[k][out_idx].se += finalOut[k][14];
-                    outbuf[k][out_idx].sf += finalOut[k][15];
-                  } 
-                }
+                iter = 0;
               }
-              for (int k = 0; k < OCFACT; ++k) {
-                int out_idx;
-                int out_size;
-                if (mode) {
-                  out_idx = ((p * ksize + q) * outchannels +
-                    (o * OCFACT + k)) * (inchannels >> 4) +
-                    n * (burstchannels >> 4);
-                  out_size = burstchannels >> 4;
+              img_off = iter;
+            } else {
+              if (iter == burstchannels) {
+                if (kdim_off == ksize * ksize - 1) {
+                  kdim_off = 0;
+                  img_off++;
                 } else {
-                  out_idx = (((y * xdim) + x) * outchannels +
-                    (o * OCFACT) + k) * (numimages >> 4);
-                  out_size = numimages >> 4;
+                  kdim_off++;
                 }
-                if (o * OCFACT + k < outchannels)
-                  memcpy(output + out_idx, outbuf[k],
-                      sizeof(chalf16) * out_size);
+                iter = 0;
               }
+              w_off = iter;
             }
+
+            short w_idx = (mode) ? img_off : kdim_off * (burstchannels >> 4) +
+              (w_off >> 4);
+            for (int k = 0; k < OCFACT; ++k) {
+              if (!mode) {
+                weight_fw[0] = wbuf[k][w_idx].s0;
+                weight_fw[1] = wbuf[k][w_idx].s1;
+                weight_fw[2] = wbuf[k][w_idx].s2;
+                weight_fw[3] = wbuf[k][w_idx].s3;   
+                weight_fw[4] = wbuf[k][w_idx].s4;
+                weight_fw[5] = wbuf[k][w_idx].s5;
+                weight_fw[6] = wbuf[k][w_idx].s6;
+                weight_fw[7] = wbuf[k][w_idx].s7;
+                weight_fw[8] = wbuf[k][w_idx].s8;
+                weight_fw[9] = wbuf[k][w_idx].s9;
+                weight_fw[10] = wbuf[k][w_idx].sa;
+                weight_fw[11] = wbuf[k][w_idx].sb;
+                weight_fw[12] = wbuf[k][w_idx].sc;
+                weight_fw[13] = wbuf[k][w_idx].sd;
+                weight_fw[14] = wbuf[k][w_idx].se;
+                weight_fw[15] = wbuf[k][w_idx].sf;
+                for (int j = 0; j < 16; ++j)
+                  weight_val[j] = weight_fw[w_off & 0xF];
+              } else {
+                weight_val[0] = wbuf[k][w_idx].s0;
+                weight_val[1] = wbuf[k][w_idx].s1;
+                weight_val[2] = wbuf[k][w_idx].s2;
+                weight_val[3] = wbuf[k][w_idx].s3;
+                weight_val[4] = wbuf[k][w_idx].s4;
+                weight_val[5] = wbuf[k][w_idx].s5;
+                weight_val[6] = wbuf[k][w_idx].s6;
+                weight_val[7] = wbuf[k][w_idx].s7;
+                weight_val[8] = wbuf[k][w_idx].s8;
+                weight_val[9] = wbuf[k][w_idx].s9;
+                weight_val[10] = wbuf[k][w_idx].sa;
+                weight_val[11] = wbuf[k][w_idx].sb;
+                weight_val[12] = wbuf[k][w_idx].sc;
+                weight_val[13] = wbuf[k][w_idx].sd;
+                weight_val[14] = wbuf[k][w_idx].se;
+                weight_val[15] = wbuf[k][w_idx].sf;
+              }
+              short in_idx = (kdim_off * burstchannels  + w_off) *
+                (numimages >> 4) + img_off;
+              multres[k][0] = inbuf[in_idx].s0 * weight_val[0];
+              multres[k][1] = inbuf[in_idx].s1 * weight_val[1];
+              multres[k][2] = inbuf[in_idx].s2 * weight_val[2];
+              multres[k][3] = inbuf[in_idx].s3 * weight_val[3];
+              multres[k][4] = inbuf[in_idx].s4 * weight_val[4];
+              multres[k][5] = inbuf[in_idx].s5 * weight_val[5];
+              multres[k][6] = inbuf[in_idx].s6 * weight_val[6];
+              multres[k][7] = inbuf[in_idx].s7 * weight_val[7];
+              multres[k][8] = inbuf[in_idx].s8 * weight_val[8];
+              multres[k][9] = inbuf[in_idx].s9 * weight_val[9];
+              multres[k][10] = inbuf[in_idx].sa * weight_val[10];
+              multres[k][11] = inbuf[in_idx].sb * weight_val[11];
+              multres[k][12] = inbuf[in_idx].sc * weight_val[12];
+              multres[k][13] = inbuf[in_idx].sd * weight_val[13];
+              multres[k][14] = inbuf[in_idx].se * weight_val[14];
+              multres[k][15] = inbuf[in_idx].sf * weight_val[15];
+
+              for (int j = 0; j < 8; ++j)
+                addres_s1[j] = multres[k][j * 2] + multres[k][j * 2 + 1];
+              for (int j = 0; j < 4; ++j)
+                addres_s2[j] = addres_s1[j * 2] + addres_s1[j * 2 + 1];
+              for (int j = 0; j < 2; ++j)
+                addres_s3[j] = addres_s2[j * 2] + addres_s2[j * 2 + 1];
+              addres_s4 = addres_s3[0] + addres_s3[1];
+
+              short out_idx = (mode) ? kdim_off * (burstchannels >> 4) +
+                (w_off >> 4) : img_off;
+
+              bool acc_enable = (mode) ? ((w_off & 0xF) == 15) : true;
+
+              if (!mode) {
+                for (int j = 0; j < 16; ++j)
+                  finalOut[k][j] = multres[k][j];
+              } else {
+                  finalOut[k][w_off & 0xF] = addres_s4;
+              }
+
+              if (acc_enable) {
+                outbuf[k][out_idx].s0 += finalOut[k][0];
+                outbuf[k][out_idx].s1 += finalOut[k][1];
+                outbuf[k][out_idx].s2 += finalOut[k][2];
+                outbuf[k][out_idx].s3 += finalOut[k][3];
+                outbuf[k][out_idx].s4 += finalOut[k][4];
+                outbuf[k][out_idx].s5 += finalOut[k][5];
+                outbuf[k][out_idx].s6 += finalOut[k][6];
+                outbuf[k][out_idx].s7 += finalOut[k][7];
+                outbuf[k][out_idx].s8 += finalOut[k][8];
+                outbuf[k][out_idx].s9 += finalOut[k][9];
+                outbuf[k][out_idx].sa += finalOut[k][10];
+                outbuf[k][out_idx].sb += finalOut[k][11];
+                outbuf[k][out_idx].sc += finalOut[k][12];
+                outbuf[k][out_idx].sd += finalOut[k][13];
+                outbuf[k][out_idx].se += finalOut[k][14];
+                outbuf[k][out_idx].sf += finalOut[k][15];
+              } 
+            }
+          }
+          for (int k = 0; k < OCFACT; ++k) {
+            int out_idx;
+            int out_size;
+            if (mode) {
+              out_idx = (o * OCFACT + k) * ksize * ksize *
+                (inchannels >> 4) + n * (burstchannels >> 4);
+              out_size = ksize * ksize * (burstchannels >> 4);
+            } else {
+              out_idx = (((y * xdim) + x) * outchannels +
+                (o * OCFACT) + k) * (numimages >> 4);
+              out_size = numimages >> 4;
+            }
+            if (o * OCFACT + k < outchannels)
+              memcpy(output + out_idx, outbuf[k],
+                  sizeof(chalf16) * out_size);
           }
         }
       }
