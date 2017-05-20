@@ -224,7 +224,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
   // Input tile buffer
   chalf16 inbuf[8 * 256 * 16];
-
+#pragma HLS ARRAY_PARTITION variable=inbuf cyclic dim=1 factor=2
   // Output buffer used for writing
   chalf16 outbuf[OCFACT][512];
 #pragma HLS ARRAY_PARTITION variable=outbuf complete dim=1
@@ -237,9 +237,10 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
   chalf biasbuf[1024];
 #pragma HLS ARRAY_PARTITION variable=biasbuf cyclic factor=8
 
-  chalf multres[OCFACT][16];
+  chalf multres[2][OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=multres complete dim=1
 #pragma HLS ARRAY_PARTITION variable=multres complete dim=2
+#pragma HLS ARRAY_PARTITION variable=multres complete dim=3
 
   chalf weight_fw[16];
 #pragma HLS ARRAY_PARTITION variable=weight_fw complete
@@ -260,7 +261,12 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS ARRAY_PARTITION variable=finalOut complete dim=1
 #pragma HLS ARRAY_PARTITION variable=finalOut complete dim=2
 
-  chalf addres_s4;
+  chalf addres_s4[2];
+#pragma HLS ARRAY_PARTITION variable=addres_s4 complete dim=1
+
+  chalf addres_f[OCFACT][16];
+#pragma HLS ARRAY_PARTITION variable=addres_f complete dim=1
+#pragma HLS ARRAY_PARTITION variable=addres_f complete dim=2
 
   int inchannels = params[0];
   int outchannels = params[1];
@@ -385,13 +391,14 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
           short iter = 0;
           short kdim_off = 0;
           int mac_iterations = ksize * ksize * (numimages >> 4) *
-            burstchannels;
+            (burstchannels >> 1);
           for (int i = 0; i < mac_iterations; ++i, ++iter) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable outbuf inter false
+#pragma HLS DEPENDENCE variable finalOut inter false
             if (!mode) {
               if (iter == (numimages >> 4)) {
-                if (w_off == burstchannels - 1) {
+                if (w_off == (burstchannels >> 1) - 1) {
                   w_off = 0;
                   kdim_off++;       
                 } else {
@@ -401,7 +408,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
               }
               img_off = iter;
             } else {
-              if (iter == burstchannels) {
+              if (iter == (burstchannels >> 1)) {
                 if (kdim_off == ksize * ksize - 1) {
                   kdim_off = 0;
                   img_off++;
@@ -412,86 +419,95 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
               }
               w_off = iter;
             }
-
-            short w_idx = (mode) ? img_off : kdim_off * (burstchannels >> 4) +
-              (w_off >> 4);
+            
             for (int k = 0; k < OCFACT; ++k) {
-              if (!mode) {
-                weight_fw[0] = wbuf[k][w_idx].s0;
-                weight_fw[1] = wbuf[k][w_idx].s1;
-                weight_fw[2] = wbuf[k][w_idx].s2;
-                weight_fw[3] = wbuf[k][w_idx].s3;   
-                weight_fw[4] = wbuf[k][w_idx].s4;
-                weight_fw[5] = wbuf[k][w_idx].s5;
-                weight_fw[6] = wbuf[k][w_idx].s6;
-                weight_fw[7] = wbuf[k][w_idx].s7;
-                weight_fw[8] = wbuf[k][w_idx].s8;
-                weight_fw[9] = wbuf[k][w_idx].s9;
-                weight_fw[10] = wbuf[k][w_idx].sa;
-                weight_fw[11] = wbuf[k][w_idx].sb;
-                weight_fw[12] = wbuf[k][w_idx].sc;
-                weight_fw[13] = wbuf[k][w_idx].sd;
-                weight_fw[14] = wbuf[k][w_idx].se;
-                weight_fw[15] = wbuf[k][w_idx].sf;
-                for (int j = 0; j < 16; ++j)
-                  weight_val[j] = weight_fw[w_off & 0xF];
-              } else {
-                weight_val[0] = wbuf[k][w_idx].s0;
-                weight_val[1] = wbuf[k][w_idx].s1;
-                weight_val[2] = wbuf[k][w_idx].s2;
-                weight_val[3] = wbuf[k][w_idx].s3;
-                weight_val[4] = wbuf[k][w_idx].s4;
-                weight_val[5] = wbuf[k][w_idx].s5;
-                weight_val[6] = wbuf[k][w_idx].s6;
-                weight_val[7] = wbuf[k][w_idx].s7;
-                weight_val[8] = wbuf[k][w_idx].s8;
-                weight_val[9] = wbuf[k][w_idx].s9;
-                weight_val[10] = wbuf[k][w_idx].sa;
-                weight_val[11] = wbuf[k][w_idx].sb;
-                weight_val[12] = wbuf[k][w_idx].sc;
-                weight_val[13] = wbuf[k][w_idx].sd;
-                weight_val[14] = wbuf[k][w_idx].se;
-                weight_val[15] = wbuf[k][w_idx].sf;
+              for (int m = 0; m < 2; ++m) {
+                short w_idx = (mode) ? img_off : kdim_off *
+                  (burstchannels >> 4) + ((w_off * 2 + m) >> 4);
+                if (!mode) {
+                  weight_fw[0] = wbuf[k][w_idx].s0;
+                  weight_fw[1] = wbuf[k][w_idx].s1;
+                  weight_fw[2] = wbuf[k][w_idx].s2;
+                  weight_fw[3] = wbuf[k][w_idx].s3;   
+                  weight_fw[4] = wbuf[k][w_idx].s4;
+                  weight_fw[5] = wbuf[k][w_idx].s5;
+                  weight_fw[6] = wbuf[k][w_idx].s6;
+                  weight_fw[7] = wbuf[k][w_idx].s7;
+                  weight_fw[8] = wbuf[k][w_idx].s8;
+                  weight_fw[9] = wbuf[k][w_idx].s9;
+                  weight_fw[10] = wbuf[k][w_idx].sa;
+                  weight_fw[11] = wbuf[k][w_idx].sb;
+                  weight_fw[12] = wbuf[k][w_idx].sc;
+                  weight_fw[13] = wbuf[k][w_idx].sd;
+                  weight_fw[14] = wbuf[k][w_idx].se;
+                  weight_fw[15] = wbuf[k][w_idx].sf;
+                  for (int j = 0; j < 16; ++j)
+                    weight_val[j] = weight_fw[(w_off & 0x7) * 2 + m];
+                } else {
+                  weight_val[0] = wbuf[k][w_idx].s0;
+                  weight_val[1] = wbuf[k][w_idx].s1;
+                  weight_val[2] = wbuf[k][w_idx].s2;
+                  weight_val[3] = wbuf[k][w_idx].s3;
+                  weight_val[4] = wbuf[k][w_idx].s4;
+                  weight_val[5] = wbuf[k][w_idx].s5;
+                  weight_val[6] = wbuf[k][w_idx].s6;
+                  weight_val[7] = wbuf[k][w_idx].s7;
+                  weight_val[8] = wbuf[k][w_idx].s8;
+                  weight_val[9] = wbuf[k][w_idx].s9;
+                  weight_val[10] = wbuf[k][w_idx].sa;
+                  weight_val[11] = wbuf[k][w_idx].sb;
+                  weight_val[12] = wbuf[k][w_idx].sc;
+                  weight_val[13] = wbuf[k][w_idx].sd;
+                  weight_val[14] = wbuf[k][w_idx].se;
+                  weight_val[15] = wbuf[k][w_idx].sf;
+                }
+                short in_idx = (kdim_off * burstchannels + w_off * 2 + m) *
+                  (numimages >> 4) + img_off;
+                multres[m][k][0] = inbuf[in_idx].s0 * weight_val[0];
+                multres[m][k][1] = inbuf[in_idx].s1 * weight_val[1];
+                multres[m][k][2] = inbuf[in_idx].s2 * weight_val[2];
+                multres[m][k][3] = inbuf[in_idx].s3 * weight_val[3];
+                multres[m][k][4] = inbuf[in_idx].s4 * weight_val[4];
+                multres[m][k][5] = inbuf[in_idx].s5 * weight_val[5];
+                multres[m][k][6] = inbuf[in_idx].s6 * weight_val[6];
+                multres[m][k][7] = inbuf[in_idx].s7 * weight_val[7];
+                multres[m][k][8] = inbuf[in_idx].s8 * weight_val[8];
+                multres[m][k][9] = inbuf[in_idx].s9 * weight_val[9];
+                multres[m][k][10] = inbuf[in_idx].sa * weight_val[10];
+                multres[m][k][11] = inbuf[in_idx].sb * weight_val[11];
+                multres[m][k][12] = inbuf[in_idx].sc * weight_val[12];
+                multres[m][k][13] = inbuf[in_idx].sd * weight_val[13];
+                multres[m][k][14] = inbuf[in_idx].se * weight_val[14];
+                multres[m][k][15] = inbuf[in_idx].sf * weight_val[15];
+              
+                for (int j = 0; j < 8; ++j)
+                  addres_s1[j] = multres[m][k][j * 2] +
+                    multres[m][k][j * 2 + 1];
+                for (int j = 0; j < 4; ++j)
+                  addres_s2[j] = addres_s1[j * 2] + addres_s1[j * 2 + 1];
+                for (int j = 0; j < 2; ++j)
+                  addres_s3[j] = addres_s2[j * 2] + addres_s2[j * 2 + 1];
+                addres_s4[m] = addres_s3[0] + addres_s3[1];
               }
-              short in_idx = (kdim_off * burstchannels  + w_off) *
-                (numimages >> 4) + img_off;
-              multres[k][0] = inbuf[in_idx].s0 * weight_val[0];
-              multres[k][1] = inbuf[in_idx].s1 * weight_val[1];
-              multres[k][2] = inbuf[in_idx].s2 * weight_val[2];
-              multres[k][3] = inbuf[in_idx].s3 * weight_val[3];
-              multres[k][4] = inbuf[in_idx].s4 * weight_val[4];
-              multres[k][5] = inbuf[in_idx].s5 * weight_val[5];
-              multres[k][6] = inbuf[in_idx].s6 * weight_val[6];
-              multres[k][7] = inbuf[in_idx].s7 * weight_val[7];
-              multres[k][8] = inbuf[in_idx].s8 * weight_val[8];
-              multres[k][9] = inbuf[in_idx].s9 * weight_val[9];
-              multres[k][10] = inbuf[in_idx].sa * weight_val[10];
-              multres[k][11] = inbuf[in_idx].sb * weight_val[11];
-              multres[k][12] = inbuf[in_idx].sc * weight_val[12];
-              multres[k][13] = inbuf[in_idx].sd * weight_val[13];
-              multres[k][14] = inbuf[in_idx].se * weight_val[14];
-              multres[k][15] = inbuf[in_idx].sf * weight_val[15];
 
-              for (int j = 0; j < 8; ++j)
-                addres_s1[j] = multres[k][j * 2] + multres[k][j * 2 + 1];
-              for (int j = 0; j < 4; ++j)
-                addres_s2[j] = addres_s1[j * 2] + addres_s1[j * 2 + 1];
-              for (int j = 0; j < 2; ++j)
-                addres_s3[j] = addres_s2[j * 2] + addres_s2[j * 2 + 1];
-              addres_s4 = addres_s3[0] + addres_s3[1];
+              for (int j = 0; j < 16; ++j) {
+                addres_f[k][j] = multres[0][k][j] + multres[1][k][j];
+              }
+
+              if (mode) {
+                for (int m = 0; m < 2; ++m) {
+                  finalOut[k][(w_off & 0x7) * 2 + m] = addres_s4[m];
+                }
+              } else {
+                for (int j = 0; j < 16; ++j)
+                  finalOut[k][j] = addres_f[k][j];
+              }
 
               short out_idx = (mode) ? kdim_off * (burstchannels >> 4) +
-                (w_off >> 4) : img_off;
+                ((w_off * 2) >> 4) : img_off;
 
-              bool acc_enable = (mode) ? ((w_off & 0xF) == 15) : true;
-
-              if (!mode) {
-                for (int j = 0; j < 16; ++j)
-                  finalOut[k][j] = multres[k][j];
-              } else {
-                  finalOut[k][w_off & 0xF] = addres_s4;
-              }
-
+              bool acc_enable = (mode) ? ((w_off & 0x7) == 7) : true;
+              
               if (acc_enable) {
                 outbuf[k][out_idx].s0 += finalOut[k][0];
                 outbuf[k][out_idx].s1 += finalOut[k][1];
