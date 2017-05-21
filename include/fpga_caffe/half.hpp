@@ -27,7 +27,7 @@
 #define SIGN_SHIFT (EXP_SIZE + MANT_SIZE)
 #define SIGN_MASK (1 << SIGN_SHIFT)
 #define FP_WIDTH (EXP_SIZE + MANT_SIZE + 1)
-#define ROUND_NEAREST 0 
+#define ROUND_NEAREST 1 
 #define OVFL_ROOM 4
 #define SHIFT_SIZE ((MANT_SIZE + 1) * 2 + 1 + OVFL_ROOM) 
 
@@ -267,7 +267,7 @@ chalf operator*(chalf T, chalf U) {
     // saturate results
     eres_t = MAX_EXP - 1;
     mantresf = MAX_MANT;
-  } else if ((e1 == 0) || (e2 == 0) || (eres < 0)) {
+  } else if ((e1 == 0) || (e2 == 0) || (eres <= 0)) {
     // 0 * val, underflow
     eres_t = 0;
     mantresf = 0;
@@ -578,7 +578,7 @@ chalf operator+(chalf T, chalf U) {
     if (eres + Rshifter + rnd_ovfl >= MAX_EXP) {
       eres_t = MAX_EXP - 1;
       mantresf = MAX_MANT;
-    } else if (eres + Rshifter <= 0) {
+    } else if (eres + Rshifter + rnd_ovfl <= 0) {
       eres_t = 0;
       mantresf = 0;
     } else {

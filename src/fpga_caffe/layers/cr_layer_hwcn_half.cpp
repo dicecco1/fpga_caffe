@@ -419,48 +419,36 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
               }
               w_off = iter;
             }
-            
+            short w_idx = (mode) ? img_off : kdim_off *
+              (burstchannels >> 4) + ((w_off * 2) >> 4);
+
             for (int k = 0; k < OCFACT; ++k) {
               for (int m = 0; m < 2; ++m) {
-                short w_idx = (mode) ? img_off : kdim_off *
-                  (burstchannels >> 4) + ((w_off * 2 + m) >> 4);
-                if (!mode) {
-                  weight_fw[0] = wbuf[k][w_idx].s0;
-                  weight_fw[1] = wbuf[k][w_idx].s1;
-                  weight_fw[2] = wbuf[k][w_idx].s2;
-                  weight_fw[3] = wbuf[k][w_idx].s3;   
-                  weight_fw[4] = wbuf[k][w_idx].s4;
-                  weight_fw[5] = wbuf[k][w_idx].s5;
-                  weight_fw[6] = wbuf[k][w_idx].s6;
-                  weight_fw[7] = wbuf[k][w_idx].s7;
-                  weight_fw[8] = wbuf[k][w_idx].s8;
-                  weight_fw[9] = wbuf[k][w_idx].s9;
-                  weight_fw[10] = wbuf[k][w_idx].sa;
-                  weight_fw[11] = wbuf[k][w_idx].sb;
-                  weight_fw[12] = wbuf[k][w_idx].sc;
-                  weight_fw[13] = wbuf[k][w_idx].sd;
-                  weight_fw[14] = wbuf[k][w_idx].se;
-                  weight_fw[15] = wbuf[k][w_idx].sf;
+                weight_fw[0] = wbuf[k][w_idx].s0;
+                weight_fw[1] = wbuf[k][w_idx].s1;
+                weight_fw[2] = wbuf[k][w_idx].s2;
+                weight_fw[3] = wbuf[k][w_idx].s3;   
+                weight_fw[4] = wbuf[k][w_idx].s4;
+                weight_fw[5] = wbuf[k][w_idx].s5;
+                weight_fw[6] = wbuf[k][w_idx].s6;
+                weight_fw[7] = wbuf[k][w_idx].s7;
+                weight_fw[8] = wbuf[k][w_idx].s8;
+                weight_fw[9] = wbuf[k][w_idx].s9;
+                weight_fw[10] = wbuf[k][w_idx].sa;
+                weight_fw[11] = wbuf[k][w_idx].sb;
+                weight_fw[12] = wbuf[k][w_idx].sc;
+                weight_fw[13] = wbuf[k][w_idx].sd;
+                weight_fw[14] = wbuf[k][w_idx].se;
+                weight_fw[15] = wbuf[k][w_idx].sf;
+
+                if (mode) {
+                  for (int j = 0; j < 16; ++j)
+                    weight_val[j] = weight_fw[j];
+                } else {
                   for (int j = 0; j < 16; ++j)
                     weight_val[j] = weight_fw[(w_off & 0x7) * 2 + m];
-                } else {
-                  weight_val[0] = wbuf[k][w_idx].s0;
-                  weight_val[1] = wbuf[k][w_idx].s1;
-                  weight_val[2] = wbuf[k][w_idx].s2;
-                  weight_val[3] = wbuf[k][w_idx].s3;
-                  weight_val[4] = wbuf[k][w_idx].s4;
-                  weight_val[5] = wbuf[k][w_idx].s5;
-                  weight_val[6] = wbuf[k][w_idx].s6;
-                  weight_val[7] = wbuf[k][w_idx].s7;
-                  weight_val[8] = wbuf[k][w_idx].s8;
-                  weight_val[9] = wbuf[k][w_idx].s9;
-                  weight_val[10] = wbuf[k][w_idx].sa;
-                  weight_val[11] = wbuf[k][w_idx].sb;
-                  weight_val[12] = wbuf[k][w_idx].sc;
-                  weight_val[13] = wbuf[k][w_idx].sd;
-                  weight_val[14] = wbuf[k][w_idx].se;
-                  weight_val[15] = wbuf[k][w_idx].sf;
                 }
+
                 short in_idx = (kdim_off * burstchannels + w_off * 2 + m) *
                   (numimages >> 4) + img_off;
                 multres[m][k][0] = inbuf[in_idx].s0 * weight_val[0];
