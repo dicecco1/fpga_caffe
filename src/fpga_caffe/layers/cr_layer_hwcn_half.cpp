@@ -245,24 +245,33 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
   chalf weight_fw[16];
 #pragma HLS ARRAY_PARTITION variable=weight_fw complete
 
-  chalf weight_val[16];
-#pragma HLS ARRAY_PARTITION variable=weight_val complete
+  chalf weight_val[2][16];
+#pragma HLS ARRAY_PARTITION variable=weight_val complete dim=1
+#pragma HLS ARRAY_PARTITION variable=weight_val complete dim=2
 
-  chalf addres_s1[8];
-#pragma HLS ARRAY_PARTITION variable=addres_s1 complete
+  chalf in_val[2][16];
+#pragma HLS ARRAY_PARTITION variable=in_val complete dim=1
+#pragma HLS ARRAY_PARTITION variable=in_val complete dim=2
 
-  chalf addres_s2[4];
-#pragma HLS ARRAY_PARTITION variable=addres_s2 complete
+  chalf addres_s1[OCFACT][8];
+#pragma HLS ARRAY_PARTITION variable=addres_s1 complete dim=1
+#pragma HLS ARRAY_PARTITION variable=addres_s1 complete dim=2
 
-  chalf addres_s3[2];
-#pragma HLS ARRAY_PARTITION variable=addres_s3 complete
+  chalf addres_s2[OCFACT][4];
+#pragma HLS ARRAY_PARTITION variable=addres_s2 complete dim=1
+#pragma HLS ARRAY_PARTITION variable=addres_s2 complete dim=2
+
+  chalf addres_s3[OCFACT][2];
+#pragma HLS ARRAY_PARTITION variable=addres_s3 complete dim=1
+#pragma HLS ARRAY_PARTITION variable=addres_s3 complete dim=2
 
   chalf finalOut[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=finalOut complete dim=1
 #pragma HLS ARRAY_PARTITION variable=finalOut complete dim=2
 
-  chalf addres_s4[2];
+  chalf addres_s4[OCFACT][2];
 #pragma HLS ARRAY_PARTITION variable=addres_s4 complete dim=1
+#pragma HLS ARRAY_PARTITION variable=addres_s4 complete dim=2
 
   chalf addres_f[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=addres_f complete dim=1
@@ -390,12 +399,15 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
           short img_off = 0;
           short iter = 0;
           short kdim_off = 0;
+          short counter = 0;
           int mac_iterations = ksize * ksize * (numimages >> 4) *
             (burstchannels >> 1);
-          for (int i = 0; i < mac_iterations; ++i, ++iter) {
+          for (int i = 0; i < mac_iterations; ++i, ++iter, ++counter) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable outbuf inter false
 #pragma HLS DEPENDENCE variable finalOut inter false
+            if (counter == 8)
+              counter = 0;
             if (!mode) {
               if (iter == (numimages >> 4)) {
                 if (w_off == (burstchannels >> 1) - 1) {
@@ -420,62 +432,66 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
               w_off = iter;
             }
             short w_idx = (mode) ? img_off : kdim_off *
-              (burstchannels >> 4) + ((w_off * 2) >> 4);
-
+              (burstchannels >> 4) + (w_off >> 3);
+            short fout_idx = counter * 2;
             for (int k = 0; k < OCFACT; ++k) {
+              weight_fw[0] = wbuf[k][w_idx].s0;
+              weight_fw[1] = wbuf[k][w_idx].s1;
+              weight_fw[2] = wbuf[k][w_idx].s2;
+              weight_fw[3] = wbuf[k][w_idx].s3;   
+              weight_fw[4] = wbuf[k][w_idx].s4;
+              weight_fw[5] = wbuf[k][w_idx].s5;
+              weight_fw[6] = wbuf[k][w_idx].s6;
+              weight_fw[7] = wbuf[k][w_idx].s7;
+              weight_fw[8] = wbuf[k][w_idx].s8;
+              weight_fw[9] = wbuf[k][w_idx].s9;
+              weight_fw[10] = wbuf[k][w_idx].sa;
+              weight_fw[11] = wbuf[k][w_idx].sb;
+              weight_fw[12] = wbuf[k][w_idx].sc;
+              weight_fw[13] = wbuf[k][w_idx].sd;
+              weight_fw[14] = wbuf[k][w_idx].se;
+              weight_fw[15] = wbuf[k][w_idx].sf;
               for (int m = 0; m < 2; ++m) {
-                weight_fw[0] = wbuf[k][w_idx].s0;
-                weight_fw[1] = wbuf[k][w_idx].s1;
-                weight_fw[2] = wbuf[k][w_idx].s2;
-                weight_fw[3] = wbuf[k][w_idx].s3;   
-                weight_fw[4] = wbuf[k][w_idx].s4;
-                weight_fw[5] = wbuf[k][w_idx].s5;
-                weight_fw[6] = wbuf[k][w_idx].s6;
-                weight_fw[7] = wbuf[k][w_idx].s7;
-                weight_fw[8] = wbuf[k][w_idx].s8;
-                weight_fw[9] = wbuf[k][w_idx].s9;
-                weight_fw[10] = wbuf[k][w_idx].sa;
-                weight_fw[11] = wbuf[k][w_idx].sb;
-                weight_fw[12] = wbuf[k][w_idx].sc;
-                weight_fw[13] = wbuf[k][w_idx].sd;
-                weight_fw[14] = wbuf[k][w_idx].se;
-                weight_fw[15] = wbuf[k][w_idx].sf;
-
                 if (mode) {
                   for (int j = 0; j < 16; ++j)
-                    weight_val[j] = weight_fw[j];
+                    weight_val[m][j] = weight_fw[j];
                 } else {
                   for (int j = 0; j < 16; ++j)
-                    weight_val[j] = weight_fw[(w_off & 0x7) * 2 + m];
+                    weight_val[m][j] = weight_fw[(w_off & 0x7) * 2 + m];
                 }
 
                 short in_idx = (kdim_off * burstchannels + w_off * 2 + m) *
                   (numimages >> 4) + img_off;
-                multres[m][k][0] = inbuf[in_idx].s0 * weight_val[0];
-                multres[m][k][1] = inbuf[in_idx].s1 * weight_val[1];
-                multres[m][k][2] = inbuf[in_idx].s2 * weight_val[2];
-                multres[m][k][3] = inbuf[in_idx].s3 * weight_val[3];
-                multres[m][k][4] = inbuf[in_idx].s4 * weight_val[4];
-                multres[m][k][5] = inbuf[in_idx].s5 * weight_val[5];
-                multres[m][k][6] = inbuf[in_idx].s6 * weight_val[6];
-                multres[m][k][7] = inbuf[in_idx].s7 * weight_val[7];
-                multres[m][k][8] = inbuf[in_idx].s8 * weight_val[8];
-                multres[m][k][9] = inbuf[in_idx].s9 * weight_val[9];
-                multres[m][k][10] = inbuf[in_idx].sa * weight_val[10];
-                multres[m][k][11] = inbuf[in_idx].sb * weight_val[11];
-                multres[m][k][12] = inbuf[in_idx].sc * weight_val[12];
-                multres[m][k][13] = inbuf[in_idx].sd * weight_val[13];
-                multres[m][k][14] = inbuf[in_idx].se * weight_val[14];
-                multres[m][k][15] = inbuf[in_idx].sf * weight_val[15];
+                in_val[m][0] = inbuf[in_idx].s0;
+                in_val[m][1] = inbuf[in_idx].s1;
+                in_val[m][2] = inbuf[in_idx].s2;
+                in_val[m][3] = inbuf[in_idx].s3;
+                in_val[m][4] = inbuf[in_idx].s4;
+                in_val[m][5] = inbuf[in_idx].s5;
+                in_val[m][6] = inbuf[in_idx].s6;
+                in_val[m][7] = inbuf[in_idx].s7;
+                in_val[m][8] = inbuf[in_idx].s8;
+                in_val[m][9] = inbuf[in_idx].s9;
+                in_val[m][10] = inbuf[in_idx].sa;
+                in_val[m][11] = inbuf[in_idx].sb;
+                in_val[m][12] = inbuf[in_idx].sc;
+                in_val[m][13] = inbuf[in_idx].sd;
+                in_val[m][14] = inbuf[in_idx].se;
+                in_val[m][15] = inbuf[in_idx].sf;
+
+                for (int j = 0; j < 16; ++j)
+                  multres[m][k][j] = in_val[m][j] * weight_val[m][j];
               
                 for (int j = 0; j < 8; ++j)
-                  addres_s1[j] = multres[m][k][j * 2] +
+                  addres_s1[k][j] = multres[m][k][j * 2] +
                     multres[m][k][j * 2 + 1];
                 for (int j = 0; j < 4; ++j)
-                  addres_s2[j] = addres_s1[j * 2] + addres_s1[j * 2 + 1];
+                  addres_s2[k][j] = addres_s1[k][j * 2] +
+                    addres_s1[k][j * 2 + 1];
                 for (int j = 0; j < 2; ++j)
-                  addres_s3[j] = addres_s2[j * 2] + addres_s2[j * 2 + 1];
-                addres_s4[m] = addres_s3[0] + addres_s3[1];
+                  addres_s3[k][j] = addres_s2[k][j * 2] +
+                    addres_s2[k][j * 2 + 1];
+                addres_s4[k][m] = addres_s3[k][0] + addres_s3[k][1];
               }
 
               for (int j = 0; j < 16; ++j) {
@@ -484,7 +500,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
               if (mode) {
                 for (int m = 0; m < 2; ++m) {
-                  finalOut[k][(w_off & 0x7) * 2 + m] = addres_s4[m];
+                  finalOut[k][fout_idx + m] = addres_s4[k][m];
                 }
               } else {
                 for (int j = 0; j < 16; ++j)
@@ -492,9 +508,9 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
               }
 
               short out_idx = (mode) ? kdim_off * (burstchannels >> 4) +
-                ((w_off * 2) >> 4) : img_off;
+                (w_off >> 3) : img_off;
 
-              bool acc_enable = (mode) ? ((w_off & 0x7) == 7) : true;
+              bool acc_enable = (mode) ? (counter == 7) : true;
               
               if (acc_enable) {
                 outbuf[k][out_idx].s0 += finalOut[k][0];
