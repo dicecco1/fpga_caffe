@@ -237,7 +237,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
   chalf biasbuf[1024];
 #pragma HLS ARRAY_PARTITION variable=biasbuf cyclic factor=8
 
-  chalf multres[2][OCFACT][16];
+  chalf multres[OCFACT][2][16];
 #pragma HLS ARRAY_PARTITION variable=multres complete dim=1
 #pragma HLS ARRAY_PARTITION variable=multres complete dim=2
 #pragma HLS ARRAY_PARTITION variable=multres complete dim=3
@@ -276,6 +276,10 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
   chalf addres_f[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=addres_f complete dim=1
 #pragma HLS ARRAY_PARTITION variable=addres_f complete dim=2
+
+  chalf wUpdate[OCFACT][16];
+#pragma HLS ARRAY_PARTITION variable=wUpdate complete dim=1
+#pragma HLS ARRAY_PARTITION variable=wUpdate complete dim=2
 
   int inchannels = params[0];
   int outchannels = params[1];
@@ -369,7 +373,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
             for (int k = 0; k < OCFACT; ++k) {
               if (mode) {
                 out_idx = (o * OCFACT + k) * ksize * ksize *
-                  (inchannels >> 4) + n * (burstchannels >> 4);
+                  (inchannels >> 4) + n * ksize * ksize * (burstchannels >> 4);
                 out_size = ksize * ksize * (burstchannels >> 4);
               } else {
                 out_idx = ((y * xdim + x) * outchannels +
@@ -382,15 +386,20 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
           } 
           
           for (int k = 0; k < OCFACT; ++k) {
-            int w_idx, w_size;
-            if (mode) {
-              w_idx = ((y * xdim + x) * outchannels +
+            int w_idx_f, w_idx_b, w_size_f, w_size_b, w_idx, w_size;
+            w_idx_b = ((y * xdim + x) * outchannels +
                 (o * OCFACT + k)) * (numimages >> 4);
-              w_size = numimages >> 4;
+            w_size_b = numimages >> 4;
+            w_idx_f = (o * OCFACT + k) * ksize * ksize * (inchannels >> 4)
+                + n * ksize * ksize * (burstchannels >> 4);
+            w_size_f = ksize * ksize * (burstchannels >> 4);
+
+            if (mode) {
+              w_idx = w_idx_b;
+              w_size = w_size_b;
             } else {
-              w_idx = (o * OCFACT + k) * ksize * ksize *
-                (inchannels >> 4) + n * (burstchannels >> 4);
-              w_size = ksize * ksize * (burstchannels >> 4);
+              w_idx = w_idx_f;
+              w_size = w_size_f;
             }
             memcpy(wbuf[k], weights + w_idx, sizeof(chalf16) * w_size);
           }
@@ -400,16 +409,22 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
           short iter = 0;
           short kdim_off = 0;
           short counter = 0;
+          short counter_fw = 0;
           int mac_iterations = ksize * ksize * (numimages >> 4) *
             (burstchannels >> 1);
           for (int i = 0; i < mac_iterations; ++i, ++iter, ++counter) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable outbuf inter false
 #pragma HLS DEPENDENCE variable finalOut inter false
+#pragma HLS DEPENDENCE variable wUpdate inter false
             if (counter == 8)
               counter = 0;
             if (!mode) {
               if (iter == (numimages >> 4)) {
+                if (counter_fw == 7)
+                  counter_fw = 0;
+                else
+                  counter_fw++;
                 if (w_off == (burstchannels >> 1) - 1) {
                   w_off = 0;
                   kdim_off++;       
@@ -431,9 +446,11 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
               }
               w_off = iter;
             }
-            short w_idx = (mode) ? img_off : kdim_off *
-              (burstchannels >> 4) + (w_off >> 3);
+            short w_idx_f = kdim_off * (burstchannels >> 4) + (w_off >> 3);
+            short w_idx_b = img_off;
+            short w_idx = (mode) ? w_idx_b : w_idx_f;
             short fout_idx = counter * 2;
+
             for (int k = 0; k < OCFACT; ++k) {
               weight_fw[0] = wbuf[k][w_idx].s0;
               weight_fw[1] = wbuf[k][w_idx].s1;
@@ -457,7 +474,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                     weight_val[m][j] = weight_fw[j];
                 } else {
                   for (int j = 0; j < 16; ++j)
-                    weight_val[m][j] = weight_fw[(w_off & 0x7) * 2 + m];
+                    weight_val[m][j] = weight_fw[counter_fw * 2 + m];
                 }
 
                 short in_idx = (kdim_off * burstchannels + w_off * 2 + m) *
@@ -480,11 +497,11 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 in_val[m][15] = inbuf[in_idx].sf;
 
                 for (int j = 0; j < 16; ++j)
-                  multres[m][k][j] = in_val[m][j] * weight_val[m][j];
+                  multres[k][m][j] = in_val[m][j] * weight_val[m][j];
               
                 for (int j = 0; j < 8; ++j)
-                  addres_s1[k][j] = multres[m][k][j * 2] +
-                    multres[m][k][j * 2 + 1];
+                  addres_s1[k][j] = multres[k][m][j * 2] +
+                    multres[k][m][j * 2 + 1];
                 for (int j = 0; j < 4; ++j)
                   addres_s2[k][j] = addres_s1[k][j * 2] +
                     addres_s1[k][j * 2 + 1];
@@ -495,20 +512,22 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
               }
 
               for (int j = 0; j < 16; ++j) {
-                addres_f[k][j] = multres[0][k][j] + multres[1][k][j];
+                addres_f[k][j] = multres[k][0][j] + multres[k][1][j];
               }
 
-              if (mode) {
-                for (int m = 0; m < 2; ++m) {
-                  finalOut[k][fout_idx + m] = addres_s4[k][m];
-                }
-              } else {
-                for (int j = 0; j < 16; ++j)
+              for (int m = 0; m < 2; ++m)
+                wUpdate[k][fout_idx + m] = addres_s4[k][m];
+
+              for (int j = 0; j < 16; ++j) {
+                if (mode)
+                  finalOut[k][j] = wUpdate[k][j];
+                else
                   finalOut[k][j] = addres_f[k][j];
               }
 
-              short out_idx = (mode) ? kdim_off * (burstchannels >> 4) +
-                (w_off >> 3) : img_off;
+              short out_idx_f = img_off;
+              short out_idx_b = kdim_off * (burstchannels >> 4) + (w_off >> 3);
+              short out_idx = (mode) ? out_idx_b : out_idx_f;
 
               bool acc_enable = (mode) ? (counter == 7) : true;
               
@@ -537,7 +556,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
             int out_size;
             if (mode) {
               out_idx = (o * OCFACT + k) * ksize * ksize *
-                (inchannels >> 4) + n * (burstchannels >> 4);
+                (inchannels >> 4) + n * ksize * ksize * (burstchannels >> 4);
               out_size = ksize * ksize * (burstchannels >> 4);
             } else {
               out_idx = (((y * xdim) + x) * outchannels +
