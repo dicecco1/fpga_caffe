@@ -253,7 +253,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS ARRAY_PARTITION variable=in_val complete dim=1
 #pragma HLS ARRAY_PARTITION variable=in_val complete dim=2
 
-  chalf addres_s1[OCFACT][8];
+  chalf addres_s1[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=addres_s1 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=addres_s1 complete dim=2
 
@@ -306,6 +306,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
   memcpy(biasbuf, bias, sizeof(chalf) * outchannels);
   int ofm_iters = (outchannels % OCFACT == 0) ? outchannels / OCFACT :
     (outchannels / OCFACT) + 1;
+  int mac_iterations = ksize * ksize * (numimages >> 4) * (burstchannels >> 1);
 
   for (int y = 0; y < ydim_out; ++y) {
     for (int x = 0; x < xdim_out; ++x) {
@@ -348,6 +349,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
         for (int o = 0; o < ofm_iters; ++o) {
           if (n == 0 && !mode) {
             for (int i = 0; i < (numimages >> 4); ++i) {
+#pragma HLS pipeline
               for (int k = 0; k < OCFACT; ++k) {
                 outbuf[k][i].s0 = biasbuf[o * OCFACT + k];
                 outbuf[k][i].s1 = biasbuf[o * OCFACT + k];
@@ -410,8 +412,6 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
           short kdim_off = 0;
           short counter = 0;
           short counter_fw = 0;
-          int mac_iterations = ksize * ksize * (numimages >> 4) *
-            (burstchannels >> 1);
           for (int i = 0; i < mac_iterations; ++i, ++iter, ++counter) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable outbuf inter false
@@ -498,21 +498,26 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
                 for (int j = 0; j < 16; ++j)
                   multres[k][m][j] = in_val[m][j] * weight_val[m][j];
-              
-                for (int j = 0; j < 8; ++j)
-                  addres_s1[k][j] = multres[k][m][j * 2] +
-                    multres[k][m][j * 2 + 1];
+              }
+
+              if (mode) {
+                for (int m = 0; m < 2; ++m) 
+                  for (int j = 0; j < 8; ++j)
+                    addres_s1[k][m * 8 + j] = multres[k][m][j * 2] +
+                      multres[k][m][j * 2 + 1];
+              } else {
+                for (int j = 0; j < 16; ++j)
+                  addres_s1[k][j] = multres[k][0][j] + multres[k][1][j];
+              }
+
+              for (int m = 0; m < 2; ++m) {
                 for (int j = 0; j < 4; ++j)
-                  addres_s2[k][j] = addres_s1[k][j * 2] +
-                    addres_s1[k][j * 2 + 1];
+                  addres_s2[k][j] = addres_s1[k][m * 8 + j * 2] +
+                    addres_s1[k][m * 8 + j * 2 + 1];
                 for (int j = 0; j < 2; ++j)
                   addres_s3[k][j] = addres_s2[k][j * 2] +
                     addres_s2[k][j * 2 + 1];
                 addres_s4[k][m] = addres_s3[k][0] + addres_s3[k][1];
-              }
-
-              for (int j = 0; j < 16; ++j) {
-                addres_f[k][j] = multres[k][0][j] + multres[k][1][j];
               }
 
               for (int m = 0; m < 2; ++m)
@@ -522,7 +527,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 if (mode)
                   finalOut[k][j] = wUpdate[k][j];
                 else
-                  finalOut[k][j] = addres_f[k][j];
+                  finalOut[k][j] = addres_s1[k][j];
               }
 
               short out_idx_f = img_off;
