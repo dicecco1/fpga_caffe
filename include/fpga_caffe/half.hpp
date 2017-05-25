@@ -27,7 +27,8 @@
 #define SIGN_SHIFT (EXP_SIZE + MANT_SIZE)
 #define SIGN_MASK (1 << SIGN_SHIFT)
 #define FP_WIDTH (EXP_SIZE + MANT_SIZE + 1)
-#define ROUND_NEAREST 1 
+#define ROUND_NEAREST_MULT 0
+#define ROUND_NEAREST_ADD 1
 #define OVFL_ROOM 4
 #define SHIFT_SIZE ((MANT_SIZE + 1) * 2 + 1 + OVFL_ROOM) 
 
@@ -251,7 +252,7 @@ chalf operator*(chalf T, chalf U) {
     eres++;
   }
 
-#if ROUND_NEAREST == 1
+#if ROUND_NEAREST_MULT == 1
   if (guard & (sticky | last)) {
     if (mantres == (MAX_MANT | MANT_NORM))
       eres++;
@@ -520,7 +521,7 @@ chalf operator+(chalf T, chalf U) {
 
   ap_uint<1> sticky;
  
-#if ROUND_NEAREST == 1
+#if ROUND_NEAREST_ADD == 1
   sticky = (mant2_a & ((1 << (MANT_SIZE - 2)) - 1)) > 0;
 #else
   sticky = 0;
@@ -555,7 +556,7 @@ chalf operator+(chalf T, chalf U) {
   ap_uint<1> last = sum_t & 0x1;
   ap_uint<1> rnd_ovfl = 0;
 
-#if ROUND_NEAREST == 1
+#if ROUND_NEAREST_ADD == 1
   if (guard & (last | round | sticky)) {
     if (sum_t == (MAX_MANT | MANT_NORM))
       rnd_ovfl = 1;
