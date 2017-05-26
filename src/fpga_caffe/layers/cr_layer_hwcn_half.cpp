@@ -322,8 +322,9 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
             if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
               if ((x != 0) && (stride == 1) && (q != ksize - 1)) {
                 int q_off = burstchannels * (numimages >> 4);
-                for (int i = 0; i < in_size; ++i) {
+                SHIFT_LOOP: for (int i = 0; i < in_size; ++i) {
 #pragma HLS pipeline
+#pragma HLS dependence variable=inbuf inter false
                   inbuf[i + inbuf_idx].s0 = inbuf[i + inbuf_idx + q_off].s0;
                   inbuf[i + inbuf_idx].s1 = inbuf[i + inbuf_idx + q_off].s1;
                   inbuf[i + inbuf_idx].s2 = inbuf[i + inbuf_idx + q_off].s2;
