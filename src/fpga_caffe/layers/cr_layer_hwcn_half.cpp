@@ -224,7 +224,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
   // Input tile buffer
   chalf16 inbuf[8 * 256 * 16];
-#pragma HLS ARRAY_PARTITION variable=inbuf cyclic dim=1 factor=2
+//#pragma HLS ARRAY_PARTITION variable=inbuf cyclic dim=1 factor=2
   // Output buffer used for writing
   chalf16 outbuf[OCFACT][512];
 #pragma HLS ARRAY_PARTITION variable=outbuf complete dim=1
@@ -308,9 +308,9 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
     (outchannels / OCFACT) + 1;
   int mac_iterations = ksize * ksize * (numimages >> 4) * (burstchannels >> 1);
 
-  for (int y = 0; y < ydim_out; ++y) {
-    for (int x = 0; x < xdim_out; ++x) {
-      for (int n = 0; n < rpo; ++n) {
+  for (int n = 0; n < rpo; ++n) {
+    for (int y = 0; y < ydim_out; ++y) {
+      for (int x = 0; x < xdim_out; ++x) {
         for (int p = 0; p < ksize; ++p) {
           for (int q = 0; q < ksize; ++q) {
             int in_y = y * stride - pad + p;
@@ -320,8 +320,31 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
             int inbuf_idx = (p * ksize + q) * burstchannels * (numimages >> 4);
             int in_size = burstchannels * (numimages >> 4);
             if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
-              memcpy(inbuf + inbuf_idx, input + in_idx, sizeof(chalf16) *
-                  in_size);
+              if ((x != 0) && (stride == 1) && (q != ksize - 1)) {
+                int q_off = burstchannels * (numimages >> 4);
+                for (int i = 0; i < in_size; ++i) {
+#pragma HLS pipeline
+                  inbuf[i + inbuf_idx].s0 = inbuf[i + inbuf_idx + q_off].s0;
+                  inbuf[i + inbuf_idx].s1 = inbuf[i + inbuf_idx + q_off].s1;
+                  inbuf[i + inbuf_idx].s2 = inbuf[i + inbuf_idx + q_off].s2;
+                  inbuf[i + inbuf_idx].s3 = inbuf[i + inbuf_idx + q_off].s3;
+                  inbuf[i + inbuf_idx].s4 = inbuf[i + inbuf_idx + q_off].s4;
+                  inbuf[i + inbuf_idx].s5 = inbuf[i + inbuf_idx + q_off].s5;
+                  inbuf[i + inbuf_idx].s6 = inbuf[i + inbuf_idx + q_off].s6;
+                  inbuf[i + inbuf_idx].s7 = inbuf[i + inbuf_idx + q_off].s7;
+                  inbuf[i + inbuf_idx].s8 = inbuf[i + inbuf_idx + q_off].s8;
+                  inbuf[i + inbuf_idx].s9 = inbuf[i + inbuf_idx + q_off].s9;
+                  inbuf[i + inbuf_idx].sa = inbuf[i + inbuf_idx + q_off].sa;
+                  inbuf[i + inbuf_idx].sb = inbuf[i + inbuf_idx + q_off].sb;
+                  inbuf[i + inbuf_idx].sc = inbuf[i + inbuf_idx + q_off].sc;
+                  inbuf[i + inbuf_idx].sd = inbuf[i + inbuf_idx + q_off].sd;
+                  inbuf[i + inbuf_idx].se = inbuf[i + inbuf_idx + q_off].se;
+                  inbuf[i + inbuf_idx].sf = inbuf[i + inbuf_idx + q_off].sf;
+                }
+              } else {
+                memcpy(inbuf + inbuf_idx, input + in_idx, sizeof(chalf16) *
+                    in_size);
+              }
             } else {
               for (int i = 0; i < in_size; ++i) {
 #pragma HLS pipeline
@@ -412,7 +435,8 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
           short kdim_off = 0;
           short counter = 0;
           short counter_fw = 0;
-          for (int i = 0; i < mac_iterations; ++i, ++iter, ++counter) {
+          MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter,
+            ++counter) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable outbuf inter false
 #pragma HLS DEPENDENCE variable finalOut inter false
