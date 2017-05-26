@@ -48,149 +48,6 @@ typedef struct {
   chalf sf;
 } chalf16;
 
-void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
-    ap_uint<EXP_SIZE> exp_out_b[3], ap_int<SHIFT_SIZE> out_vals[16][3]) {
-#pragma HLS pipeline
-	ap_uint<EXP_SIZE> exp_array[16][3];
-#pragma HLS ARRAY_PARTITION variable=exp_array complete dim=1
-#pragma HLS ARRAY_PARTITION variable=exp_array complete dim=2
-	ap_uint<1> sign_array[16][3];
-#pragma HLS ARRAY_PARTITION variable=sign_array complete dim=1
-#pragma HLS ARRAY_PARTITION variable=sign_array complete dim=2
-	ap_int<SHIFT_SIZE> mant_array[16][3];
-#pragma HLS ARRAY_PARTITION variable=mant_array complete dim=1
-#pragma HLS ARRAY_PARTITION variable=mant_array complete dim=2
-
-	for (int i = 0; i < 16; ++i) {
-		for (int j = 0; j < 3; ++j) {
-			exp_array[i][j] = ot[i][j].getdata() >> EXP_SHIFT;
-			if (exp_array[i][j] != 0)
-				mant_array[i][j] = (ot[i][j].getdata() & MANT_MASK) | MANT_NORM;
-			else
-				mant_array[i][j] = 0;
-			sign_array[i][j] = ot[i][j].getdata() >> SIGN_SHIFT;
-		}
-    ap_uint<EXP_SIZE> temp_exp;
-		if (exp_array[i][0] > exp_array[i][1])
-			temp_exp = exp_array[i][0];
-		else
-			temp_exp = exp_array[i][1];
-		if (exp_array[i][2] > temp_exp)
-			temp_exp = exp_array[i][2];
-		exp_out_f[i] = temp_exp;
-	}
-
-	ap_uint<EXP_SIZE> exp_r1[8];
-#pragma HLS ARRAY_PARTITION variable=exp_r1 complete dim=1
-	ap_uint<EXP_SIZE> exp_r2[4];
-#pragma HLS ARRAY_PARTITION variable=exp_r2 complete dim=1
-	ap_uint<EXP_SIZE> exp_r3[2];
-#pragma HLS ARRAY_PARTITION variable=exp_r3 complete dim=1
-
-	for (int i = 0; i < 3; ++i) {
-		for (int j = 0; j < 8; ++j) {
-			if (exp_array[j * 2 + 0][i] > exp_array[j * 2 + 1][i])
-				exp_r1[j] = exp_array[j * 2 + 0][i];
-			else
-				exp_r1[j] = exp_array[j * 2 + 1][i];
-		}
-		for (int j = 0; j < 4; ++j) {
-			if (exp_r1[j * 2 + 0] > exp_r1[j * 2 + 1])
-				exp_r2[j] = exp_r1[j * 2 + 0];
-			else
-				exp_r2[j] = exp_r1[j * 2 + 1];
-		}
-		for (int j = 0; j < 2; ++j) {
-			if (exp_r2[j * 2 + 0] > exp_r2[j * 2 + 1])
-				exp_r3[j] = exp_r2[j * 2 + 0];
-			else
-				exp_r3[j] = exp_r2[j * 2 + 1];
-		}
-		if (exp_r3[0] > exp_r3[1])
-			exp_out_b[i] = exp_r3[0];
-		else
-			exp_out_b[i] = exp_r3[1];
-	}
-
-	for (int i = 0; i < 16; ++i) {
-		for (int j = 0; j < 3; ++j) {
-			ap_uint<6> diff;
-			if (mode) {
-// backward mode
-				diff = exp_out_b[j] - exp_array[i][j];
-			} else {
-// forward mode
-				diff = exp_out_f[i] - exp_array[i][j];
-			}
-			if (sign_array[i][j])
-				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff) * -1;
-			else
-				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff);
-		}
-	}
-}
-void adder_tree(bool mode, ap_int<SHIFT_SIZE> ot[16][3],
-    ap_int<SHIFT_SIZE> otForward[16],
-    ap_int<SHIFT_SIZE> otBackward[3]) {
-  
-  ap_int<SHIFT_SIZE> ot_s1[8][3];
-#pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=2
-
-  ap_int<SHIFT_SIZE> ot_s2[4][3];
-#pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=2
-  ap_int<SHIFT_SIZE> ot_s3[2][3];
-#pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=2
- 
-#pragma HLS pipeline
-  ap_int<SHIFT_SIZE> temp, temp1, temp2;
-  for (int q = 0; q < 2; ++q) {
-    for (int p = 0; p < 8; ++p) {
-      if (mode) {
-        temp1 = ot[p][q];
-        temp2 = ot[p + 8][q];
-      } else {
-        temp1 = ot[p + q * 8][0];
-        temp2 = ot[p + q * 8][1] + ot[p + q * 8][2];
-#pragma HLS RESOURCE variable=temp2 core=AddSub_DSP
-      }
-      temp = temp1 + temp2;
-#pragma HLS RESOURCE variable=temp core=AddSub_DSP
-      ot_s1[p][q] = temp;
-      otForward[p + q * 8] = temp;
-    }
-  }
-  for (int p = 0; p < 8; ++p) {
-    temp = ot[p][2] + ot[p + 8][2];
-    ot_s1[p][2] = temp;
-#pragma HLS RESOURCE variable=temp core=AddSub_DSP
-  }
-
-  for (int q = 0; q < 3; ++q) {
-    for (int p = 0; p < 4; ++p) {
-      temp = ot_s1[p][q] + ot_s1[p + 4][q];
-      ot_s2[p][q] = temp;
-#pragma HLS RESOURCE variable=temp core=AddSub_DSP
-    }
-  }
-
-  for (int q = 0; q < 3; ++q) {
-    for (int p = 0; p < 2; ++p) {
-      temp = ot_s2[p][q] + ot_s2[p + 2][q];
-      ot_s3[p][q] = temp;
-#pragma HLS RESOURCE variable=temp core=AddSub_DSP
-    }
-  }
-
-  for (int q = 0; q < 3; ++q) {
-    temp = ot_s3[0][q] + ot_s3[1][q];
-    otBackward[q] = temp;
-#pragma HLS RESOURCE variable=temp core=AddSub_DSP
-  }
-}
-
 /* Kernel used for computing direct convolution forward and backward. 
  * input:         flattened input array containing image data, padded to be
  *                divisible by 16 on the x dimension
@@ -281,47 +138,49 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS ARRAY_PARTITION variable=wUpdate complete dim=1
 #pragma HLS ARRAY_PARTITION variable=wUpdate complete dim=2
 
-  int inchannels = params[0];
-  int outchannels = params[1];
-  int burstchannels = params[2];
-  int rpo = params[3];
-  int rpofm = params[4];
-  int burstydim = params[5];
-  int ydim = params[6];
-  int xdim = params[7];
-  int xtile_pad = params[8];
-  int ksize = params[9];
-  int numgroups = params[10];
-  int numimages = params[11];
-  int fc = params[12];
-  int relu = params[13];
-  int backward = params[14];
-  int stride = params[15];
-  int pad = params[16];
-  bool mode = (backward);
+  short inchannels = params[0];
+  short outchannels = params[1];
+  short burstchannels = params[2];
+  short rpo = params[3];
+  short rpofm = params[4];
+  short burstydim = params[5];
+  short ydim = params[6];
+  short xdim = params[7];
+  short xtile_pad = params[8];
+  ap_uint<5> ksize = params[9];
+  short numgroups = params[10];
+  short numimages = params[11];
+  short fc = params[12];
+  short relu = params[13];
+  short backward = params[14];
+  short stride = params[15];
+  short pad = params[16];
+  bool mode = backward;
 
-  int xdim_out = ((xdim - ksize + 2 * pad) / stride) + 1;
-  int ydim_out = xdim_out;
+  short xdim_out = ((xdim - ksize + 2 * pad) / stride) + 1;
+  short ydim_out = xdim_out;
+
+  short fact = numimages >> 4;
 
   memcpy(biasbuf, bias, sizeof(chalf) * outchannels);
-  int ofm_iters = (outchannels % OCFACT == 0) ? outchannels / OCFACT :
+  short ofm_iters = (outchannels % OCFACT == 0) ? outchannels / OCFACT :
     (outchannels / OCFACT) + 1;
-  int mac_iterations = ksize * ksize * (numimages >> 4) * (burstchannels >> 1);
+  int mac_iterations = ksize * ksize * fact * (burstchannels >> 1);
 
   for (int n = 0; n < rpo; ++n) {
     for (int y = 0; y < ydim_out; ++y) {
       for (int x = 0; x < xdim_out; ++x) {
         for (int p = 0; p < ksize; ++p) {
           for (int q = 0; q < ksize; ++q) {
-            int in_y = y * stride - pad + p;
-            int in_x = x * stride - pad + q;
+            short in_y = y * stride - pad + p;
+            short in_x = x * stride - pad + q;
             int in_idx = ((in_y * xdim + in_x) * inchannels +
-                n * burstchannels) * (numimages >> 4);
-            int inbuf_idx = (p * ksize + q) * burstchannels * (numimages >> 4);
-            int in_size = burstchannels * (numimages >> 4);
+                n * burstchannels) * fact;
+            int inbuf_idx = (p * ksize + q) * burstchannels * fact;
+            short in_size = burstchannels * fact;
             if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
               if ((x != 0) && (stride == 1) && (q != ksize - 1)) {
-                int q_off = burstchannels * (numimages >> 4);
+                short q_off = burstchannels * fact;
                 SHIFT_LOOP: for (int i = 0; i < in_size; ++i) {
 #pragma HLS pipeline
 #pragma HLS dependence variable=inbuf inter false
@@ -372,7 +231,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
         for (int o = 0; o < ofm_iters; ++o) {
           if (n == 0 && !mode) {
-            for (int i = 0; i < (numimages >> 4); ++i) {
+            for (int i = 0; i < (fact); ++i) {
 #pragma HLS pipeline
               for (int k = 0; k < OCFACT; ++k) {
                 outbuf[k][i].s0 = biasbuf[o * OCFACT + k];
@@ -403,8 +262,8 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 out_size = ksize * ksize * (burstchannels >> 4);
               } else {
                 out_idx = ((y * xdim + x) * outchannels +
-                    (o * OCFACT) + k) * (numimages >> 4);
-                out_size = numimages >> 4;
+                    (o * OCFACT) + k) * (fact);
+                out_size = fact;
               }
               memcpy(outbuf[k], output + out_idx,
                   sizeof(chalf16) * out_size);
@@ -414,8 +273,8 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
           for (int k = 0; k < OCFACT; ++k) {
             int w_idx_f, w_idx_b, w_size_f, w_size_b, w_idx, w_size;
             w_idx_b = ((y * xdim + x) * outchannels +
-                (o * OCFACT + k)) * (numimages >> 4);
-            w_size_b = numimages >> 4;
+                (o * OCFACT + k)) * (fact);
+            w_size_b = fact;
             w_idx_f = (o * OCFACT + k) * ksize * ksize * (inchannels >> 4)
                 + n * ksize * ksize * (burstchannels >> 4);
             w_size_f = ksize * ksize * (burstchannels >> 4);
@@ -445,7 +304,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
             if (counter == 8)
               counter = 0;
             if (!mode) {
-              if (iter == (numimages >> 4)) {
+              if (iter == (fact)) {
                 if (counter_fw == 7)
                   counter_fw = 0;
                 else
@@ -503,7 +362,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 }
 
                 short in_idx = (kdim_off * burstchannels + w_off * 2 + m) *
-                  (numimages >> 4) + img_off;
+                  (fact) + img_off;
                 in_val[m][0] = inbuf[in_idx].s0;
                 in_val[m][1] = inbuf[in_idx].s1;
                 in_val[m][2] = inbuf[in_idx].s2;
@@ -525,14 +384,18 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                   multres[k][m][j] = in_val[m][j] * weight_val[m][j];
               }
 
-              if (mode) {
-                for (int m = 0; m < 2; ++m) 
-                  for (int j = 0; j < 8; ++j)
-                    addres_s1[k][m * 8 + j] = multres[k][m][j * 2] +
-                      multres[k][m][j * 2 + 1];
-              } else {
-                for (int j = 0; j < 16; ++j)
-                  addres_s1[k][j] = multres[k][0][j] + multres[k][1][j];
+              for (int m = 0; m < 2; ++m) {
+                for (int j = 0; j < 8; ++j) {
+                  chalf temp1, temp2;
+                  if (mode) {
+                    temp1 = multres[k][m][j * 2];
+                    temp2 = multres[k][m][j * 2 + 1];
+                  } else {
+                    temp1 = multres[k][0][m * 8 + j];
+                    temp2 = multres[k][1][m * 8 + j];
+                  }
+                  addres_s1[k][m * 8 + j] = temp1 + temp2;
+                }
               }
 
               for (int m = 0; m < 2; ++m) {
@@ -590,8 +453,8 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
               out_size = ksize * ksize * (burstchannels >> 4);
             } else {
               out_idx = (((y * xdim) + x) * outchannels +
-                (o * OCFACT) + k) * (numimages >> 4);
-              out_size = numimages >> 4;
+                (o * OCFACT) + k) * (fact);
+              out_size = fact;
             }
             if (o * OCFACT + k < outchannels)
               memcpy(output + out_idx, outbuf[k],
