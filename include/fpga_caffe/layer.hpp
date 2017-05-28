@@ -2,7 +2,7 @@
 #define LAYER_HPP_
 
 #define FADD_LATENCY 13
-#define HADD_LATENCY 10
+#define HADD_LATENCY 12
 
 typedef struct {
   int inchannels;
@@ -20,6 +20,8 @@ typedef struct {
   int fc;
   int relu;
   int backward;
+  int stride;
+  int pad;
 } kernel_params;
 
 #endif  // LAYER_HPP_

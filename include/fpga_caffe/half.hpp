@@ -28,7 +28,7 @@
 #define SIGN_MASK (1 << SIGN_SHIFT)
 #define FP_WIDTH (EXP_SIZE + MANT_SIZE + 1)
 #define ROUND_NEAREST_MULT 0
-#define ROUND_NEAREST_ADD 1
+#define ROUND_NEAREST_ADD 1 
 #define OVFL_ROOM 4
 #define SHIFT_SIZE ((MANT_SIZE + 1) * 2 + 1 + OVFL_ROOM) 
 

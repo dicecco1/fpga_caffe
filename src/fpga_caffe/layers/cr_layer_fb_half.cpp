@@ -5,48 +5,9 @@
 
 #include "../../../include/fpga_caffe/layer.hpp"
 #include "../../../include/fpga_caffe/half.hpp"
+#include "../../../include/fpga_caffe/vector_types.hpp"
 
-#define HADD_LATENCY 12 
 #define OCFACT 1 
-/* chalf16 data type definition */
-
-typedef struct {
-  char s0;
-  char s1;
-  char s2;
-  char s3;
-  char s4;
-  char s5;
-  char s6;
-  char s7;
-  char s8;
-  char s9;
-  char sa;
-  char sb;
-  char sc;
-  char sd;
-  char se;
-  char sf;
-} char16;
-
-typedef struct {
-  chalf s0;
-  chalf s1;
-  chalf s2;
-  chalf s3;
-  chalf s4;
-  chalf s5;
-  chalf s6;
-  chalf s7;
-  chalf s8;
-  chalf s9;
-  chalf sa;
-  chalf sb;
-  chalf sc;
-  chalf sd;
-  chalf se;
-  chalf sf;
-} chalf16;
 
 void relu_fw(chalf16 outbuf[OCFACT][512], char16 outbuf_relu[OCFACT][512],
   int k, int num_iter) {
@@ -403,26 +364,6 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   int fc = params[12];
   int relu = params[13];
   int backward = params[14];
-/*
-  assert(inchannels >= 1);
-  assert(inchannels <= 1024);
-  assert(outchannels >= 1);
-  assert(outchannels <= 1024);
-
-  assert(burstchannels >= 1);
-  assert(burstchannels <= 256);
-
-  assert(xdim >= 7);
-  assert(xdim <= 256);
-  assert(ydim >= 7);
-  assert(ydim <= 256);
-
-  assert(numgroups <= 2);
-  assert(numgroups >= 1);
-
-  assert(xtile_pad >= 8);
-  assert(xtile_pad <= 128);
-*/
   assert(rpo >= 1);
   assert(rpo <= 64);
 
@@ -511,22 +452,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
             #pragma HLS pipeline
               for (int k = 0; k < OCFACT; ++k) {
                 chalf16 bias_;
-                bias_.s0 = biasbuf[o * OCFACT + k];
-                bias_.s1 = biasbuf[o * OCFACT + k];
-                bias_.s2 = biasbuf[o * OCFACT + k];
-                bias_.s3 = biasbuf[o * OCFACT + k];
-                bias_.s4 = biasbuf[o * OCFACT + k];
-                bias_.s5 = biasbuf[o * OCFACT + k];
-                bias_.s6 = biasbuf[o * OCFACT + k];
-                bias_.s7 = biasbuf[o * OCFACT + k];
-                bias_.s8 = biasbuf[o * OCFACT + k];
-                bias_.s9 = biasbuf[o * OCFACT + k];
-                bias_.sa = biasbuf[o * OCFACT + k];
-                bias_.sb = biasbuf[o * OCFACT + k];
-                bias_.sc = biasbuf[o * OCFACT + k];
-                bias_.sd = biasbuf[o * OCFACT + k];
-                bias_.se = biasbuf[o * OCFACT + k];
-                bias_.sf = biasbuf[o * OCFACT + k];
+                bias_ = biasbuf[o * OCFACT + k];
                 outbuf[k][i] = bias_;
               }
             } 

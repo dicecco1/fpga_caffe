@@ -5,48 +5,9 @@
 
 #include "../../../include/fpga_caffe/layer.hpp"
 #include "../../../include/fpga_caffe/half.hpp"
+#include "../../../include/fpga_caffe/vector_types.hpp"
 
-#define HADD_LATENCY 12 
 #define OCFACT 1 
-/* chalf16 data type definition */
-
-typedef struct {
-  char s0;
-  char s1;
-  char s2;
-  char s3;
-  char s4;
-  char s5;
-  char s6;
-  char s7;
-  char s8;
-  char s9;
-  char sa;
-  char sb;
-  char sc;
-  char sd;
-  char se;
-  char sf;
-} char16;
-
-typedef struct {
-  chalf s0;
-  chalf s1;
-  chalf s2;
-  chalf s3;
-  chalf s4;
-  chalf s5;
-  chalf s6;
-  chalf s7;
-  chalf s8;
-  chalf s9;
-  chalf sa;
-  chalf sb;
-  chalf sc;
-  chalf sd;
-  chalf se;
-  chalf sf;
-} chalf16;
 
 /* Kernel used for computing direct convolution forward and backward. 
  * input:         flattened input array containing image data, padded to be
@@ -184,22 +145,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 SHIFT_LOOP: for (int i = 0; i < in_size; ++i) {
 #pragma HLS pipeline
 #pragma HLS dependence variable=inbuf inter false
-                  inbuf[i + inbuf_idx].s0 = inbuf[i + inbuf_idx + q_off].s0;
-                  inbuf[i + inbuf_idx].s1 = inbuf[i + inbuf_idx + q_off].s1;
-                  inbuf[i + inbuf_idx].s2 = inbuf[i + inbuf_idx + q_off].s2;
-                  inbuf[i + inbuf_idx].s3 = inbuf[i + inbuf_idx + q_off].s3;
-                  inbuf[i + inbuf_idx].s4 = inbuf[i + inbuf_idx + q_off].s4;
-                  inbuf[i + inbuf_idx].s5 = inbuf[i + inbuf_idx + q_off].s5;
-                  inbuf[i + inbuf_idx].s6 = inbuf[i + inbuf_idx + q_off].s6;
-                  inbuf[i + inbuf_idx].s7 = inbuf[i + inbuf_idx + q_off].s7;
-                  inbuf[i + inbuf_idx].s8 = inbuf[i + inbuf_idx + q_off].s8;
-                  inbuf[i + inbuf_idx].s9 = inbuf[i + inbuf_idx + q_off].s9;
-                  inbuf[i + inbuf_idx].sa = inbuf[i + inbuf_idx + q_off].sa;
-                  inbuf[i + inbuf_idx].sb = inbuf[i + inbuf_idx + q_off].sb;
-                  inbuf[i + inbuf_idx].sc = inbuf[i + inbuf_idx + q_off].sc;
-                  inbuf[i + inbuf_idx].sd = inbuf[i + inbuf_idx + q_off].sd;
-                  inbuf[i + inbuf_idx].se = inbuf[i + inbuf_idx + q_off].se;
-                  inbuf[i + inbuf_idx].sf = inbuf[i + inbuf_idx + q_off].sf;
+                  inbuf[i + inbuf_idx] = inbuf[i + inbuf_idx + q_off];
                 }
               } else {
                 memcpy(inbuf + inbuf_idx, input + in_idx, sizeof(chalf16) *
@@ -208,22 +154,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
             } else {
               for (int i = 0; i < in_size; ++i) {
 #pragma HLS pipeline
-                inbuf[i + inbuf_idx].s0 = 0;
-                inbuf[i + inbuf_idx].s1 = 0;
-                inbuf[i + inbuf_idx].s2 = 0;
-                inbuf[i + inbuf_idx].s3 = 0;
-                inbuf[i + inbuf_idx].s4 = 0;
-                inbuf[i + inbuf_idx].s5 = 0;
-                inbuf[i + inbuf_idx].s6 = 0;
-                inbuf[i + inbuf_idx].s7 = 0;
-                inbuf[i + inbuf_idx].s8 = 0;
-                inbuf[i + inbuf_idx].s9 = 0;
-                inbuf[i + inbuf_idx].sa = 0;
-                inbuf[i + inbuf_idx].sb = 0;
-                inbuf[i + inbuf_idx].sc = 0;
-                inbuf[i + inbuf_idx].sd = 0;
-                inbuf[i + inbuf_idx].se = 0;
-                inbuf[i + inbuf_idx].sf = 0;
+                inbuf[i + inbuf_idx] = chalf(0);
               }
             }
           }
@@ -234,28 +165,14 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
             for (int i = 0; i < (fact); ++i) {
 #pragma HLS pipeline
               for (int k = 0; k < OCFACT; ++k) {
-                outbuf[k][i].s0 = biasbuf[o * OCFACT + k];
-                outbuf[k][i].s1 = biasbuf[o * OCFACT + k];
-                outbuf[k][i].s2 = biasbuf[o * OCFACT + k];
-                outbuf[k][i].s3 = biasbuf[o * OCFACT + k];
-                outbuf[k][i].s4 = biasbuf[o * OCFACT + k];
-                outbuf[k][i].s5 = biasbuf[o * OCFACT + k];
-                outbuf[k][i].s6 = biasbuf[o * OCFACT + k];
-                outbuf[k][i].s7 = biasbuf[o * OCFACT + k];
-                outbuf[k][i].s8 = biasbuf[o * OCFACT + k];
-                outbuf[k][i].s9 = biasbuf[o * OCFACT + k];
-                outbuf[k][i].sa = biasbuf[o * OCFACT + k];
-                outbuf[k][i].sb = biasbuf[o * OCFACT + k];
-                outbuf[k][i].sc = biasbuf[o * OCFACT + k];
-                outbuf[k][i].sd = biasbuf[o * OCFACT + k];
-                outbuf[k][i].se = biasbuf[o * OCFACT + k];
-                outbuf[k][i].sf = biasbuf[o * OCFACT + k];
+                outbuf[k][i] = biasbuf[o * OCFACT + k];
               }
             }
           } else {
             int out_idx;
             int out_size;
             for (int k = 0; k < OCFACT; ++k) {
+#pragma HLS unroll
               if (mode) {
                 out_idx = (o * OCFACT + k) * ksize * ksize *
                   (inchannels >> 4) + n * ksize * ksize * (burstchannels >> 4);
@@ -271,6 +188,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
           } 
           
           for (int k = 0; k < OCFACT; ++k) {
+#pragma HLS unroll
             int w_idx_f, w_idx_b, w_size_f, w_size_b, w_idx, w_size;
             w_idx_b = ((y * xdim + x) * outchannels +
                 (o * OCFACT + k)) * (fact);
@@ -445,6 +363,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
             }
           }
           for (int k = 0; k < OCFACT; ++k) {
+#pragma HLS unroll
             int out_idx;
             int out_size;
             if (mode) {
