@@ -289,6 +289,7 @@ void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3],
 void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
     ap_uint<EXP_SIZE> exp_out_b[3], ap_int<SHIFT_SIZE> out_vals[16][3]) {
 #pragma HLS pipeline
+
 	ap_uint<EXP_SIZE> exp_array[16][3];
 #pragma HLS ARRAY_PARTITION variable=exp_array complete dim=1
 #pragma HLS ARRAY_PARTITION variable=exp_array complete dim=2
@@ -308,7 +309,10 @@ void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
 				mant_array[i][j] = 0;
 			sign_array[i][j] = ot[i][j].getdata() >> SIGN_SHIFT;
 		}
-    ap_uint<EXP_SIZE> temp_exp;
+	}
+
+	ap_uint<EXP_SIZE> temp_exp;
+	for (int i = 0; i < 16; ++i) {
 		if (exp_array[i][0] > exp_array[i][1])
 			temp_exp = exp_array[i][0];
 		else
@@ -324,6 +328,7 @@ void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
 #pragma HLS ARRAY_PARTITION variable=exp_r2 complete dim=1
 	ap_uint<EXP_SIZE> exp_r3[2];
 #pragma HLS ARRAY_PARTITION variable=exp_r3 complete dim=1
+
 
 	for (int i = 0; i < 3; ++i) {
 		for (int j = 0; j < 8; ++j) {
@@ -344,7 +349,7 @@ void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
 			else
 				exp_r3[j] = exp_r2[j * 2 + 1];
 		}
-		if (exp_r3[0] > exp_r3[1])
+		if (exp_r3[0] >= exp_r3[1])
 			exp_out_b[i] = exp_r3[0];
 		else
 			exp_out_b[i] = exp_r3[1];
@@ -352,7 +357,8 @@ void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
 
 	for (int i = 0; i < 16; ++i) {
 		for (int j = 0; j < 3; ++j) {
-			ap_uint<6> diff;
+			ap_uint<EXP_SIZE> diff;
+			ap_uint<6> diff_sat;
 			if (mode) {
 // backward mode
 				diff = exp_out_b[j] - exp_array[i][j];
@@ -360,73 +366,16 @@ void cfp_convert(bool mode, chalf ot[16][3], ap_uint<EXP_SIZE> exp_out_f[16],
 // forward mode
 				diff = exp_out_f[i] - exp_array[i][j];
 			}
-			if (sign_array[i][j])
-				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff) * -1;
+			if (diff >= (MANT_SIZE + 1) * 2)
+				diff_sat = (MANT_SIZE + 1) * 2;
 			else
-				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff);
+				diff_sat = diff;
+			if (sign_array[i][j])
+				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff_sat) * -1;
+			else
+				out_vals[i][j] = ((mant_array[i][j] << (MANT_SIZE + 1)) >> diff_sat);
 		}
 	}
-}
-void adder_tree(bool mode, ap_int<SHIFT_SIZE> ot[16][3],
-    ap_int<SHIFT_SIZE> otForward[16],
-    ap_int<SHIFT_SIZE> otBackward[3]) {
-  
-  ap_int<SHIFT_SIZE> ot_s1[8][3];
-#pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=2
-
-  ap_int<SHIFT_SIZE> ot_s2[4][3];
-#pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=2
-  ap_int<SHIFT_SIZE> ot_s3[2][3];
-#pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=2
- 
-#pragma HLS pipeline
-  ap_int<SHIFT_SIZE> temp, temp1, temp2;
-  for (int q = 0; q < 2; ++q) {
-    for (int p = 0; p < 8; ++p) {
-      if (mode) {
-        temp1 = ot[p][q];
-        temp2 = ot[p + 8][q];
-      } else {
-        temp1 = ot[p + q * 8][0];
-        temp2 = ot[p + q * 8][1] + ot[p + q * 8][2];
-#pragma HLS RESOURCE variable=temp2 core=AddSub_DSP
-      }
-      temp = temp1 + temp2;
-#pragma HLS RESOURCE variable=temp core=AddSub_DSP
-      ot_s1[p][q] = temp;
-      otForward[p + q * 8] = temp;
-    }
-  }
-  for (int p = 0; p < 8; ++p) {
-    temp = ot[p][2] + ot[p + 8][2];
-    ot_s1[p][2] = temp;
-#pragma HLS RESOURCE variable=temp core=AddSub_DSP
-  }
-
-  for (int q = 0; q < 3; ++q) {
-    for (int p = 0; p < 4; ++p) {
-      temp = ot_s1[p][q] + ot_s1[p + 4][q];
-      ot_s2[p][q] = temp;
-#pragma HLS RESOURCE variable=temp core=AddSub_DSP
-    }
-  }
-
-  for (int q = 0; q < 3; ++q) {
-    for (int p = 0; p < 2; ++p) {
-      temp = ot_s2[p][q] + ot_s2[p + 2][q];
-      ot_s3[p][q] = temp;
-#pragma HLS RESOURCE variable=temp core=AddSub_DSP
-    }
-  }
-
-  for (int q = 0; q < 3; ++q) {
-    temp = ot_s3[0][q] + ot_s3[1][q];
-    otBackward[q] = temp;
-#pragma HLS RESOURCE variable=temp core=AddSub_DSP
-  }
 }
 
 /* Kernel used for computing direct convolution forward and backward. 
@@ -514,41 +463,39 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS ARRAY_PARTITION variable=wt complete dim=3
 
   // Ouput tile transform stage 1 output
-  ap_int<SHIFT_SIZE> otForward[OCFACT][16];
-#pragma HLS ARRAY_PARTITION variable=otForward complete dim=1
-#pragma HLS ARRAY_PARTITION variable=otForward complete dim=2
+  ap_int<SHIFT_SIZE> ot_s1[OCFACT][24];
+#pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
+#pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=2
 
-  ap_int<SHIFT_SIZE> otBackward[OCFACT][3];
-#pragma HLS ARRAY_PARTITION variable=otBackward complete dim=1
-#pragma HLS ARRAY_PARTITION variable=otBackward complete dim=2
+  ap_int<SHIFT_SIZE> ot_s2[OCFACT][3][4];
+#pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=1
+#pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=2
+#pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=3
+
+  ap_int<SHIFT_SIZE> ot_s3[OCFACT][3][2];
+#pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=1
+#pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=2
+#pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=3
+
+  ap_int<SHIFT_SIZE> ot_s4[OCFACT][3];
+#pragma HLS ARRAY_PARTITION variable=ot_s4 complete dim=1
+#pragma HLS ARRAY_PARTITION variable=ot_s4 complete dim=2
  
-  ap_int<SHIFT_SIZE> otf[OCFACT][16];
+  chalf ot_s4_cfp[OCFACT][3];
+#pragma HLS ARRAY_PARTITION variable=ot_s4_cfp complete dim=1
+#pragma HLS ARRAY_PARTITION variable=ot_s4_cfp complete dim=2
+
+  chalf otf[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=2
 
-  ap_int<SHIFT_SIZE> otfc[OCFACT][16];
+  chalf otfc[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otfc complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otfc complete dim=2
 
-  ap_int<SHIFT_SIZE> otb[OCFACT][16];
+  chalf otb[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otb complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otb complete dim=2
-
-  ap_uint<EXP_SIZE> expf[OCFACT][16];
-#pragma HLS ARRAY_PARTITION variable=expf complete dim=1
-#pragma HLS ARRAY_PARTITION variable=expf complete dim=2
-
-  ap_uint<EXP_SIZE> expfc[OCFACT][16];
-#pragma HLS ARRAY_PARTITION variable=expfc complete dim=1
-#pragma HLS ARRAY_PARTITION variable=expfc complete dim=2
-
-  ap_uint<EXP_SIZE> expb[OCFACT][16];
-#pragma HLS ARRAY_PARTITION variable=expb complete dim=1
-#pragma HLS ARRAY_PARTITION variable=expb complete dim=2
-
-  chalf otcfp[OCFACT][16];
-#pragma HLS ARRAY_PARTITION variable=otcfp complete dim=1
-#pragma HLS ARRAY_PARTITION variable=otcfp complete dim=2
 
   int inchannels = params[0];
   int outchannels = params[1];
@@ -773,7 +720,6 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
           #pragma HLS DEPENDENCE variable=outbuf inter false
           #pragma HLS DEPENDENCE variable=wbuf inter false
           #pragma HLS DEPENDENCE variable=otb inter false
-          #pragma HLS DEPENDENCE variable=otf inter false
           #pragma HLS pipeline        
             if (fc_off == 16) {
               fc_off = 0;
@@ -865,53 +811,78 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
               }
               cfp_convert(fc || backward_flag, otm[k], exp_out_f[k],
                 exp_out_b[k], ot[k]);
-            }
-            for (int k = 0; k < OCFACT; ++k)
-              adder_tree(fc || backward_flag, ot[k], otForward[k],
-                  otBackward[k]);
 
-            for (int k = 0; k < OCFACT; ++k) {
-              for (int q = 0; q < 3; ++q) {
-                otb[k][row_off * 3 + q] = otBackward[k][q];
-                expb[k][row_off * 3 + q] = exp_out_b[k][q];
+              for (int p = 0; p < 8; ++p) { 
+                ot_s1[k][p + 2 * 8] = ot[k][p * 2][2] + ot[k][p * 2 + 1][2];
+#pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP
               }
 
-              otfc[k][fc_off] = otBackward[k][0];
-              expfc[k][fc_off] = exp_out_b[k][0];
+              if (backward_flag || fc_flag) {
+                for (int q = 0; q < 2; ++q) {
+                  for (int p = 0; p < 8; ++p) { 
+                    ot_s1[k][p + q * 8] = ot[k][p * 2][q] +
+                      ot[k][p * 2 + 1][q];
+#pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP
+                  }
+                }
+                for (int q = 0; q < 3; ++q) {
+                  for (int p = 0; p < 4; ++p) {
+                    ot_s2[k][q][p] = ot_s1[k][p * 2 + q * 8] +
+                      ot_s1[k][p * 2 + 1 + q * 8];
+#pragma HLS RESOURCE variable=ot_s2 core=AddSub_DSP
+                  }
+                }
+              } else {
+                for (int p = 0; p < 16; ++p) {
+                  ot_s1[k][p] = ot[k][p][0] + ot[k][p][1] + ot[k][p][2];
+#pragma HLS RESOURCE variable=ot_s1 core=AddSub_DSP                 
+                }
+              }
+
+              for (int q = 0; q < 3; ++q) {
+                for (int p = 0; p < 2; ++p) {
+                  ot_s3[k][q][p] = ot_s2[k][q][p * 2] + ot_s2[k][q][p * 2 + 1];
+#pragma HLS RESOURCE variable=ot_s3 core=AddSub_DSP
+                }
+                ot_s4[k][q] = ot_s3[k][q][0] + ot_s3[k][q][1];
+#pragma HLS RESOURCE variable=ot_s4 core=AddSub_DSP
+                ot_s4_cfp[k][q] = tocfp(ot_s4[k][q], exp_out_b[k][q]);
+              }
+               
+              for (int p = 0; p < 3; ++p)
+                otb[k][row_off * 3 + p] = ot_s4_cfp[k][p];
+
+              otfc[k][fc_off] = ot_s4_cfp[k][0];
 
               for (int p = 0; p < 16; ++p) {
                 if (fc_flag) {
                   otf[k][p] = otfc[k][p];
-                  expf[k][p] = expfc[k][p];
                 } else {
                   if (backward_flag) {
                     otf[k][p] = otb[k][p];
-                    expf[k][p] = expb[k][p];
                   } else {
-                    otf[k][p] = otForward[k][p];
-                    expf[k][p] = exp_out_f[k][p];
+                    otf[k][p] = tocfp(ot_s1[k][p], exp_out_f[k][p]);
                   }
                 }
-                otcfp[k][p] = tocfp(otf[k][p], expf[k][p]);
               }
 
               if (acc_enable) {
-                outbuf[k][o_idx].s0 += otcfp[k][0]; 
-                outbuf[k][o_idx].s1 += otcfp[k][1]; 
-                outbuf[k][o_idx].s2 += otcfp[k][2]; 
-                outbuf[k][o_idx].s3 += otcfp[k][3]; 
-                outbuf[k][o_idx].s4 += otcfp[k][4]; 
-                outbuf[k][o_idx].s5 += otcfp[k][5]; 
-                outbuf[k][o_idx].s6 += otcfp[k][6]; 
-                outbuf[k][o_idx].s7 += otcfp[k][7]; 
-                outbuf[k][o_idx].s8 += otcfp[k][8]; 
-                outbuf[k][o_idx].s9 += otcfp[k][9]; 
-                outbuf[k][o_idx].sa += otcfp[k][10];
-                outbuf[k][o_idx].sb += otcfp[k][11];
-                outbuf[k][o_idx].sc += otcfp[k][12];
-                outbuf[k][o_idx].sd += otcfp[k][13];
-                outbuf[k][o_idx].se += otcfp[k][14];
-                outbuf[k][o_idx].sf += otcfp[k][15];
+                outbuf[k][o_idx].s0 += otf[k][0];
+                outbuf[k][o_idx].s1 += otf[k][1];
+                outbuf[k][o_idx].s2 += otf[k][2];
+                outbuf[k][o_idx].s3 += otf[k][3];
+                outbuf[k][o_idx].s4 += otf[k][4];
+                outbuf[k][o_idx].s5 += otf[k][5];
+                outbuf[k][o_idx].s6 += otf[k][6];
+                outbuf[k][o_idx].s7 += otf[k][7];
+                outbuf[k][o_idx].s8 += otf[k][8];
+                outbuf[k][o_idx].s9 += otf[k][9];
+                outbuf[k][o_idx].sa += otf[k][10];
+                outbuf[k][o_idx].sb += otf[k][11];
+                outbuf[k][o_idx].sc += otf[k][12];
+                outbuf[k][o_idx].sd += otf[k][13];
+                outbuf[k][o_idx].se += otf[k][14];
+                outbuf[k][o_idx].sf += otf[k][15];
               }
             }
           }
