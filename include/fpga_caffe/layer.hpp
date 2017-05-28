@@ -4,6 +4,9 @@
 #define FADD_LATENCY 13
 #define HADD_LATENCY 12
 
+#define PRAGMA_SUB(x) _Pragma (#x)
+#define DO_PRAGMA(x) PRAGMA_SUB(x)
+
 typedef struct {
   int inchannels;
   int outchannels;

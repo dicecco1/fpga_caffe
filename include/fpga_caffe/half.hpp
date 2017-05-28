@@ -755,49 +755,4 @@ inline bool operator<=(chalf T, chalf U) {
   return Tdata <= Udata;
 }
 
-#ifdef SYNTHESIS
-chalf tocfp(ap_int<SHIFT_SIZE> data, ap_uint<EXP_SIZE> exp) {
-  ap_uint<FP_WIDTH> sign;
-  ap_uint<SHIFT_SIZE - 1> udata;
-  if (data < 0) {
-    sign = 1;
-    udata = data * -1;
-  } else {
-    sign = 0;
-    udata = data;
-  }
-
-  ap_uint<EXP_SIZE> lop;
-  lop = SHIFT_SIZE - 1;
-
-  for (int i = 0; i < SHIFT_SIZE - 1; ++i) {
-    if ((udata >> i) & 0x1)
-      lop = i;
-  }
-
-  ap_int<7> exp_shift = 0;
-  exp_shift = lop - SHIFT_SIZE + 6;
-
-  ap_uint<FP_WIDTH - 1> eresf;
-  ap_uint<MANT_SIZE> mantresf;
-
-  eresf = exp + exp_shift;
-  mantresf = (udata >> ((MANT_SIZE + 1) + exp_shift));
-
-  if (exp + exp_shift >= MAX_EXP) {
-    eresf = MAX_EXP - 1;
-    mantresf = MAX_MANT;
-  } else if ((exp + exp_shift <= 0) || (lop == SHIFT_SIZE - 1)) {
-    eresf = 0;
-    mantresf = 0;
-  }
-
-  ap_uint<FP_WIDTH> res;
-  res = ((sign << SIGN_SHIFT) & SIGN_MASK) |
-    ((eresf << EXP_SHIFT) & EXP_MASK) | mantresf;
-  return chalf(res);
-
-}
-#endif
-
 #endif  // HALF_HPP_
