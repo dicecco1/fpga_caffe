@@ -472,7 +472,7 @@ chalf operator+(chalf T, chalf U) {
 
   ap_uint<MANT_SIZE + 4> mant1_large = (e1_s != 0) ?
     (ap_uint<MANT_SIZE + 4>)(mant1_s | MANT_NORM) : (ap_uint<MANT_SIZE + 4>)0;
-  ap_uint<PRODUCT_SIZE> mant2_large = (e2_s != 0) ?
+  ap_uint<PRODUCT_SIZE + 6> mant2_large = (e2_s != 0) ?
     (ap_uint<PRODUCT_SIZE>)(mant2_s | MANT_NORM) : (ap_uint<PRODUCT_SIZE>)0;
 
   // Close path, sub and (diff = 0 or diff = 1)
@@ -513,22 +513,22 @@ chalf operator+(chalf T, chalf U) {
 
   // saturate difference at 11 bits
 
-  ap_uint<EXP_SIZE> diff_sat = (diff > (MANT_SIZE + 1)) ?
-    (ap_uint<EXP_SIZE>)(MANT_SIZE + 1) : diff;
+  ap_uint<EXP_SIZE> diff_sat = (diff > (MANT_SIZE + 4)) ?
+    (ap_uint<EXP_SIZE>)(MANT_SIZE + 4) : diff;
 
-  ap_uint<PRODUCT_SIZE> mant2_a =
-    (mant2_large) << ((MANT_SIZE + 1) - diff_sat);
+  ap_uint<PRODUCT_SIZE + 6> mant2_a =
+    (mant2_large) << ((MANT_SIZE + 4) - diff_sat);
 
   ap_uint<1> sticky;
  
 #if ROUND_NEAREST_ADD == 1
-  sticky = (mant2_a & ((1 << (MANT_SIZE - 2)) - 1)) > 0;
+  sticky = (mant2_a & ((1 << (MANT_SIZE + 1)) - 1)) > 0;
 #else
   sticky = 0;
 #endif
 
   ap_uint<MANT_SIZE + 4> mant1_fpath = (mant1_large) << 3;
-  ap_uint<MANT_SIZE + 4> mant2_fpath = (mant2_a >> (MANT_SIZE - 2)) | sticky;
+  ap_uint<MANT_SIZE + 4> mant2_fpath = (mant2_a >> (MANT_SIZE + 1)) | sticky;
 
   if (EOP) 
     sum_fpath = mant1_fpath + mant2_fpath;

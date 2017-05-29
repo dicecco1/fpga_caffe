@@ -40,11 +40,11 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
   chalf16 inbuf[8 * 256 * 16];
 
   // Output buffer used for writing
-  chalf16 outbuf[OCFACT][512];
+  chalf16 outbuf[OCFACT][256];
 #pragma HLS ARRAY_PARTITION variable=outbuf complete dim=1
 
   // Weight buffer
-  chalf16 wbuf[OCFACT][512];
+  chalf16 wbuf[OCFACT][256];
 #pragma HLS ARRAY_PARTITION variable=wbuf complete dim=1
 
   // Bias buffer
@@ -157,7 +157,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
         }
         for (int o = 0; o < ofm_iters; ++o) {
           if (n == 0 && !mode) {
-            for (int i = 0; i < (fact); ++i) {
+            for (int i = 0; i < fact; ++i) {
 #pragma HLS pipeline
               for (int k = 0; k < OCFACT; ++k) {
                 outbuf[k][i] = biasbuf[o * OCFACT + k];
@@ -167,7 +167,6 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             int out_idx;
             int out_size;
             for (int k = 0; k < OCFACT; ++k) {
-#pragma HLS unroll
               if (mode) {
                 out_idx = (o * OCFACT + k) * ksize * ksize *
                   (inchannels >> 4) + n * ksize * ksize * (burstchannels >> 4);
@@ -177,13 +176,11 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                     (o * OCFACT) + k) * (fact);
                 out_size = fact;
               }
-              memcpy(outbuf[k], output + out_idx,
-                  sizeof(chalf16) * out_size);
+              memcpy(outbuf[k], output + out_idx, sizeof(chalf16) * out_size);
             }
           } 
           
           for (int k = 0; k < OCFACT; ++k) {
-#pragma HLS unroll
             int w_idx_f, w_idx_b, w_size_f, w_size_b, w_idx, w_size;
             w_idx_b = ((y * xdim_out + x) * outchannels +
                 (o * OCFACT + k)) * (fact);
@@ -358,7 +355,6 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             }
           }
           for (int k = 0; k < OCFACT; ++k) {
-#pragma HLS unroll
             int out_idx;
             int out_size;
             if (mode) {
@@ -371,8 +367,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               out_size = fact;
             }
             if (o * OCFACT + k < outchannels)
-              memcpy(output + out_idx, outbuf[k],
-                  sizeof(chalf16) * out_size);
+              memcpy(output + out_idx, outbuf[k], sizeof(chalf16) * out_size);
           }
         }
       }
