@@ -300,7 +300,7 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
   // Bias buffer
   chalf biasbuf[1024];
-#pragma HLS ARRAY_PARTITION variable=biasbuf cyclic factor=8
+DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 
   // Input tile registers post transform
   chalf it[16][3];
@@ -349,21 +349,21 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS ARRAY_PARTITION variable=otb complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otb complete dim=2
 
-  int inchannels = params[0];
-  int outchannels = params[1];
-  int burstchannels = params[2];
-  int rpo = params[3];
-  int rpofm = params[4];
-  int burstydim = params[5];
-  int ydim = params[6];
-  int xdim = params[7];
-  int xtile_pad = params[8];
-  int ksize = params[9];
-  int numgroups = params[10];
-  int numimages = params[11];
-  int fc = params[12];
-  int relu = params[13];
-  int backward = params[14];
+  short inchannels = params[0];
+  short outchannels = params[1];
+  short burstchannels = params[2];
+  short rpo = params[3];
+  short rpofm = params[4];
+  short burstydim = params[5];
+  short ydim = params[6];
+  short xdim = params[7];
+  short xtile_pad = params[8];
+  short ksize = params[9];
+  short numgroups = params[10];
+  short numimages = params[11];
+  short fc = params[12];
+  short relu = params[13];
+  short backward = params[14];
   assert(rpo >= 1);
   assert(rpo <= 64);
 
