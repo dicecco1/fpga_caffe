@@ -122,11 +122,16 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
   memcpy(biasbuf, bias, sizeof(chalf) * outchannels);
   short out_div = outchannels / OCFACT;
   short ofm_iters = (outchannels % OCFACT == 0) ? out_div : out_div + 1;
-  short mac_iterations = ksize * ksize * fact * (burstchannels >> 1);
-
+  
   for (int n = 0; n < rpo; ++n) {
     for (int y = 0; y < ydim_out; ++y) {
       for (int x = 0; x < xdim_out; ++x) {
+        short yk_off = 0;
+        short xk_off = 0;
+        short yksize = 0;
+        short xksize = 0;
+        bool xkset = false;
+        bool ykset = false;
         for (int p = 0; p < ksize; ++p) {
           for (int q = 0; q < ksize; ++q) {
             short in_y = y * stride - pad + p;
@@ -135,6 +140,24 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                 n * burstchannels) * fact;
             int inbuf_idx = (p * ksize + q) * burstchannels * fact;
             short in_size = burstchannels * fact;
+
+            if (in_y >= 0 && in_y < ydim) {
+              if (q == 0)
+                yksize++;
+              if (yk_off == 0 && !ykset) {
+                yk_off = p;
+                ykset = true;
+              }
+            }
+            if (in_x >= 0 && in_x < xdim) {
+              if (p == 0)
+                xksize++;
+              if (xk_off == 0 && !xkset) {
+                xk_off = q;
+                xkset = true;
+              }
+            }
+
             if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
               if ((x != 0) && (stride == 1) && (q != ksize - 1)) {
                 short q_off = burstchannels * fact;
@@ -146,11 +169,6 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               } else {
                 memcpy(inbuf + inbuf_idx, input + in_idx, sizeof(chalf16) *
                     in_size);
-              }
-            } else {
-              for (int i = 0; i < in_size; ++i) {
-#pragma HLS pipeline
-                inbuf[i + inbuf_idx] = chalf(0);
               }
             }
           }
@@ -202,9 +220,12 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
           short w_off = 0;
           short img_off = 0;
           short iter = 0;
-          short kdim_off = 0;
+          short xdim_off = 0;
+          short ydim_off = 0;
           short counter = 0;
           short counter_fw = 0;
+          short mac_iterations = yksize * xksize * fact * (burstchannels >> 1);
+
           MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter,
             ++counter) {
 #pragma HLS pipeline
@@ -221,7 +242,12 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                   counter_fw++;
                 if (w_off == (burstchannels >> 1) - 1) {
                   w_off = 0;
-                  kdim_off++;       
+                  if (xdim_off == xksize - 1) {
+                    xdim_off = 0;
+                    ydim_off++;
+                  } else {
+                    xdim_off++;
+                  }
                 } else {
                   w_off++;
                 }
@@ -230,17 +256,23 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               img_off = iter;
             } else {
               if (iter == (burstchannels >> 1)) {
-                if (kdim_off == ksize * ksize - 1) {
-                  kdim_off = 0;
-                  img_off++;
+                if (xdim_off == xksize - 1) {
+                  xdim_off = 0;
+                  if (ydim_off == yksize - 1) {
+                    ydim_off = 0;
+                    img_off++;
+                  } else {
+                    ydim_off++;
+                  }
                 } else {
-                  kdim_off++;
+                  xdim_off++;
                 }
                 iter = 0;
               }
               w_off = iter;
             }
-            short w_idx_f = kdim_off * (burstchannels >> 4) + (w_off >> 3);
+            short w_idx_f = ((yk_off + ydim_off) * ksize + xk_off + xdim_off) 
+                * (burstchannels >> 4) + (w_off >> 3);
             short w_idx_b = img_off;
             short w_idx = (mode) ? w_idx_b : w_idx_f;
             short fout_idx = counter * 2;
@@ -271,8 +303,9 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                     weight_val[m][j] = weight_fw[counter_fw * 2 + m];
                 }
 
-                short in_idx = (kdim_off * burstchannels + w_off * 2 + m) *
-                  (fact) + img_off;
+                short in_idx = (((yk_off + ydim_off) * ksize +
+                      (xk_off + xdim_off)) * burstchannels + w_off * 2 + m) *
+                      (fact) + img_off;
                 in_val[m][0] = inbuf[in_idx].s0;
                 in_val[m][1] = inbuf[in_idx].s1;
                 in_val[m][2] = inbuf[in_idx].s2;
@@ -329,7 +362,8 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               }
 
               short out_idx_f = img_off;
-              short out_idx_b = kdim_off * (burstchannels >> 4) + (w_off >> 3);
+              short out_idx_b = ((yk_off + ydim_off) * ksize + xk_off +
+                  xdim_off) * (burstchannels >> 4) + (w_off >> 3);
               short out_idx = (mode) ? out_idx_b : out_idx_f;
 
               bool acc_enable = (mode) ? (counter == 7) : true;
