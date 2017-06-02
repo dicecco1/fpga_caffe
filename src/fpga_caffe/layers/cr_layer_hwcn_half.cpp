@@ -37,8 +37,8 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
   // Input tile buffer
-  chalf16 inbuf[8 * 256 * 16];
-
+  chalf16 inbuf[4][2 * 256 * 16];
+#pragma HLS ARRAY_PARTITION variable=inbuf complete dim=1
   // Output buffer used for writing
   chalf16 outbuf[OCFACT][256];
 #pragma HLS ARRAY_PARTITION variable=outbuf complete dim=1
@@ -51,7 +51,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
   chalf biasbuf[1024];
 DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 
-  chalf multres[OCFACT][2][16];
+  chalf multres[OCFACT][4][16];
 #pragma HLS ARRAY_PARTITION variable=multres complete dim=1
 #pragma HLS ARRAY_PARTITION variable=multres complete dim=2
 #pragma HLS ARRAY_PARTITION variable=multres complete dim=3
@@ -59,31 +59,32 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
   chalf weight_fw[16];
 #pragma HLS ARRAY_PARTITION variable=weight_fw complete
 
-  chalf weight_val[2][16];
+  chalf weight_val[4][16];
 #pragma HLS ARRAY_PARTITION variable=weight_val complete dim=1
 #pragma HLS ARRAY_PARTITION variable=weight_val complete dim=2
 
-  chalf in_val[2][16];
+  chalf in_val[4][16];
 #pragma HLS ARRAY_PARTITION variable=in_val complete dim=1
 #pragma HLS ARRAY_PARTITION variable=in_val complete dim=2
 
-  chalf addres_s1[OCFACT][16];
+  chalf addres_s1[OCFACT][32];
 #pragma HLS ARRAY_PARTITION variable=addres_s1 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=addres_s1 complete dim=2
 
-  chalf addres_s2[OCFACT][4];
+  chalf addres_s2[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=addres_s2 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=addres_s2 complete dim=2
 
-  chalf addres_s3[OCFACT][2];
+  chalf addres_s3[OCFACT][4][2];
 #pragma HLS ARRAY_PARTITION variable=addres_s3 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=addres_s3 complete dim=2
+#pragma HLS ARRAY_PARTITION variable=addres_s3 complete dim=3
 
   chalf finalOut[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=finalOut complete dim=1
 #pragma HLS ARRAY_PARTITION variable=finalOut complete dim=2
 
-  chalf addres_s4[OCFACT][2];
+  chalf addres_s4[OCFACT][4];
 #pragma HLS ARRAY_PARTITION variable=addres_s4 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=addres_s4 complete dim=2
 
@@ -138,8 +139,8 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             short in_x = x * stride - pad + q;
             int in_idx = ((in_y * xdim + in_x) * inchannels +
                 n * burstchannels) * fact;
-            int inbuf_idx = (p * ksize + q) * burstchannels * fact;
-            short in_size = burstchannels * fact;
+            int inbuf_idx = (p * ksize + q) * (burstchannels >> 2) * fact;
+            short in_size = (burstchannels >> 2) * fact;
 
             if (in_y >= 0 && in_y < ydim) {
               if (q == 0)
@@ -160,15 +161,20 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 
             if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
               if ((x != 0) && (stride == 1) && (q != ksize - 1)) {
-                short q_off = burstchannels * fact;
+                short q_off = (burstchannels >> 2) * fact;
                 SHIFT_LOOP: for (int i = 0; i < in_size; ++i) {
 #pragma HLS pipeline
 #pragma HLS dependence variable=inbuf inter false
-                  inbuf[i + inbuf_idx] = inbuf[i + inbuf_idx + q_off];
+                  for (int j = 0; j < 4; ++j) {
+                    inbuf[j][i + inbuf_idx] = inbuf[j][i + inbuf_idx + q_off];
+                  }
                 }
               } else {
-                memcpy(inbuf + inbuf_idx, input + in_idx, sizeof(chalf16) *
-                    in_size);
+                for (int j = 0; j < 4; ++j) {
+                  int f_in_idx = in_idx + j * (burstchannels >> 2) * fact;
+                  memcpy(inbuf[j] + inbuf_idx, input + f_in_idx,
+                      sizeof(chalf16) * in_size);
+                }
               }
             }
           }
@@ -217,30 +223,29 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             memcpy(wbuf[k], weights + w_idx, sizeof(chalf16) * w_size);
           }
 
-          short w_off = 0;
-          short img_off = 0;
-          short iter = 0;
-          short xdim_off = 0;
-          short ydim_off = 0;
-          short counter = 0;
-          short counter_fw = 0;
-          short mac_iterations = yksize * xksize * fact * (burstchannels >> 1);
-
+          ap_uint<8> w_off = 0;
+          ap_uint<5> img_off = 0;
+          ap_uint<8> iter = 0;
+          ap_uint<8> xdim_off = 0;
+          ap_uint<8> ydim_off = 0;
+          ap_uint<4> counter = 0;
+          ap_uint<4> counter_fw = 0;
+          short mac_iterations = yksize * xksize * fact * (burstchannels >> 2);
           MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter,
             ++counter) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable outbuf inter false
 #pragma HLS DEPENDENCE variable finalOut inter false
 #pragma HLS DEPENDENCE variable wUpdate inter false
-            if (counter == 8)
+            if (counter == 4)
               counter = 0;
             if (!mode) {
               if (iter == (fact)) {
-                if (counter_fw == 7)
+                if (counter_fw == 3)
                   counter_fw = 0;
                 else
                   counter_fw++;
-                if (w_off == (burstchannels >> 1) - 1) {
+                if (w_off == (burstchannels >> 2) - 1) {
                   w_off = 0;
                   if (xdim_off == xksize - 1) {
                     xdim_off = 0;
@@ -255,7 +260,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               }
               img_off = iter;
             } else {
-              if (iter == (burstchannels >> 1)) {
+              if (iter == (burstchannels >> 2)) {
                 if (xdim_off == xksize - 1) {
                   xdim_off = 0;
                   if (ydim_off == yksize - 1) {
@@ -272,10 +277,13 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               w_off = iter;
             }
             short w_idx_f = ((yk_off + ydim_off) * ksize + xk_off + xdim_off) 
-                * (burstchannels >> 4) + (w_off >> 3);
+                * (burstchannels >> 4) + (w_off >> 2);
             short w_idx_b = img_off;
             short w_idx = (mode) ? w_idx_b : w_idx_f;
-            short fout_idx = counter * 2;
+            short fout_idx = counter * 4;
+            short in_idx = (((yk_off + ydim_off) * ksize +
+                  (xk_off + xdim_off)) * (burstchannels >> 2) + w_off) *
+                  (fact) + img_off;
 
             for (int k = 0; k < OCFACT; ++k) {
               weight_fw[0] = wbuf[k][w_idx].s0;
@@ -294,79 +302,92 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               weight_fw[13] = wbuf[k][w_idx].sd;
               weight_fw[14] = wbuf[k][w_idx].se;
               weight_fw[15] = wbuf[k][w_idx].sf;
-              for (int m = 0; m < 2; ++m) {
+              for (int m = 0; m < 4; ++m) {
                 if (mode) {
                   for (int j = 0; j < 16; ++j)
                     weight_val[m][j] = weight_fw[j];
                 } else {
-                  for (int j = 0; j < 16; ++j)
-                    weight_val[m][j] = weight_fw[counter_fw * 2 + m];
+                  for (int j = 0; j < 16; ++j) {
+                    weight_val[m][j] = weight_fw[counter_fw * 4 + m];
+                  }
                 }
 
-                short in_idx = (((yk_off + ydim_off) * ksize +
-                      (xk_off + xdim_off)) * burstchannels + w_off * 2 + m) *
-                      (fact) + img_off;
-                in_val[m][0] = inbuf[in_idx].s0;
-                in_val[m][1] = inbuf[in_idx].s1;
-                in_val[m][2] = inbuf[in_idx].s2;
-                in_val[m][3] = inbuf[in_idx].s3;
-                in_val[m][4] = inbuf[in_idx].s4;
-                in_val[m][5] = inbuf[in_idx].s5;
-                in_val[m][6] = inbuf[in_idx].s6;
-                in_val[m][7] = inbuf[in_idx].s7;
-                in_val[m][8] = inbuf[in_idx].s8;
-                in_val[m][9] = inbuf[in_idx].s9;
-                in_val[m][10] = inbuf[in_idx].sa;
-                in_val[m][11] = inbuf[in_idx].sb;
-                in_val[m][12] = inbuf[in_idx].sc;
-                in_val[m][13] = inbuf[in_idx].sd;
-                in_val[m][14] = inbuf[in_idx].se;
-                in_val[m][15] = inbuf[in_idx].sf;
+                in_val[m][0] = inbuf[m][in_idx].s0;
+                in_val[m][1] = inbuf[m][in_idx].s1;
+                in_val[m][2] = inbuf[m][in_idx].s2;
+                in_val[m][3] = inbuf[m][in_idx].s3;
+                in_val[m][4] = inbuf[m][in_idx].s4;
+                in_val[m][5] = inbuf[m][in_idx].s5;
+                in_val[m][6] = inbuf[m][in_idx].s6;
+                in_val[m][7] = inbuf[m][in_idx].s7;
+                in_val[m][8] = inbuf[m][in_idx].s8;
+                in_val[m][9] = inbuf[m][in_idx].s9;
+                in_val[m][10] = inbuf[m][in_idx].sa;
+                in_val[m][11] = inbuf[m][in_idx].sb;
+                in_val[m][12] = inbuf[m][in_idx].sc;
+                in_val[m][13] = inbuf[m][in_idx].sd;
+                in_val[m][14] = inbuf[m][in_idx].se;
+                in_val[m][15] = inbuf[m][in_idx].sf;
 
-                for (int j = 0; j < 16; ++j)
+                for (int j = 0; j < 16; ++j) 
                   multres[k][m][j] = in_val[m][j] * weight_val[m][j];
               }
 
-              for (int m = 0; m < 2; ++m) {
-                for (int j = 0; j < 8; ++j) {
-                  chalf temp1, temp2;
-                  if (mode) {
-                    temp1 = multres[k][m][j * 2];
-                    temp2 = multres[k][m][j * 2 + 1];
-                  } else {
-                    temp1 = multres[k][0][m * 8 + j];
-                    temp2 = multres[k][1][m * 8 + j];
+              for (int off = 0; off < 2; ++off) {
+                for (int m = 0; m < 2; ++m) {
+                  for (int j = 0; j < 8; ++j) {
+                    chalf temp1, temp2;
+                    if (mode) {
+                      temp1 = multres[k][off * 2 + m][j * 2];
+                      temp2 = multres[k][off * 2 + m][j * 2 + 1];
+                    } else {
+                      temp1 = multres[k][off * 2 + 0][m * 8 + j];
+                      temp2 = multres[k][off * 2 + 1][m * 8 + j];
+                    }
+                    addres_s1[k][(off * 2 + m) * 8 + j] = temp1 + temp2;
                   }
-                  addres_s1[k][m * 8 + j] = temp1 + temp2;
+                }
+              }
+              for (int off = 0; off < 2; ++off) {
+                for (int m = 0; m < 2; ++m) {
+                  for (int j = 0; j < 4; ++j) {
+                    chalf temp1, temp2;
+                    if (mode) {
+                      temp1 = addres_s1[k][(off * 2 + m) * 8 + j * 2];
+                      temp2 = addres_s1[k][(off * 2 + m) * 8 + j * 2 + 1];
+                    } else {
+                      temp1 = addres_s1[k][(off * 2 + m) * 4 + j];
+                      temp2 = addres_s1[k][(off * 2 + m) * 4 + j + 16];
+                    }
+                    addres_s2[k][(off * 2 + m) * 4 + j] = temp1 + temp2;
+                  }
                 }
               }
 
-              for (int m = 0; m < 2; ++m) {
-                for (int j = 0; j < 4; ++j)
-                  addres_s2[k][j] = addres_s1[k][m * 8 + j * 2] +
-                    addres_s1[k][m * 8 + j * 2 + 1];
+
+              for (int m = 0; m < 4; ++m) {
                 for (int j = 0; j < 2; ++j)
-                  addres_s3[k][j] = addres_s2[k][j * 2] +
-                    addres_s2[k][j * 2 + 1];
-                addres_s4[k][m] = addres_s3[k][0] + addres_s3[k][1];
+                  addres_s3[k][m][j] = addres_s2[k][m * 4 + j * 2] +
+                    addres_s2[k][m * 4 + j * 2 + 1];
+                addres_s4[k][m] = addres_s3[k][m][0] + addres_s3[k][m][1];
               }
 
-              for (int m = 0; m < 2; ++m)
+              for (int m = 0; m < 4; ++m)
                 wUpdate[k][fout_idx + m] = addres_s4[k][m];
 
               for (int j = 0; j < 16; ++j) {
                 if (mode)
                   finalOut[k][j] = wUpdate[k][j];
                 else
-                  finalOut[k][j] = addres_s1[k][j];
+                  finalOut[k][j] = addres_s2[k][j];
               }
 
               short out_idx_f = img_off;
               short out_idx_b = ((yk_off + ydim_off) * ksize + xk_off +
-                  xdim_off) * (burstchannels >> 4) + (w_off >> 3);
+                  xdim_off) * (burstchannels >> 4) + (w_off >> 2);
               short out_idx = (mode) ? out_idx_b : out_idx_f;
 
-              bool acc_enable = (mode) ? (counter == 7) : true;
+              bool acc_enable = (mode) ? (counter == 3) : true;
               
               if (acc_enable) {
                 outbuf[k][out_idx].s0 += finalOut[k][0];
