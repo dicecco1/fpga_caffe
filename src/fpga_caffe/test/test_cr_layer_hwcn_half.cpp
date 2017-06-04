@@ -29,20 +29,22 @@ void ref_conv_layer_hwcn(std::vector<float> input, std::vector<float> weights,
       int o_g = outchannels / numgroups;
       int k_g = inchannels / numgroups;
       for (int o = 0; o < o_g; o++) {
-        for (int k = 0; k < k_g; k++) {
-          for (int y = 0; y < ydim; y++) {
-            for (int x = 0; x < xdim; x++) {
-              for (int p = 0; p < ksize; p++) {
-                for (int q = 0; q < ksize; q++) {
-                  int in_y = y * stride - pad + p;
-                  int in_x = x * stride - pad + q;
-                  if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
-                    out_idx = ((y * xdim + x) * outchannels + o + o_head)
-                        * numimages + n;
-                    in_idx = ((in_y * xdim + in_x) * inchannels + k + k_head) *
-                      numimages + n;
-                    k_idx = (((o + o_head) * ksize + p) * ksize + q) * k_g + k;
-                    output[out_idx] += input[in_idx] * weights[k_idx];
+        for (int k = 0; k < k_g / 4; k++) {
+          for (int m = 0; m < 4; ++m) {
+            for (int y = 0; y < ydim; y++) {
+              for (int x = 0; x < xdim; x++) {
+                for (int p = 0; p < ksize; p++) {
+                  for (int q = 0; q < ksize; q++) {
+                    int in_y = y * stride - pad + p;
+                    int in_x = x * stride - pad + q;
+                    if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
+                      out_idx = ((y * xdim + x) * outchannels + o + o_head)
+                          * numimages + n;
+                      in_idx = ((in_y * xdim + in_x) * inchannels + m * (k_g / 4) + k + k_head) *
+                        numimages + n;
+                      k_idx = (((o + o_head) * ksize + p) * ksize + q) * k_g + k * 4 + m;
+                      output[out_idx] += input[in_idx] * weights[k_idx];
+                    }
                   }
                 }
               }
@@ -88,21 +90,23 @@ void ref_backward_conv_layer_hwcn(std::vector<float> input,
       int o_g = outchannels / numgroups;
       int k_g = inchannels / numgroups;
       for (int o = 0; o < o_g; o++) {
-        for (int k = 0; k < k_g; k++) {
-          for (int p = 0; p < ydim; p++) {
-            for (int q = 0; q < xdim; q++) {
-              for (int y = 0; y < ksize; y++) {
-                for (int x = 0; x < ksize; x++) {
-                  int in_y = y * stride - pad + p;
-                  int in_x = x * stride - pad + q;
-                  if (in_y >= 0 && in_y < ydim
-                    && in_x >= 0 && in_x < xdim) {
-                    out_idx = ((p * xdim + q) * outchannels + o + o_head)
-                      * numimages + n;
-                    in_idx = ((in_y * xdim + in_x) * inchannels + k + k_head)
-                      * numimages + n;
-                    k_idx = (((o + o_head) * ksize + y) * ksize + x) * k_g + k;
-                    output[k_idx] += input[in_idx] * weights[out_idx];
+        for (int k = 0; k < k_g / 4; k++) {
+          for (int m = 0; m < 4; ++m) {
+            for (int p = 0; p < ydim; p++) {
+              for (int q = 0; q < xdim; q++) {
+                for (int y = 0; y < ksize; y++) {
+                  for (int x = 0; x < ksize; x++) {
+                    int in_y = y * stride - pad + p;
+                    int in_x = x * stride - pad + q;
+                    if (in_y >= 0 && in_y < ydim
+                      && in_x >= 0 && in_x < xdim) {
+                      out_idx = ((p * xdim + q) * outchannels + o + o_head)
+                        * numimages + n;
+                      in_idx = ((in_y * xdim + in_x) * inchannels + m * (k_g / 4) + k + k_head)
+                        * numimages + n;
+                      k_idx = (((o + o_head) * ksize + y) * ksize + x) * k_g + k * 4 + m;
+                      output[k_idx] += input[in_idx] * weights[out_idx];
+                    }
                   }
                 }
               }
@@ -168,7 +172,7 @@ TYPED_TEST_CASE(CRLayerHWCNHalfTest, TestOCLDtypesAndDevices);
 TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
-  int ksize = 3;
+  int ksize = 5;
   int ksize_pad = 1;
   std::vector<kernel_params> params = this->params;
   std::vector<cl_event> events;
@@ -179,7 +183,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
     params[i].backward = 0;
     params[i].relu = 0;
     params[i].stride = 1;
-    params[i].pad = 1;
+    params[i].pad = 2;
     int insize = params[i].numimages * params[i].inchannels * params[i].ydim *
       params[i].xdim * params[i].numgroups;
     int wsize = params[i].outchannels * params[i].numgroups *
@@ -293,7 +297,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
 TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1B_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
-  int ksize = 3;
+  int ksize = 5;
   std::vector<kernel_params> params = this->params;
   std::vector<cl_event> events;
 
@@ -303,7 +307,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1B_HALF) {
     params[i].relu = 0;
     params[i].backward = 1;
     params[i].stride = 1;
-    params[i].pad = 1;
+    params[i].pad = 2;
     int insize = params[i].numimages * params[i].inchannels * params[i].ydim *
       params[i].xdim * params[i].numgroups;
     int wsize = params[i].numimages * params[i].outchannels * params[i].ydim *
