@@ -226,6 +226,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                 SHIFT_LOOP: for (int i = 0; i < in_size; ++i) {
 #pragma HLS pipeline
 #pragma HLS dependence variable=inbuf inter false
+#pragma HLS dependence variable=inbuf_relu inter false
                   for (int j = 0; j < 4; ++j) {
                     inbuf[j][i + inbuf_idx] = inbuf[j][i + inbuf_idx + q_off];
                     inbuf_relu[j][i + inbuf_idx] =
