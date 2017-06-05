@@ -16,10 +16,58 @@
  * output:        output of the convolution
  */ 
 
+chalf relu_bw(chalf input, bool enable) {
+  chalf res = (enable) ? input : chalf(0);
+  return res;
+}
+
+void relu_fw(chalf16 outbuf[OCFACT][256], short outbuf_relu[OCFACT][256],
+  int k, int num_iter) {
+  RELU_FW: for (int i = 0; i < num_iter; ++i) {
+  #pragma HLS pipeline
+    chalf16 val;
+    val.s0 = max(outbuf[k][i].s0);
+    val.s1 = max(outbuf[k][i].s1);
+    val.s2 = max(outbuf[k][i].s2);
+    val.s3 = max(outbuf[k][i].s3);
+    val.s4 = max(outbuf[k][i].s4);
+    val.s5 = max(outbuf[k][i].s5);
+    val.s6 = max(outbuf[k][i].s6);
+    val.s7 = max(outbuf[k][i].s7);
+    val.s8 = max(outbuf[k][i].s8);
+    val.s9 = max(outbuf[k][i].s9);
+    val.sa = max(outbuf[k][i].sa);
+    val.sb = max(outbuf[k][i].sb);
+    val.sc = max(outbuf[k][i].sc);
+    val.sd = max(outbuf[k][i].sd);
+    val.se = max(outbuf[k][i].se);
+    val.sf = max(outbuf[k][i].sf);
+
+    outbuf[k][i] = val;
+
+    outbuf_relu[k][i] |= (val.s0 != chalf(0)) ? 1 << 0 : 0;
+    outbuf_relu[k][i] |= (val.s1 != chalf(0)) ? 1 << 1 : 0;
+    outbuf_relu[k][i] |= (val.s2 != chalf(0)) ? 1 << 2 : 0;
+    outbuf_relu[k][i] |= (val.s3 != chalf(0)) ? 1 << 3 : 0;
+    outbuf_relu[k][i] |= (val.s4 != chalf(0)) ? 1 << 4 : 0;
+    outbuf_relu[k][i] |= (val.s5 != chalf(0)) ? 1 << 5 : 0;
+    outbuf_relu[k][i] |= (val.s6 != chalf(0)) ? 1 << 6 : 0;
+    outbuf_relu[k][i] |= (val.s7 != chalf(0)) ? 1 << 7 : 0;
+    outbuf_relu[k][i] |= (val.s8 != chalf(0)) ? 1 << 8 : 0;
+    outbuf_relu[k][i] |= (val.s9 != chalf(0)) ? 1 << 9 : 0;
+    outbuf_relu[k][i] |= (val.sa != chalf(0)) ? 1 << 10 : 0;
+    outbuf_relu[k][i] |= (val.sb != chalf(0)) ? 1 << 11 : 0;
+    outbuf_relu[k][i] |= (val.sc != chalf(0)) ? 1 << 12 : 0;
+    outbuf_relu[k][i] |= (val.sd != chalf(0)) ? 1 << 13 : 0;
+    outbuf_relu[k][i] |= (val.se != chalf(0)) ? 1 << 14 : 0;
+    outbuf_relu[k][i] |= (val.sf != chalf(0)) ? 1 << 15 : 0;
+  }
+}
+
 extern "C" {
 
 void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
-    chalf16 *output, int *params) { 
+    chalf16 *output, short *track_relu, int *params) { 
 // Ports 
 #pragma HLS data_pack variable=weights
 #pragma HLS data_pack variable=output
@@ -28,17 +76,26 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS INTERFACE m_axi port=output offset=slave bundle=gmem2
 #pragma HLS INTERFACE m_axi port=weights offset=slave bundle=gmem3
 #pragma HLS INTERFACE m_axi port=bias offset=slave bundle=gmem4
+#pragma HLS INTERFACE m_axi port=track_relu offset=slave bundle=gmem5
 #pragma HLS INTERFACE m_axi port=params offset=slave bundle=gmem6
 #pragma HLS INTERFACE s_axilite port=input bundle=control
 #pragma HLS INTERFACE s_axilite port=output bundle=control
 #pragma HLS INTERFACE s_axilite port=weights bundle=control
 #pragma HLS INTERFACE s_axilite port=bias bundle=control
+#pragma HLS INTERFACE s_axilite port=track_relu bundle=control
 #pragma HLS INTERFACE s_axilite port=params bundle=control
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
   // Input tile buffer
   chalf16 inbuf[4][2 * 256 * 16];
 #pragma HLS ARRAY_PARTITION variable=inbuf complete dim=1
+
+  short inbuf_relu[4][2 * 256 * 16];
+#pragma HLS ARRAY_PARTITION variable=inbuf_relu complete dim=1
+
+  short outbuf_relu[OCFACT][256];
+#pragma HLS ARRAY_PARTITION variable=outbuf_relu complete dim=1
+
   // Output buffer used for writing
   chalf16 outbuf[OCFACT][256];
 #pragma HLS ARRAY_PARTITION variable=outbuf complete dim=1
@@ -101,13 +158,13 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
   short burstchannels = params[2];
   short rpo = params[3];
   short rpofm = params[4];
-  short burstydim = params[5];
-  short ydim = params[6];
-  short xdim = params[7];
-  short xtile_pad = params[8];
+  ap_uint<10> burstydim = params[5];
+  ap_uint<10> ydim = params[6];
+  ap_uint<10> xdim = params[7];
+  ap_uint<10> xtile_pad = params[8];
   ap_uint<5> ksize = params[9];
   short numgroups = params[10];
-  short numimages = params[11];
+  ap_uint<10> numimages = params[11];
   short fc = params[12];
   short relu = params[13];
   short backward = params[14];
@@ -115,11 +172,15 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
   ap_uint<4> pad = params[16];
   bool mode = backward;
 
-  short xdim_out = ((xdim - ksize + 2 * pad) / stride) + 1;
-  short ydim_out = xdim_out;
+  ap_uint<10> xdim_out = ((xdim - ksize + 2 * pad) / stride) + 1;
+  ap_uint<10> ydim_out = xdim_out;
 
-  ap_uint<8> fact = numimages >> 4;
-
+  ap_uint<8> img_fact = numimages >> 4;
+  short burst_fact = burstchannels >> 2;
+  short ic_fact = (inchannels % 16 == 0) ? (inchannels >> 4) :
+    (inchannels >> 4) + 1;
+  short wc_fact = (burstchannels % 16 == 0) ? (burstchannels >> 4) :
+    (burstchannels >> 4) + 1;
   memcpy(biasbuf, bias, sizeof(chalf) * outchannels);
   short out_div = outchannels / OCFACT;
   short ofm_iters = (outchannels % OCFACT == 0) ? out_div : out_div + 1;
@@ -138,9 +199,9 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             short in_y = y * stride - pad + p;
             short in_x = x * stride - pad + q;
             int in_idx = ((in_y * xdim + in_x) * inchannels +
-                n * burstchannels) * fact;
-            int inbuf_idx = (p * ksize + q) * (burstchannels >> 2) * fact;
-            short in_size = (burstchannels >> 2) * fact;
+                n * burstchannels) * img_fact;
+            int inbuf_idx = (p * ksize + q) * burst_fact * img_fact;
+            short in_size = burst_fact * img_fact;
 
             if (in_y >= 0 && in_y < ydim) {
               if (q == 0)
@@ -161,19 +222,23 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 
             if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
               if ((x != 0) && (stride == 1) && (q != ksize - 1)) {
-                short q_off = (burstchannels >> 2) * fact;
+                short q_off = burst_fact * img_fact;
                 SHIFT_LOOP: for (int i = 0; i < in_size; ++i) {
 #pragma HLS pipeline
 #pragma HLS dependence variable=inbuf inter false
                   for (int j = 0; j < 4; ++j) {
                     inbuf[j][i + inbuf_idx] = inbuf[j][i + inbuf_idx + q_off];
+                    inbuf_relu[j][i + inbuf_idx] =
+                      inbuf_relu[j][i + inbuf_idx + q_off];
                   }
                 }
               } else {
                 for (int j = 0; j < 4; ++j) {
-                  int f_in_idx = in_idx + j * (burstchannels >> 2) * fact;
+                  int f_in_idx = in_idx + j * burst_fact * img_fact;
                   memcpy(inbuf[j] + inbuf_idx, input + f_in_idx,
                       sizeof(chalf16) * in_size);
+                  memcpy(inbuf_relu[j] + inbuf_idx, track_relu + f_in_idx,
+                      sizeof(short) * in_size);
                 }
               }
             }
@@ -181,23 +246,22 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
         }
         for (int o = 0; o < ofm_iters; ++o) {
           if (n == 0 && !mode) {
-            for (int i = 0; i < fact; ++i) {
+            for (int i = 0; i < img_fact; ++i) {
 #pragma HLS pipeline
               for (int k = 0; k < OCFACT; ++k) {
                 outbuf[k][i] = biasbuf[o * OCFACT + k];
               }
             }
           } else {
-            int out_idx, out_idx_f, out_idx_b;
-            short out_size, out_size_f, out_size_b;
-
             for (int k = 0; k < OCFACT; ++k) {
-              out_idx_b = (o * OCFACT + k) * ksize * ksize * (inchannels >> 4)
-                + n * ksize * ksize * (burstchannels >> 4);
-              out_size_b = ksize * ksize * (burstchannels >> 4);
+              int out_idx, out_idx_f, out_idx_b;
+              short out_size, out_size_f, out_size_b;
+              out_idx_b = (o * OCFACT + k) * ksize * ksize * ic_fact
+                + n * ksize * ksize * wc_fact;
+              out_size_b = ksize * ksize * wc_fact;
               out_idx_f = ((y * xdim + x) * outchannels + (o * OCFACT) + k) *
-                fact;
-              out_size_f = fact;
+                img_fact;
+              out_size_f = img_fact;
 
               if (mode) {
                 out_idx = out_idx_b;
@@ -206,8 +270,9 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                 out_idx = out_idx_f;
                 out_size = out_size_f;
               }
-
-              memcpy(outbuf[k], output + out_idx, sizeof(chalf16) * out_size);
+              if (o * OCFACT + k < outchannels)
+                memcpy(outbuf[k], output + out_idx, sizeof(chalf16) *
+                    out_size);
             }
           } 
           
@@ -215,11 +280,11 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             int w_idx_f, w_idx_b, w_idx;
             short w_size_f, w_size_b, w_size;
             w_idx_b = ((y * xdim_out + x) * outchannels +
-                (o * OCFACT + k)) * (fact);
-            w_size_b = fact;
-            w_idx_f = (o * OCFACT + k) * ksize * ksize * (inchannels >> 4)
-                + n * ksize * ksize * (burstchannels >> 4);
-            w_size_f = ksize * ksize * (burstchannels >> 4);
+                (o * OCFACT + k)) * img_fact;
+            w_size_b = img_fact;
+            w_idx_f = (o * OCFACT + k) * ksize * ksize * ic_fact
+                + n * ksize * ksize * wc_fact;
+            w_size_f = ksize * ksize * wc_fact;
 
             if (mode) {
               w_idx = w_idx_b;
@@ -228,7 +293,8 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               w_idx = w_idx_f;
               w_size = w_size_f;
             }
-            memcpy(wbuf[k], weights + w_idx, sizeof(chalf16) * w_size);
+            if (o * OCFACT + k < outchannels)
+              memcpy(wbuf[k], weights + w_idx, sizeof(chalf16) * w_size);
           }
 
           ap_uint<8> w_off = 0;
@@ -236,24 +302,19 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
           ap_uint<8> iter = 0;
           ap_uint<8> xdim_off = 0;
           ap_uint<8> ydim_off = 0;
-          ap_uint<4> counter = 0;
-          ap_uint<4> counter_fw = 0;
-          short mac_iterations = yksize * xksize * fact * (burstchannels >> 2);
+          ap_uint<2> counter_bw = 0;
+          ap_uint<2> counter_fw = 0;
+          short mac_iterations = yksize * xksize * img_fact * burst_fact;
           MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter,
-            ++counter) {
+            ++counter_bw) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable outbuf inter false
 #pragma HLS DEPENDENCE variable finalOut inter false
 #pragma HLS DEPENDENCE variable wUpdate inter false
-            if (counter == 4)
-              counter = 0;
             if (!mode) {
-              if (iter == (fact)) {
-                if (counter_fw == 3)
-                  counter_fw = 0;
-                else
-                  counter_fw++;
-                if (w_off == (burstchannels >> 2) - 1) {
+              if (iter == img_fact) {
+                counter_fw++;
+                if (w_off == burst_fact - 1) {
                   w_off = 0;
                   if (xdim_off == xksize - 1) {
                     xdim_off = 0;
@@ -268,7 +329,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               }
               img_off = iter;
             } else {
-              if (iter == (burstchannels >> 2)) {
+              if (iter == burst_fact) {
                 if (xdim_off == xksize - 1) {
                   xdim_off = 0;
                   if (ydim_off == yksize - 1) {
@@ -286,14 +347,14 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             }
 
             short filt_off = (yk_off + ydim_off) * ksize + xk_off + xdim_off;
-            short w_idx_f = filt_off * (burstchannels >> 4) + (w_off >> 2);
+            short w_idx_f = filt_off * wc_fact + (w_off >> 2);
             short w_idx_b = img_off;
             short w_idx = (mode) ? w_idx_b : w_idx_f;
-            short fout_idx = counter * 4;
-            short in_idx = (filt_off * (burstchannels >> 2) + w_off) * fact
+            short fout_idx = counter_bw * 4;
+            short in_idx = (filt_off * burst_fact + w_off) * img_fact
               + img_off;
             short out_idx_f = img_off;
-            short out_idx_b = (filt_off) * (burstchannels >> 4) + (w_off >> 2);
+            short out_idx_b = filt_off * wc_fact + (w_off >> 2);
             short out_idx = (mode) ? out_idx_b : out_idx_f;
 
             for (int k = 0; k < OCFACT; ++k) {
@@ -321,22 +382,44 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                     weight_val[m][j] = weight_fw[counter_fw * 4 + m];
                 }
 
-                in_val[m][0] = inbuf[m][in_idx].s0;
-                in_val[m][1] = inbuf[m][in_idx].s1;
-                in_val[m][2] = inbuf[m][in_idx].s2;
-                in_val[m][3] = inbuf[m][in_idx].s3;
-                in_val[m][4] = inbuf[m][in_idx].s4;
-                in_val[m][5] = inbuf[m][in_idx].s5;
-                in_val[m][6] = inbuf[m][in_idx].s6;
-                in_val[m][7] = inbuf[m][in_idx].s7;
-                in_val[m][8] = inbuf[m][in_idx].s8;
-                in_val[m][9] = inbuf[m][in_idx].s9;
-                in_val[m][10] = inbuf[m][in_idx].sa;
-                in_val[m][11] = inbuf[m][in_idx].sb;
-                in_val[m][12] = inbuf[m][in_idx].sc;
-                in_val[m][13] = inbuf[m][in_idx].sd;
-                in_val[m][14] = inbuf[m][in_idx].se;
-                in_val[m][15] = inbuf[m][in_idx].sf;
+                bool relu_on = (relu && ((backward == 1) ||
+                    (backward == 2) || (backward == 3)));
+
+                short relu_val = inbuf_relu[m][in_idx];
+                bool fw_mode = (backward == 0);
+                bool relu0 = (relu_on && ((relu_val >> 0) & 0x1)) || fw_mode;
+                bool relu1 = (relu_on && ((relu_val >> 1) & 0x1)) || fw_mode;
+                bool relu2 = (relu_on && ((relu_val >> 2) & 0x1)) || fw_mode;
+                bool relu3 = (relu_on && ((relu_val >> 3) & 0x1)) || fw_mode;
+                bool relu4 = (relu_on && ((relu_val >> 4) & 0x1)) || fw_mode;
+                bool relu5 = (relu_on && ((relu_val >> 5) & 0x1)) || fw_mode;
+                bool relu6 = (relu_on && ((relu_val >> 6) & 0x1)) || fw_mode;
+                bool relu7 = (relu_on && ((relu_val >> 7) & 0x1)) || fw_mode;
+                bool relu8 = (relu_on && ((relu_val >> 8) & 0x1)) || fw_mode;
+                bool relu9 = (relu_on && ((relu_val >> 9) & 0x1)) || fw_mode;
+                bool relua = (relu_on && ((relu_val >> 10) & 0x1)) || fw_mode;
+                bool relub = (relu_on && ((relu_val >> 11) & 0x1)) || fw_mode;
+                bool reluc = (relu_on && ((relu_val >> 12) & 0x1)) || fw_mode;
+                bool relud = (relu_on && ((relu_val >> 13) & 0x1)) || fw_mode;
+                bool relue = (relu_on && ((relu_val >> 14) & 0x1)) || fw_mode;
+                bool reluf = (relu_on && ((relu_val >> 15) & 0x1)) || fw_mode; 
+
+                in_val[m][0] = relu_bw(inbuf[m][in_idx].s0, relu0);
+                in_val[m][1] = relu_bw(inbuf[m][in_idx].s1, relu1);
+                in_val[m][2] = relu_bw(inbuf[m][in_idx].s2, relu2);
+                in_val[m][3] = relu_bw(inbuf[m][in_idx].s3, relu3);
+                in_val[m][4] = relu_bw(inbuf[m][in_idx].s4, relu4);
+                in_val[m][5] = relu_bw(inbuf[m][in_idx].s5, relu5);
+                in_val[m][6] = relu_bw(inbuf[m][in_idx].s6, relu6);
+                in_val[m][7] = relu_bw(inbuf[m][in_idx].s7, relu7);
+                in_val[m][8] = relu_bw(inbuf[m][in_idx].s8, relu8);
+                in_val[m][9] = relu_bw(inbuf[m][in_idx].s9, relu9);
+                in_val[m][10] = relu_bw(inbuf[m][in_idx].sa, relua);
+                in_val[m][11] = relu_bw(inbuf[m][in_idx].sb, relub);
+                in_val[m][12] = relu_bw(inbuf[m][in_idx].sc, reluc);
+                in_val[m][13] = relu_bw(inbuf[m][in_idx].sd, relud);
+                in_val[m][14] = relu_bw(inbuf[m][in_idx].se, relue);
+                in_val[m][15] = relu_bw(inbuf[m][in_idx].sf, reluf);
 
                 for (int j = 0; j < 16; ++j) 
                   multres[k][m][j] = in_val[m][j] * weight_val[m][j];
@@ -390,7 +473,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                   finalOut[k][j] = addres_s2[k][j];
               }
               
-              bool acc_enable = (mode) ? (counter == 3) : true;
+              bool acc_enable = (mode) ? (counter_bw == 3) : true;
               
               if (acc_enable) {
                 outbuf[k][out_idx].s0 += finalOut[k][0];
@@ -413,17 +496,29 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             }
           }
           for (int k = 0; k < OCFACT; ++k) {
-            int out_idx;
-            int out_size;
+            int out_idx, out_idx_f, out_idx_b;
+            short out_size, out_size_f, out_size_b;
+            out_idx_b = (o * OCFACT + k) * ksize * ksize * ic_fact
+              + n * ksize * ksize * wc_fact;
+            out_size_b = ksize * ksize * wc_fact;
+            out_idx_f = ((y * xdim + x) * outchannels + (o * OCFACT) + k) *
+              img_fact;
+            out_size_f = img_fact;
+
             if (mode) {
-              out_idx = (o * OCFACT + k) * ksize * ksize *
-                (inchannels >> 4) + n * ksize * ksize * (burstchannels >> 4);
-              out_size = ksize * ksize * (burstchannels >> 4);
+              out_idx = out_idx_b;
+              out_size = out_size_b;
             } else {
-              out_idx = (((y * xdim_out) + x) * outchannels +
-                (o * OCFACT) + k) * (fact);
-              out_size = fact;
+              out_idx = out_idx_f;
+              out_size = out_size_f;
             }
+
+            if (relu && (o * OCFACT + k < outchannels) && (backward == 0)) {
+              relu_fw(outbuf, outbuf_relu, k, out_size);
+              memcpy(track_relu + out_idx, outbuf_relu[k], sizeof(short) *
+                  out_size);
+            }
+
             if (o * OCFACT + k < outchannels)
               memcpy(output + out_idx, outbuf[k], sizeof(chalf16) * out_size);
           }
