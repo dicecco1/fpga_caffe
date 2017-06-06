@@ -39,10 +39,11 @@ void ref_conv_layer_hwcn(std::vector<float> input, std::vector<float> weights,
                     int in_x = x * stride - pad + q;
                     if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
                       out_idx = ((y * xdim + x) * outchannels + o + o_head)
-                          * numimages + n;
-                      in_idx = ((in_y * xdim + in_x) * inchannels + m * (k_g / 4) + k + k_head) *
-                        numimages + n;
-                      k_idx = (((o + o_head) * ksize + p) * ksize + q) * k_g + k * 4 + m;
+                        * numimages + n;
+                      in_idx = ((in_y * xdim + in_x) * inchannels + m *
+                        (k_g / 4) + k + k_head) * numimages + n;
+                      k_idx = (((o + o_head) * ksize + p) * ksize + q) * k_g +
+                        k * 4 + m;
                       output[out_idx] += input[in_idx] * weights[k_idx];
                     }
                   }
@@ -102,9 +103,10 @@ void ref_backward_conv_layer_hwcn(std::vector<float> input,
                       && in_x >= 0 && in_x < xdim) {
                       out_idx = ((p * xdim + q) * outchannels + o + o_head)
                         * numimages + n;
-                      in_idx = ((in_y * xdim + in_x) * inchannels + m * (k_g / 4) + k + k_head)
-                        * numimages + n;
-                      k_idx = (((o + o_head) * ksize + y) * ksize + x) * k_g + k * 4 + m;
+                      in_idx = ((in_y * xdim + in_x) * inchannels + m *
+                        (k_g / 4) + k + k_head) * numimages + n;
+                      k_idx = (((o + o_head) * ksize + y) * ksize + x) *
+                        k_g + k * 4 + m;
                       output[k_idx] += input[in_idx] * weights[out_idx];
                     }
                   }
@@ -134,11 +136,16 @@ class CRLayerHWCNHalfTest : public OCLDeviceTest<TypeParam> {
     params[0].burstchannels = 16;
     params[0].rpo = 1;
     params[0].rpofm = 1;
-    params[0].burstydim = 1;
-    params[0].ydim = 1;
-    params[0].xdim = 1;
-    params[0].xtile_pad = 1;
+    params[0].burstydim = 8;
+    params[0].ydim = 8;
+    params[0].xdim = 8;
+    params[0].xtile_pad = 8;
     params[0].numimages = 256;
+    params[0].ksize = 3;
+    params[0].backward = 0;
+    params[0].relu = 1;
+    params[0].stride = 1;
+    params[0].pad = 1;
     batch_size[0] = 256;
   }
 
@@ -170,20 +177,13 @@ class CRLayerHWCNHalfTest : public OCLDeviceTest<TypeParam> {
 TYPED_TEST_CASE(CRLayerHWCNHalfTest, TestOCLDtypesAndDevices);
 
 TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
-  typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
-  int ksize = 1;
-  int ksize_pad = 1;
   std::vector<kernel_params> params = this->params;
   std::vector<cl_event> events;
 
   for (int i = 0; i < params.size(); ++i) {
+    int ksize = params[i].ksize;
     // Set sizes
-    params[i].ksize = ksize;
-    params[i].backward = 0;
-    params[i].relu = 1;
-    params[i].stride = 1;
-    params[i].pad = 0;
     int insize = params[i].numimages * params[i].inchannels * params[i].ydim *
       params[i].xdim * params[i].numgroups;
     int wsize = params[i].outchannels * params[i].numgroups *
@@ -236,7 +236,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(chalf) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
-        CL_MEM_READ_WRITE, outsize, NULL, NULL);
+        CL_MEM_READ_WRITE, sizeof(short) * outsize / 16, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
@@ -253,7 +253,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
         0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
-        CL_TRUE, 0, outsize, this->relu_vals.data(), 0,
+        CL_TRUE, 0, sizeof(short) * outsize / 16, this->relu_vals.data(), 0,
         NULL, NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_params, CL_TRUE,
         0, sizeof(kernel_params), &params[i], 0, NULL, NULL);
@@ -283,8 +283,8 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
         0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL,
         NULL);
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
-        CL_TRUE, 0, outsize, this->relu_vals.data(), 0, NULL,
-        NULL);
+        CL_TRUE, 0, sizeof(short) * outsize / 16, this->relu_vals.data(), 0,
+        NULL, NULL);
 
     toFloat(this->hw_results_half, this->hw_results);
 
@@ -302,24 +302,20 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
     clReleaseMemObject(this->ocl_weights);
     clReleaseMemObject(this->ocl_output);
     clReleaseMemObject(this->ocl_bias);
+    clReleaseMemObject(this->ocl_relu_vals);
     clReleaseMemObject(this->ocl_params);
   }
 }
 
 TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1B_HALF) {
-  typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
-  int ksize = 1;
   std::vector<kernel_params> params = this->params;
   std::vector<cl_event> events;
 
   for (int i = 0; i < params.size(); ++i) {
     // Set sizes
-    params[i].ksize = ksize;
-    params[i].relu = 1;
+    int ksize = params[i].ksize;
     params[i].backward = 1;
-    params[i].stride = 1;
-    params[i].pad = 0;
     int insize = params[i].numimages * params[i].inchannels * params[i].ydim *
       params[i].xdim * params[i].numgroups;
     int wsize = params[i].numimages * params[i].outchannels * params[i].ydim *
@@ -372,7 +368,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1B_HALF) {
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(chalf) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
-        CL_MEM_READ_WRITE, insize, NULL, NULL);
+        CL_MEM_READ_WRITE, sizeof(short) * insize / 16, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
@@ -389,7 +385,8 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1B_HALF) {
         0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
-        CL_TRUE, 0, insize, this->relu_vals.data(), 0, NULL, NULL);
+        CL_TRUE, 0, sizeof(short) * insize / 16, this->relu_vals.data(), 0,
+        NULL, NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_params, CL_TRUE,
         0, sizeof(kernel_params), &params[i], 0, NULL, NULL);
 
@@ -433,6 +430,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1B_HALF) {
     clReleaseMemObject(this->ocl_weights);
     clReleaseMemObject(this->ocl_output);
     clReleaseMemObject(this->ocl_bias);
+    clReleaseMemObject(this->ocl_relu_vals);
     clReleaseMemObject(this->ocl_params);
   }
 }

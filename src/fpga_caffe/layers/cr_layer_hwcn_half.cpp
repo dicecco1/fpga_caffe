@@ -260,8 +260,8 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               out_idx_b = (o * OCFACT + k) * ksize * ksize * ic_fact
                 + n * ksize * ksize * wc_fact;
               out_size_b = ksize * ksize * wc_fact;
-              out_idx_f = ((y * xdim + x) * outchannels + (o * OCFACT) + k) *
-                img_fact;
+              out_idx_f = ((y * xdim_out + x) * outchannels +
+                (o * OCFACT) + k) * img_fact;
               out_size_f = img_fact;
 
               if (mode) {
@@ -502,7 +502,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             out_idx_b = (o * OCFACT + k) * ksize * ksize * ic_fact
               + n * ksize * ksize * wc_fact;
             out_size_b = ksize * ksize * wc_fact;
-            out_idx_f = ((y * xdim + x) * outchannels + (o * OCFACT) + k) *
+            out_idx_f = ((y * xdim_out + x) * outchannels + (o * OCFACT) + k) *
               img_fact;
             out_size_f = img_fact;
 
@@ -514,7 +514,8 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               out_size = out_size_f;
             }
 
-            if (relu && (o * OCFACT + k < outchannels) && (backward == 0)) {
+            if (relu && (o * OCFACT + k < outchannels) && (!mode) &&
+                (n == rpo - 1)) {
               relu_fw(outbuf, outbuf_relu, k, out_size);
               memcpy(track_relu + out_idx, outbuf_relu[k], sizeof(short) *
                   out_size);
