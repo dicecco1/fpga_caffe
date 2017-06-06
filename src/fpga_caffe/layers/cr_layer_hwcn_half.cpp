@@ -21,47 +21,10 @@ chalf relu_bw(chalf input, bool enable) {
   return res;
 }
 
-void relu_fw(chalf16 outbuf[OCFACT][256], short outbuf_relu[OCFACT][256],
-  int k, int num_iter) {
-  RELU_FW: for (int i = 0; i < num_iter; ++i) {
-  #pragma HLS pipeline
-    chalf16 val;
-    val.s0 = max(outbuf[k][i].s0);
-    val.s1 = max(outbuf[k][i].s1);
-    val.s2 = max(outbuf[k][i].s2);
-    val.s3 = max(outbuf[k][i].s3);
-    val.s4 = max(outbuf[k][i].s4);
-    val.s5 = max(outbuf[k][i].s5);
-    val.s6 = max(outbuf[k][i].s6);
-    val.s7 = max(outbuf[k][i].s7);
-    val.s8 = max(outbuf[k][i].s8);
-    val.s9 = max(outbuf[k][i].s9);
-    val.sa = max(outbuf[k][i].sa);
-    val.sb = max(outbuf[k][i].sb);
-    val.sc = max(outbuf[k][i].sc);
-    val.sd = max(outbuf[k][i].sd);
-    val.se = max(outbuf[k][i].se);
-    val.sf = max(outbuf[k][i].sf);
-
-    outbuf[k][i] = val;
-
-    outbuf_relu[k][i] |= (val.s0 != chalf(0)) ? 1 << 0 : 0;
-    outbuf_relu[k][i] |= (val.s1 != chalf(0)) ? 1 << 1 : 0;
-    outbuf_relu[k][i] |= (val.s2 != chalf(0)) ? 1 << 2 : 0;
-    outbuf_relu[k][i] |= (val.s3 != chalf(0)) ? 1 << 3 : 0;
-    outbuf_relu[k][i] |= (val.s4 != chalf(0)) ? 1 << 4 : 0;
-    outbuf_relu[k][i] |= (val.s5 != chalf(0)) ? 1 << 5 : 0;
-    outbuf_relu[k][i] |= (val.s6 != chalf(0)) ? 1 << 6 : 0;
-    outbuf_relu[k][i] |= (val.s7 != chalf(0)) ? 1 << 7 : 0;
-    outbuf_relu[k][i] |= (val.s8 != chalf(0)) ? 1 << 8 : 0;
-    outbuf_relu[k][i] |= (val.s9 != chalf(0)) ? 1 << 9 : 0;
-    outbuf_relu[k][i] |= (val.sa != chalf(0)) ? 1 << 10 : 0;
-    outbuf_relu[k][i] |= (val.sb != chalf(0)) ? 1 << 11 : 0;
-    outbuf_relu[k][i] |= (val.sc != chalf(0)) ? 1 << 12 : 0;
-    outbuf_relu[k][i] |= (val.sd != chalf(0)) ? 1 << 13 : 0;
-    outbuf_relu[k][i] |= (val.se != chalf(0)) ? 1 << 14 : 0;
-    outbuf_relu[k][i] |= (val.sf != chalf(0)) ? 1 << 15 : 0;
-  }
+chalf relu_fw(chalf input, bool relu_enable, short *relu_out) {
+  chalf res = max(input, relu_enable);
+  *relu_out = (res != chalf(0)) ? 1 : 0;
+  return res;
 }
 
 extern "C" {
@@ -310,6 +273,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             ++counter_bw) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable outbuf inter false
+#pragma HLS DEPENDENCE variable outbuf_relu inter false
 #pragma HLS DEPENDENCE variable finalOut inter false
 #pragma HLS DEPENDENCE variable wUpdate inter false
             if (!mode) {
@@ -475,24 +439,34 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               }
               
               bool acc_enable = (mode) ? (counter_bw == 3) : true;
-              
+              bool relu_en = (!mode) && relu && (n == rpo - 1) &&
+                  (xdim_off == xksize - 1) && (ydim_off == yksize - 1) &&
+                  (w_off == burst_fact - 1);
+              short rfw[16];
               if (acc_enable) {
-                outbuf[k][out_idx].s0 += finalOut[k][0];
-                outbuf[k][out_idx].s1 += finalOut[k][1];
-                outbuf[k][out_idx].s2 += finalOut[k][2];
-                outbuf[k][out_idx].s3 += finalOut[k][3];
-                outbuf[k][out_idx].s4 += finalOut[k][4];
-                outbuf[k][out_idx].s5 += finalOut[k][5];
-                outbuf[k][out_idx].s6 += finalOut[k][6];
-                outbuf[k][out_idx].s7 += finalOut[k][7];
-                outbuf[k][out_idx].s8 += finalOut[k][8];
-                outbuf[k][out_idx].s9 += finalOut[k][9];
-                outbuf[k][out_idx].sa += finalOut[k][10];
-                outbuf[k][out_idx].sb += finalOut[k][11];
-                outbuf[k][out_idx].sc += finalOut[k][12];
-                outbuf[k][out_idx].sd += finalOut[k][13];
-                outbuf[k][out_idx].se += finalOut[k][14];
-                outbuf[k][out_idx].sf += finalOut[k][15];
+                chalf16 out = outbuf[k][out_idx];
+                chalf16 res;
+                res.s0 = relu_fw(out.s0 + finalOut[k][0], relu_en, &rfw[0]);
+                res.s1 = relu_fw(out.s1 + finalOut[k][1], relu_en, &rfw[1]);
+                res.s2 = relu_fw(out.s2 + finalOut[k][2], relu_en, &rfw[2]);
+                res.s3 = relu_fw(out.s3 + finalOut[k][3], relu_en, &rfw[3]);
+                res.s4 = relu_fw(out.s4 + finalOut[k][4], relu_en, &rfw[4]);
+                res.s5 = relu_fw(out.s5 + finalOut[k][5], relu_en, &rfw[5]);
+                res.s6 = relu_fw(out.s6 + finalOut[k][6], relu_en, &rfw[6]);
+                res.s7 = relu_fw(out.s7 + finalOut[k][7], relu_en, &rfw[7]);
+                res.s8 = relu_fw(out.s8 + finalOut[k][8], relu_en, &rfw[8]);
+                res.s9 = relu_fw(out.s9 + finalOut[k][9], relu_en, &rfw[9]);
+                res.sa = relu_fw(out.sa + finalOut[k][10], relu_en, &rfw[10]);
+                res.sb = relu_fw(out.sb + finalOut[k][11], relu_en, &rfw[11]);
+                res.sc = relu_fw(out.sc + finalOut[k][12], relu_en, &rfw[12]);
+                res.sd = relu_fw(out.sd + finalOut[k][13], relu_en, &rfw[13]);
+                res.se = relu_fw(out.se + finalOut[k][14], relu_en, &rfw[14]);
+                res.sf = relu_fw(out.sf + finalOut[k][15], relu_en, &rfw[15]);
+                outbuf[k][out_idx] = res;
+                short relu_val = 0;
+                for (int j = 0; j < 16; ++j)
+                  relu_val |= ((rfw[j] & 0x1) << j);
+                outbuf_relu[k][out_idx] = relu_val;
               } 
             }
           }
@@ -516,7 +490,6 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 
             if (relu && (o * OCFACT + k < outchannels) && (!mode) &&
                 (n == rpo - 1)) {
-              relu_fw(outbuf, outbuf_relu, k, out_size);
               memcpy(track_relu + out_idx, outbuf_relu[k], sizeof(short) *
                   out_size);
             }
