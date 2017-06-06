@@ -30,7 +30,7 @@ chalf relu_fw(chalf input, bool relu_enable, short *relu_out) {
 extern "C" {
 
 void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
-    chalf16 *output, short *track_relu, int *params) { 
+    chalf16 *output, short *track_relu, int *params, int group_idx) { 
 // Ports 
 #pragma HLS data_pack variable=weights
 #pragma HLS data_pack variable=output
@@ -47,6 +47,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS INTERFACE s_axilite port=bias bundle=control
 #pragma HLS INTERFACE s_axilite port=track_relu bundle=control
 #pragma HLS INTERFACE s_axilite port=params bundle=control
+#pragma HLS INTERFACE s_axilite port=group_idx bundle=control
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
   // Input tile buffer
@@ -144,7 +145,8 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
     (inchannels >> 4) + 1;
   short wc_fact = (burstchannels % 16 == 0) ? (burstchannels >> 4) :
     (burstchannels >> 4) + 1;
-  memcpy(biasbuf, bias, sizeof(chalf) * outchannels);
+  int bias_offset = outchannels * group_idx;
+  memcpy(biasbuf, bias + bias_offset, sizeof(chalf) * outchannels);
   short out_div = outchannels / OCFACT;
   short ofm_iters = (outchannels % OCFACT == 0) ? out_div : out_div + 1;
   
@@ -161,8 +163,8 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
           for (int q = 0; q < ksize; ++q) {
             short in_y = y * stride - pad + p;
             short in_x = x * stride - pad + q;
-            int in_idx = ((in_y * xdim + in_x) * inchannels +
-                n * burstchannels) * img_fact;
+            int in_idx = (((in_y * xdim + in_x) * numgroups + group_idx) *
+                inchannels + n * burstchannels) * img_fact;
             int inbuf_idx = (p * ksize + q) * burst_fact * img_fact;
             short in_size = burst_fact * img_fact;
 
@@ -220,11 +222,11 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             for (int k = 0; k < OCFACT; ++k) {
               int out_idx, out_idx_f, out_idx_b;
               short out_size, out_size_f, out_size_b;
-              out_idx_b = (o * OCFACT + k) * ksize * ksize * ic_fact
-                + n * ksize * ksize * wc_fact;
+              out_idx_b = (o * OCFACT + k + outchannels * group_idx) * ksize *
+                ksize * ic_fact + n * ksize * ksize * wc_fact;
               out_size_b = ksize * ksize * wc_fact;
-              out_idx_f = ((y * xdim_out + x) * outchannels +
-                (o * OCFACT) + k) * img_fact;
+              out_idx_f = (((y * xdim_out + x) * numgroups + group_idx) *
+                outchannels + (o * OCFACT) + k) * img_fact;
               out_size_f = img_fact;
 
               if (mode) {
@@ -243,11 +245,11 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
           for (int k = 0; k < OCFACT; ++k) {
             int w_idx_f, w_idx_b, w_idx;
             short w_size_f, w_size_b, w_size;
-            w_idx_b = ((y * xdim_out + x) * outchannels +
-                (o * OCFACT + k)) * img_fact;
+            w_idx_b = (((y * xdim_out + x) * numgroups + group_idx) *
+                outchannels + (o * OCFACT + k)) * img_fact;
             w_size_b = img_fact;
-            w_idx_f = (o * OCFACT + k) * ksize * ksize * ic_fact
-                + n * ksize * ksize * wc_fact;
+            w_idx_f = (o * OCFACT + k + outchannels * group_idx) * ksize *
+              ksize * ic_fact + n * ksize * ksize * wc_fact;
             w_size_f = ksize * ksize * wc_fact;
 
             if (mode) {
@@ -473,11 +475,11 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
           for (int k = 0; k < OCFACT; ++k) {
             int out_idx, out_idx_f, out_idx_b;
             short out_size, out_size_f, out_size_b;
-            out_idx_b = (o * OCFACT + k) * ksize * ksize * ic_fact
-              + n * ksize * ksize * wc_fact;
+            out_idx_b = (o * OCFACT + k + outchannels * group_idx) * ksize *
+              ksize * ic_fact + n * ksize * ksize * wc_fact;
             out_size_b = ksize * ksize * wc_fact;
-            out_idx_f = ((y * xdim_out + x) * outchannels + (o * OCFACT) + k) *
-              img_fact;
+            out_idx_f = (((y * xdim_out + x) * numgroups + group_idx) *
+                outchannels + (o * OCFACT) + k) * img_fact;
             out_size_f = img_fact;
 
             if (mode) {

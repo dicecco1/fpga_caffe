@@ -129,7 +129,6 @@ class CRLayerHWCNHalfTest : public OCLDeviceTest<TypeParam> {
   {}
   virtual void SetUp() {
     params.resize(1);
-    batch_size.resize(1);
     params[0].numgroups = 1;
     params[0].inchannels = 16;
     params[0].outchannels = 1;
@@ -146,7 +145,6 @@ class CRLayerHWCNHalfTest : public OCLDeviceTest<TypeParam> {
     params[0].relu = 1;
     params[0].stride = 1;
     params[0].pad = 1;
-    batch_size[0] = 256;
   }
 
   virtual ~CRLayerHWCNHalfTest() {}
@@ -165,7 +163,6 @@ class CRLayerHWCNHalfTest : public OCLDeviceTest<TypeParam> {
   std::vector<Dtype> sw_results;
   std::vector<kernel_params> params;
   std::vector<short> relu_vals;
-  std::vector<int> batch_size;
   cl_mem ocl_input;
   cl_mem ocl_weights;
   cl_mem ocl_output;
@@ -191,8 +188,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
     int outsize = params[i].numimages * params[i].outchannels * params[i].ydim
       * params[i].xdim * params[i].numgroups;
     int bsize = params[i].outchannels * params[i].numgroups;
-    int events_size = this->batch_size[i] / params[i].numimages *
-      params[i].numgroups;
+    int events_size = params[i].numgroups;
     // Clear input vectors
     this->input.clear();
     this->input_pad_half.clear();
@@ -258,23 +254,23 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_params, CL_TRUE,
         0, sizeof(kernel_params), &params[i], 0, NULL, NULL);
 
-    for (int n = 0; n < this->batch_size[i] / params[i].numimages; ++n) {
-      for (int g = 0; g < params[i].numgroups; ++g) {
-        clSetKernelArg(this->ocl.oclKernel, 0, sizeof(cl_mem),
-            &this->ocl_input);
-        clSetKernelArg(this->ocl.oclKernel, 1, sizeof(cl_mem), 
-            &this->ocl_weights);
-        clSetKernelArg(this->ocl.oclKernel, 2, sizeof(cl_mem),
-            &this->ocl_bias);
-        clSetKernelArg(this->ocl.oclKernel, 3, sizeof(cl_mem),
-            &this->ocl_output);
-        clSetKernelArg(this->ocl.oclKernel, 4, sizeof(cl_mem),
-            &this->ocl_relu_vals);
-        clSetKernelArg(this->ocl.oclKernel, 5, sizeof(cl_mem), 
-            &this->ocl_params);
-        clEnqueueTask(this->ocl.oclCommandQueue, this->ocl.oclKernel, 0, NULL,
-            &(events[n * params[i].numgroups + g]));
-      }
+    for (int g = 0; g < params[i].numgroups; ++g) {
+      clSetKernelArg(this->ocl.oclKernel, 0, sizeof(cl_mem),
+          &this->ocl_input);
+      clSetKernelArg(this->ocl.oclKernel, 1, sizeof(cl_mem), 
+          &this->ocl_weights);
+      clSetKernelArg(this->ocl.oclKernel, 2, sizeof(cl_mem),
+          &this->ocl_bias);
+      clSetKernelArg(this->ocl.oclKernel, 3, sizeof(cl_mem),
+          &this->ocl_output);
+      clSetKernelArg(this->ocl.oclKernel, 4, sizeof(cl_mem),
+          &this->ocl_relu_vals);
+      clSetKernelArg(this->ocl.oclKernel, 5, sizeof(cl_mem), 
+          &this->ocl_params);
+      clSetKernelArg(this->ocl.oclKernel, 6, sizeof(cl_int), 
+          &g);
+      clEnqueueTask(this->ocl.oclCommandQueue, this->ocl.oclKernel, 0, NULL,
+          &(events[g]));
     }
 
     clWaitForEvents(events_size, events.data());
@@ -294,7 +290,8 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
     int size = params[i].numimages * params[i].outchannels *
       params[i].numgroups * params[i].ydim * params[i].xdim;
     for (int j = 0; j < size; ++j) {
-      std::cout<<this->sw_results[j]<<" "<<this->hw_results[j]<<std::endl;
+      std::cout<<this->sw_results[j]<<" "<<this->hw_results[j]<<" relu: "<<
+        ((this->relu_vals[j / 16] >> (j % 16)) & 0x1)<<std::endl;
       EXPECT_TRUE(checkEQ(this->sw_results[j],
             this->hw_results[j], 1e-1, 1e-1));
     }
@@ -323,8 +320,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1B_HALF) {
     int outsize = params[i].outchannels * params[i].numgroups *
       params[i].inchannels * ksize * ksize;
     int bsize = params[i].outchannels * params[i].numgroups;
-    int events_size = this->batch_size[i] / params[i].numimages *
-       params[i].numgroups;
+    int events_size = params[i].numgroups;
     // Clear input vectors
     this->input.clear();
     this->input_pad_half.clear();
@@ -390,23 +386,23 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1B_HALF) {
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_params, CL_TRUE,
         0, sizeof(kernel_params), &params[i], 0, NULL, NULL);
 
-    for (int n = 0; n < this->batch_size[i] / params[i].numimages; ++n) {
-      for (int g = 0; g < params[i].numgroups; ++g) {
-        clSetKernelArg(this->ocl.oclKernel, 0, sizeof(cl_mem),
-            &this->ocl_input);
-        clSetKernelArg(this->ocl.oclKernel, 1, sizeof(cl_mem), 
-            &this->ocl_weights);
-        clSetKernelArg(this->ocl.oclKernel, 2, sizeof(cl_mem),
-            &this->ocl_bias);
-        clSetKernelArg(this->ocl.oclKernel, 3, sizeof(cl_mem),
-            &this->ocl_output);
-        clSetKernelArg(this->ocl.oclKernel, 4, sizeof(cl_mem),
-            &this->ocl_relu_vals);
-        clSetKernelArg(this->ocl.oclKernel, 5, sizeof(cl_mem), 
-            &this->ocl_params);
-        clEnqueueTask(this->ocl.oclCommandQueue, this->ocl.oclKernel, 0, NULL,
-            &(events[n * params[i].numgroups + g]));
-      }
+    for (int g = 0; g < params[i].numgroups; ++g) {
+      clSetKernelArg(this->ocl.oclKernel, 0, sizeof(cl_mem),
+          &this->ocl_input);
+      clSetKernelArg(this->ocl.oclKernel, 1, sizeof(cl_mem), 
+          &this->ocl_weights);
+      clSetKernelArg(this->ocl.oclKernel, 2, sizeof(cl_mem),
+          &this->ocl_bias);
+      clSetKernelArg(this->ocl.oclKernel, 3, sizeof(cl_mem),
+          &this->ocl_output);
+      clSetKernelArg(this->ocl.oclKernel, 4, sizeof(cl_mem),
+          &this->ocl_relu_vals);
+      clSetKernelArg(this->ocl.oclKernel, 5, sizeof(cl_mem), 
+          &this->ocl_params);
+      clSetKernelArg(this->ocl.oclKernel, 6, sizeof(cl_int), 
+          &g);
+      clEnqueueTask(this->ocl.oclCommandQueue, this->ocl.oclKernel, 0, NULL,
+          &(events[g]));
     }
 
     clWaitForEvents(events_size, events.data());
