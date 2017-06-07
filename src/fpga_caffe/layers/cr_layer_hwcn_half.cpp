@@ -22,9 +22,9 @@ chalf relu_bw(chalf input, bool enable) {
   return res;
 }
 
-chalf relu_fw(chalf input, bool relu_enable, short *relu_out) {
+chalf relu_fw(chalf input, bool reluf, short *relu_out) {
 #pragma HLS INLINE off
-  chalf res = max(input, relu_enable);
+  chalf res = max(input, reluf);
   *relu_out = (res != chalf(0)) ? 1 : 0;
   return res;
 }
@@ -119,6 +119,10 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
   chalf wUpdate[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=wUpdate complete dim=1
 #pragma HLS ARRAY_PARTITION variable=wUpdate complete dim=2
+
+  chalf acc[OCFACT][16];
+#pragma HLS ARRAY_PARTITION variable=acc complete dim=1
+#pragma HLS ARRAY_PARTITION variable=acc complete dim=2
 
   short rfw[16];
 #pragma HLS ARRAY_PARTITION variable=rfw complete dim=1
@@ -333,6 +337,12 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             short out_idx_f = img_off;
             short out_idx_b = filt_off * wc_fact + (w_off >> 2);
             short out_idx = (mode) ? out_idx_b : out_idx_f;
+            bool acc_enable = (mode) ? (counter_bw == 3) : true;
+            bool reluf = (!mode) && relu && (n == rpo - 1) &&
+                (xdim_off == xksize - 1) && (ydim_off == yksize - 1) &&
+                (w_off == burst_fact - 1);
+            bool relub = (relu && ((backward == 1) ||
+                (backward == 2) || (backward == 3)));
 
             for (int k = 0; k < OCFACT; ++k) {
               weight_fw[0] = wbuf[o & 0x1][k][w_idx].s0;
@@ -359,27 +369,24 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                     weight_val[m][j] = weight_fw[counter_fw * 4 + m];
                 }
 
-                bool relu_on = (relu && ((backward == 1) ||
-                    (backward == 2) || (backward == 3)));
-
                 short relu_val = inbuf_relu[m][in_idx];
                 bool fw_mode = (backward == 0);
-                bool relu0 = (relu_on && ((relu_val >> 0) & 0x1)) || fw_mode;
-                bool relu1 = (relu_on && ((relu_val >> 1) & 0x1)) || fw_mode;
-                bool relu2 = (relu_on && ((relu_val >> 2) & 0x1)) || fw_mode;
-                bool relu3 = (relu_on && ((relu_val >> 3) & 0x1)) || fw_mode;
-                bool relu4 = (relu_on && ((relu_val >> 4) & 0x1)) || fw_mode;
-                bool relu5 = (relu_on && ((relu_val >> 5) & 0x1)) || fw_mode;
-                bool relu6 = (relu_on && ((relu_val >> 6) & 0x1)) || fw_mode;
-                bool relu7 = (relu_on && ((relu_val >> 7) & 0x1)) || fw_mode;
-                bool relu8 = (relu_on && ((relu_val >> 8) & 0x1)) || fw_mode;
-                bool relu9 = (relu_on && ((relu_val >> 9) & 0x1)) || fw_mode;
-                bool relua = (relu_on && ((relu_val >> 10) & 0x1)) || fw_mode;
-                bool relub = (relu_on && ((relu_val >> 11) & 0x1)) || fw_mode;
-                bool reluc = (relu_on && ((relu_val >> 12) & 0x1)) || fw_mode;
-                bool relud = (relu_on && ((relu_val >> 13) & 0x1)) || fw_mode;
-                bool relue = (relu_on && ((relu_val >> 14) & 0x1)) || fw_mode;
-                bool reluf = (relu_on && ((relu_val >> 15) & 0x1)) || fw_mode; 
+                bool relu0 = (relub && ((relu_val >> 0) & 0x1)) || fw_mode;
+                bool relu1 = (relub && ((relu_val >> 1) & 0x1)) || fw_mode;
+                bool relu2 = (relub && ((relu_val >> 2) & 0x1)) || fw_mode;
+                bool relu3 = (relub && ((relu_val >> 3) & 0x1)) || fw_mode;
+                bool relu4 = (relub && ((relu_val >> 4) & 0x1)) || fw_mode;
+                bool relu5 = (relub && ((relu_val >> 5) & 0x1)) || fw_mode;
+                bool relu6 = (relub && ((relu_val >> 6) & 0x1)) || fw_mode;
+                bool relu7 = (relub && ((relu_val >> 7) & 0x1)) || fw_mode;
+                bool relu8 = (relub && ((relu_val >> 8) & 0x1)) || fw_mode;
+                bool relu9 = (relub && ((relu_val >> 9) & 0x1)) || fw_mode;
+                bool relu10 = (relub && ((relu_val >> 10) & 0x1)) || fw_mode;
+                bool relu11 = (relub && ((relu_val >> 11) & 0x1)) || fw_mode;
+                bool relu12 = (relub && ((relu_val >> 12) & 0x1)) || fw_mode;
+                bool relu13 = (relub && ((relu_val >> 13) & 0x1)) || fw_mode;
+                bool relu14 = (relub && ((relu_val >> 14) & 0x1)) || fw_mode;
+                bool relu15 = (relub && ((relu_val >> 15) & 0x1)) || fw_mode; 
 
                 in_val[m][0] = relu_bw(inbuf[m][in_idx].s0, relu0);
                 in_val[m][1] = relu_bw(inbuf[m][in_idx].s1, relu1);
@@ -391,12 +398,12 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                 in_val[m][7] = relu_bw(inbuf[m][in_idx].s7, relu7);
                 in_val[m][8] = relu_bw(inbuf[m][in_idx].s8, relu8);
                 in_val[m][9] = relu_bw(inbuf[m][in_idx].s9, relu9);
-                in_val[m][10] = relu_bw(inbuf[m][in_idx].sa, relua);
-                in_val[m][11] = relu_bw(inbuf[m][in_idx].sb, relub);
-                in_val[m][12] = relu_bw(inbuf[m][in_idx].sc, reluc);
-                in_val[m][13] = relu_bw(inbuf[m][in_idx].sd, relud);
-                in_val[m][14] = relu_bw(inbuf[m][in_idx].se, relue);
-                in_val[m][15] = relu_bw(inbuf[m][in_idx].sf, reluf);
+                in_val[m][10] = relu_bw(inbuf[m][in_idx].sa, relu10);
+                in_val[m][11] = relu_bw(inbuf[m][in_idx].sb, relu11);
+                in_val[m][12] = relu_bw(inbuf[m][in_idx].sc, relu12);
+                in_val[m][13] = relu_bw(inbuf[m][in_idx].sd, relu13);
+                in_val[m][14] = relu_bw(inbuf[m][in_idx].se, relu14);
+                in_val[m][15] = relu_bw(inbuf[m][in_idx].sf, relu15);
 
                 for (int j = 0; j < 16; ++j) 
                   multres[k][m][j] = in_val[m][j] * weight_val[m][j];
@@ -450,34 +457,44 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                   finalOut[k][j] = addres_s2[k][j];
               }
               
-              bool acc_enable = (mode) ? (counter_bw == 3) : true;
-              bool relu_en = (!mode) && relu && (n == rpo - 1) &&
-                  (xdim_off == xksize - 1) && (ydim_off == yksize - 1) &&
-                  (w_off == burst_fact - 1);
               if (acc_enable) {
-                chalf16 out = outbuf[k][out_idx];
-                chalf16 res;
-                res.s0 = relu_fw(out.s0 + finalOut[k][0], relu_en, &rfw[0]);
-                res.s1 = relu_fw(out.s1 + finalOut[k][1], relu_en, &rfw[1]);
-                res.s2 = relu_fw(out.s2 + finalOut[k][2], relu_en, &rfw[2]);
-                res.s3 = relu_fw(out.s3 + finalOut[k][3], relu_en, &rfw[3]);
-                res.s4 = relu_fw(out.s4 + finalOut[k][4], relu_en, &rfw[4]);
-                res.s5 = relu_fw(out.s5 + finalOut[k][5], relu_en, &rfw[5]);
-                res.s6 = relu_fw(out.s6 + finalOut[k][6], relu_en, &rfw[6]);
-                res.s7 = relu_fw(out.s7 + finalOut[k][7], relu_en, &rfw[7]);
-                res.s8 = relu_fw(out.s8 + finalOut[k][8], relu_en, &rfw[8]);
-                res.s9 = relu_fw(out.s9 + finalOut[k][9], relu_en, &rfw[9]);
-                res.sa = relu_fw(out.sa + finalOut[k][10], relu_en, &rfw[10]);
-                res.sb = relu_fw(out.sb + finalOut[k][11], relu_en, &rfw[11]);
-                res.sc = relu_fw(out.sc + finalOut[k][12], relu_en, &rfw[12]);
-                res.sd = relu_fw(out.sd + finalOut[k][13], relu_en, &rfw[13]);
-                res.se = relu_fw(out.se + finalOut[k][14], relu_en, &rfw[14]);
-                res.sf = relu_fw(out.sf + finalOut[k][15], relu_en, &rfw[15]);
-                outbuf[k][out_idx] = res;
-                short relu_val = 0;
+                short relu_out = 0;
+                acc[k][0] = outbuf[k][out_idx].s0 + finalOut[k][0];
+                acc[k][1] = outbuf[k][out_idx].s1 + finalOut[k][1];
+                acc[k][2] = outbuf[k][out_idx].s2 + finalOut[k][2];
+                acc[k][3] = outbuf[k][out_idx].s3 + finalOut[k][3];
+                acc[k][4] = outbuf[k][out_idx].s4 + finalOut[k][4];
+                acc[k][5] = outbuf[k][out_idx].s5 + finalOut[k][5];
+                acc[k][6] = outbuf[k][out_idx].s6 + finalOut[k][6];
+                acc[k][7] = outbuf[k][out_idx].s7 + finalOut[k][7];
+                acc[k][8] = outbuf[k][out_idx].s8 + finalOut[k][8];
+                acc[k][9] = outbuf[k][out_idx].s9 + finalOut[k][9];
+                acc[k][10] = outbuf[k][out_idx].sa + finalOut[k][10];
+                acc[k][11] = outbuf[k][out_idx].sb + finalOut[k][11];
+                acc[k][12] = outbuf[k][out_idx].sc + finalOut[k][12];
+                acc[k][13] = outbuf[k][out_idx].sd + finalOut[k][13];
+                acc[k][14] = outbuf[k][out_idx].se + finalOut[k][14];
+                acc[k][15] = outbuf[k][out_idx].sf + finalOut[k][15];
+
+                outbuf[k][out_idx].s0 = relu_fw(acc[k][0], reluf, &rfw[0]);
+                outbuf[k][out_idx].s1 = relu_fw(acc[k][1], reluf, &rfw[1]);
+                outbuf[k][out_idx].s2 = relu_fw(acc[k][2], reluf, &rfw[2]);
+                outbuf[k][out_idx].s3 = relu_fw(acc[k][3], reluf, &rfw[3]);
+                outbuf[k][out_idx].s4 = relu_fw(acc[k][4], reluf, &rfw[4]);
+                outbuf[k][out_idx].s5 = relu_fw(acc[k][5], reluf, &rfw[5]);
+                outbuf[k][out_idx].s6 = relu_fw(acc[k][6], reluf, &rfw[6]);
+                outbuf[k][out_idx].s7 = relu_fw(acc[k][7], reluf, &rfw[7]);
+                outbuf[k][out_idx].s8 = relu_fw(acc[k][8], reluf, &rfw[8]);
+                outbuf[k][out_idx].s9 = relu_fw(acc[k][9], reluf, &rfw[9]);
+                outbuf[k][out_idx].sa = relu_fw(acc[k][10], reluf, &rfw[10]);
+                outbuf[k][out_idx].sb = relu_fw(acc[k][11], reluf, &rfw[11]);
+                outbuf[k][out_idx].sc = relu_fw(acc[k][12], reluf, &rfw[12]);
+                outbuf[k][out_idx].sd = relu_fw(acc[k][13], reluf, &rfw[13]);
+                outbuf[k][out_idx].se = relu_fw(acc[k][14], reluf, &rfw[14]);
+                outbuf[k][out_idx].sf = relu_fw(acc[k][15], reluf, &rfw[15]);
                 for (int j = 0; j < 16; ++j)
-                  relu_val |= ((rfw[j] & 0x1) << j);
-                outbuf_relu[k][out_idx] = relu_val;
+                  relu_out |= ((rfw[j] & 0x1) << j);
+                outbuf_relu[k][out_idx] = relu_out;
               } 
             }
           }
