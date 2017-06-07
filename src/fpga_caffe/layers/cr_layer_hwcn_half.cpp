@@ -17,11 +17,13 @@
  */ 
 
 chalf relu_bw(chalf input, bool enable) {
+#pragma HLS INLINE off
   chalf res = (enable) ? input : chalf(0);
   return res;
 }
 
 chalf relu_fw(chalf input, bool relu_enable, short *relu_out) {
+#pragma HLS INLINE off
   chalf res = max(input, relu_enable);
   *relu_out = (res != chalf(0)) ? 1 : 0;
   return res;
@@ -118,6 +120,9 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 #pragma HLS ARRAY_PARTITION variable=wUpdate complete dim=1
 #pragma HLS ARRAY_PARTITION variable=wUpdate complete dim=2
 
+  short rfw[16];
+#pragma HLS ARRAY_PARTITION variable=rfw complete dim=1
+
   short inchannels = params[0];
   short outchannels = params[1];
   short burstchannels = params[2];
@@ -195,8 +200,9 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 #pragma HLS dependence variable=inbuf_relu inter false
                   for (int j = 0; j < 4; ++j) {
                     inbuf[j][i + inbuf_idx] = inbuf[j][i + inbuf_idx + q_off];
-                    inbuf_relu[j][i + inbuf_idx] =
-                      inbuf_relu[j][i + inbuf_idx + q_off];
+                    if (backward != 0)
+                      inbuf_relu[j][i + inbuf_idx] =
+                        inbuf_relu[j][i + inbuf_idx + q_off];
                   }
                 }
               } else {
@@ -204,8 +210,9 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                   int f_in_idx = in_idx + j * burst_fact * img_fact;
                   memcpy(inbuf[j] + inbuf_idx, input + f_in_idx,
                       sizeof(chalf16) * in_size);
-                  memcpy(inbuf_relu[j] + inbuf_idx, track_relu + f_in_idx,
-                      sizeof(short) * in_size);
+                  if (backward != 0)
+                    memcpy(inbuf_relu[j] + inbuf_idx, track_relu + f_in_idx,
+                        sizeof(short) * in_size);
                 }
               }
             }
@@ -447,7 +454,6 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               bool relu_en = (!mode) && relu && (n == rpo - 1) &&
                   (xdim_off == xksize - 1) && (ydim_off == yksize - 1) &&
                   (w_off == burst_fact - 1);
-              short rfw[16];
               if (acc_enable) {
                 chalf16 out = outbuf[k][out_idx];
                 chalf16 res;
@@ -492,10 +498,11 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               w_idx = w_idx_f;
               w_size = w_size_f;
             }
-            if (o * OCFACT + k < outchannels && (o + 1 < ofm_iters))
+            if ((o + 1) * OCFACT + k < outchannels && (o + 1 < ofm_iters))
               memcpy(wbuf[((o + 1) & 0x1)][k], weights + w_idx,
                 sizeof(chalf16) * w_size);
-
+          }
+          for (int k = 0; k < OCFACT; ++k) {
             int out_idx, out_idx_f, out_idx_b;
             short out_size, out_size_f, out_size_b;
             out_idx_b = (o * OCFACT + k + outchannels * group_idx) * ksize *
