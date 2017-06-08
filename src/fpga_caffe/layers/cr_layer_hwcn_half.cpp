@@ -45,7 +45,7 @@ void relu_fw(chalf16 outbuf[OCFACT][256], short outbuf_relu[OCFACT][256],
     val.sf = max(outbuf[k][i].sf);
 
     outbuf[k][i] = val;
-
+    outbuf_relu[k][i] = 0;
     outbuf_relu[k][i] |= (val.s0 != chalf(0)) ? 1 << 0 : 0;
     outbuf_relu[k][i] |= (val.s1 != chalf(0)) ? 1 << 1 : 0;
     outbuf_relu[k][i] |= (val.s2 != chalf(0)) ? 1 << 2 : 0;
