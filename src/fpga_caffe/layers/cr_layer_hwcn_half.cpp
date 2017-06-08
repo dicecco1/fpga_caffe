@@ -21,46 +21,48 @@ chalf relu_bw(chalf input, bool enable) {
   chalf res = (enable) ? input : chalf(0);
   return res;
 }
-void relu_fw(chalf16 outbuf[256], short outbuf_relu[256], chalf acc[16],
-  int out_idx, bool reluf) {
-#pragma HLS inline
-  chalf16 val;
-  val.s0 = max(acc[0], reluf);
-  val.s1 = max(acc[1], reluf);
-  val.s2 = max(acc[2], reluf);
-  val.s3 = max(acc[3], reluf);
-  val.s4 = max(acc[4], reluf);
-  val.s5 = max(acc[5], reluf);
-  val.s6 = max(acc[6], reluf);
-  val.s7 = max(acc[7], reluf);
-  val.s8 = max(acc[8], reluf);
-  val.s9 = max(acc[9], reluf);
-  val.sa = max(acc[10], reluf);
-  val.sb = max(acc[11], reluf);
-  val.sc = max(acc[12], reluf);
-  val.sd = max(acc[13], reluf);
-  val.se = max(acc[14], reluf);
-  val.sf = max(acc[15], reluf);
 
-  outbuf[out_idx] = val;
+void relu_fw(chalf16 outbuf[OCFACT][256], short outbuf_relu[OCFACT][256],
+  int k, int num_iter) {
+  RELU_FW: for (int i = 0; i < num_iter; ++i) {
+  #pragma HLS pipeline
+    chalf16 val;
+    val.s0 = max(outbuf[k][i].s0);
+    val.s1 = max(outbuf[k][i].s1);
+    val.s2 = max(outbuf[k][i].s2);
+    val.s3 = max(outbuf[k][i].s3);
+    val.s4 = max(outbuf[k][i].s4);
+    val.s5 = max(outbuf[k][i].s5);
+    val.s6 = max(outbuf[k][i].s6);
+    val.s7 = max(outbuf[k][i].s7);
+    val.s8 = max(outbuf[k][i].s8);
+    val.s9 = max(outbuf[k][i].s9);
+    val.sa = max(outbuf[k][i].sa);
+    val.sb = max(outbuf[k][i].sb);
+    val.sc = max(outbuf[k][i].sc);
+    val.sd = max(outbuf[k][i].sd);
+    val.se = max(outbuf[k][i].se);
+    val.sf = max(outbuf[k][i].sf);
 
-  outbuf_relu[out_idx] = 0;
-  outbuf_relu[out_idx] |= (val.s0 != chalf(0)) ? 1 << 0 : 0;
-  outbuf_relu[out_idx] |= (val.s1 != chalf(0)) ? 1 << 1 : 0;
-  outbuf_relu[out_idx] |= (val.s2 != chalf(0)) ? 1 << 2 : 0;
-  outbuf_relu[out_idx] |= (val.s3 != chalf(0)) ? 1 << 3 : 0;
-  outbuf_relu[out_idx] |= (val.s4 != chalf(0)) ? 1 << 4 : 0;
-  outbuf_relu[out_idx] |= (val.s5 != chalf(0)) ? 1 << 5 : 0;
-  outbuf_relu[out_idx] |= (val.s6 != chalf(0)) ? 1 << 6 : 0;
-  outbuf_relu[out_idx] |= (val.s7 != chalf(0)) ? 1 << 7 : 0;
-  outbuf_relu[out_idx] |= (val.s8 != chalf(0)) ? 1 << 8 : 0;
-  outbuf_relu[out_idx] |= (val.s9 != chalf(0)) ? 1 << 9 : 0;
-  outbuf_relu[out_idx] |= (val.sa != chalf(0)) ? 1 << 10 : 0;
-  outbuf_relu[out_idx] |= (val.sb != chalf(0)) ? 1 << 11 : 0;
-  outbuf_relu[out_idx] |= (val.sc != chalf(0)) ? 1 << 12 : 0;
-  outbuf_relu[out_idx] |= (val.sd != chalf(0)) ? 1 << 13 : 0;
-  outbuf_relu[out_idx] |= (val.se != chalf(0)) ? 1 << 14 : 0;
-  outbuf_relu[out_idx] |= (val.sf != chalf(0)) ? 1 << 15 : 0;
+    outbuf[k][i] = val;
+
+    outbuf_relu[k][i] |= (val.s0 != chalf(0)) ? 1 << 0 : 0;
+    outbuf_relu[k][i] |= (val.s1 != chalf(0)) ? 1 << 1 : 0;
+    outbuf_relu[k][i] |= (val.s2 != chalf(0)) ? 1 << 2 : 0;
+    outbuf_relu[k][i] |= (val.s3 != chalf(0)) ? 1 << 3 : 0;
+    outbuf_relu[k][i] |= (val.s4 != chalf(0)) ? 1 << 4 : 0;
+    outbuf_relu[k][i] |= (val.s5 != chalf(0)) ? 1 << 5 : 0;
+    outbuf_relu[k][i] |= (val.s6 != chalf(0)) ? 1 << 6 : 0;
+    outbuf_relu[k][i] |= (val.s7 != chalf(0)) ? 1 << 7 : 0;
+    outbuf_relu[k][i] |= (val.s8 != chalf(0)) ? 1 << 8 : 0;
+    outbuf_relu[k][i] |= (val.s9 != chalf(0)) ? 1 << 9 : 0;
+    outbuf_relu[k][i] |= (val.sa != chalf(0)) ? 1 << 10 : 0;
+    outbuf_relu[k][i] |= (val.sb != chalf(0)) ? 1 << 11 : 0;
+    outbuf_relu[k][i] |= (val.sc != chalf(0)) ? 1 << 12 : 0;
+    outbuf_relu[k][i] |= (val.sd != chalf(0)) ? 1 << 13 : 0;
+    outbuf_relu[k][i] |= (val.se != chalf(0)) ? 1 << 14 : 0;
+    outbuf_relu[k][i] |= (val.sf != chalf(0)) ? 1 << 15 : 0;
+  }
 }
 
 extern "C" {
@@ -372,10 +374,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             short out_idx_b = filt_off * wc_fact + (w_off >> 2);
             short out_idx = (mode) ? out_idx_b : out_idx_f;
             bool acc_enable = (mode) ? (counter_bw == 3) : true;
-            bool reluf = (!mode) && relu && (n == rpo - 1) &&
-                (xdim_off == xksize - 1) && (ydim_off == yksize - 1) &&
-                (w_off == burst_fact - 1);
-            bool relub = (relu && ((backward == 1) ||
+            bool relu_on = (relu && ((backward == 1) ||
                 (backward == 2) || (backward == 3)));
 
             for (int k = 0; k < OCFACT; ++k) {
@@ -405,22 +404,22 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 
                 short relu_val = inbuf_relu[m][in_idx];
                 bool fw_mode = (backward == 0);
-                bool relu0 = (relub && ((relu_val >> 0) & 0x1)) || fw_mode;
-                bool relu1 = (relub && ((relu_val >> 1) & 0x1)) || fw_mode;
-                bool relu2 = (relub && ((relu_val >> 2) & 0x1)) || fw_mode;
-                bool relu3 = (relub && ((relu_val >> 3) & 0x1)) || fw_mode;
-                bool relu4 = (relub && ((relu_val >> 4) & 0x1)) || fw_mode;
-                bool relu5 = (relub && ((relu_val >> 5) & 0x1)) || fw_mode;
-                bool relu6 = (relub && ((relu_val >> 6) & 0x1)) || fw_mode;
-                bool relu7 = (relub && ((relu_val >> 7) & 0x1)) || fw_mode;
-                bool relu8 = (relub && ((relu_val >> 8) & 0x1)) || fw_mode;
-                bool relu9 = (relub && ((relu_val >> 9) & 0x1)) || fw_mode;
-                bool relu10 = (relub && ((relu_val >> 10) & 0x1)) || fw_mode;
-                bool relu11 = (relub && ((relu_val >> 11) & 0x1)) || fw_mode;
-                bool relu12 = (relub && ((relu_val >> 12) & 0x1)) || fw_mode;
-                bool relu13 = (relub && ((relu_val >> 13) & 0x1)) || fw_mode;
-                bool relu14 = (relub && ((relu_val >> 14) & 0x1)) || fw_mode;
-                bool relu15 = (relub && ((relu_val >> 15) & 0x1)) || fw_mode; 
+                bool relu0 = (relu_on && ((relu_val >> 0) & 0x1)) || fw_mode;
+                bool relu1 = (relu_on && ((relu_val >> 1) & 0x1)) || fw_mode;
+                bool relu2 = (relu_on && ((relu_val >> 2) & 0x1)) || fw_mode;
+                bool relu3 = (relu_on && ((relu_val >> 3) & 0x1)) || fw_mode;
+                bool relu4 = (relu_on && ((relu_val >> 4) & 0x1)) || fw_mode;
+                bool relu5 = (relu_on && ((relu_val >> 5) & 0x1)) || fw_mode;
+                bool relu6 = (relu_on && ((relu_val >> 6) & 0x1)) || fw_mode;
+                bool relu7 = (relu_on && ((relu_val >> 7) & 0x1)) || fw_mode;
+                bool relu8 = (relu_on && ((relu_val >> 8) & 0x1)) || fw_mode;
+                bool relu9 = (relu_on && ((relu_val >> 9) & 0x1)) || fw_mode;
+                bool relua = (relu_on && ((relu_val >> 10) & 0x1)) || fw_mode;
+                bool relub = (relu_on && ((relu_val >> 11) & 0x1)) || fw_mode;
+                bool reluc = (relu_on && ((relu_val >> 12) & 0x1)) || fw_mode;
+                bool relud = (relu_on && ((relu_val >> 13) & 0x1)) || fw_mode;
+                bool relue = (relu_on && ((relu_val >> 14) & 0x1)) || fw_mode;
+                bool reluf = (relu_on && ((relu_val >> 15) & 0x1)) || fw_mode; 
 
                 in_val[m][0] = relu_bw(inbuf[m][in_idx].s0, relu0);
                 in_val[m][1] = relu_bw(inbuf[m][in_idx].s1, relu1);
@@ -432,12 +431,12 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                 in_val[m][7] = relu_bw(inbuf[m][in_idx].s7, relu7);
                 in_val[m][8] = relu_bw(inbuf[m][in_idx].s8, relu8);
                 in_val[m][9] = relu_bw(inbuf[m][in_idx].s9, relu9);
-                in_val[m][10] = relu_bw(inbuf[m][in_idx].sa, relu10);
-                in_val[m][11] = relu_bw(inbuf[m][in_idx].sb, relu11);
-                in_val[m][12] = relu_bw(inbuf[m][in_idx].sc, relu12);
-                in_val[m][13] = relu_bw(inbuf[m][in_idx].sd, relu13);
-                in_val[m][14] = relu_bw(inbuf[m][in_idx].se, relu14);
-                in_val[m][15] = relu_bw(inbuf[m][in_idx].sf, relu15);
+                in_val[m][10] = relu_bw(inbuf[m][in_idx].sa, relua);
+                in_val[m][11] = relu_bw(inbuf[m][in_idx].sb, relub);
+                in_val[m][12] = relu_bw(inbuf[m][in_idx].sc, reluc);
+                in_val[m][13] = relu_bw(inbuf[m][in_idx].sd, relud);
+                in_val[m][14] = relu_bw(inbuf[m][in_idx].se, relue);
+                in_val[m][15] = relu_bw(inbuf[m][in_idx].sf, reluf);
 
                 for (int j = 0; j < 16; ++j) 
                   multres[k][m][j] = in_val[m][j] * weight_val[m][j];
@@ -490,27 +489,24 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                 else
                   finalOut[k][j] = addres_s2[k][j];
               }
-              
               if (acc_enable) {
-                short relu_out = 0;
-                acc[k][0] = outbuf[k][out_idx].s0 + finalOut[k][0];
-                acc[k][1] = outbuf[k][out_idx].s1 + finalOut[k][1];
-                acc[k][2] = outbuf[k][out_idx].s2 + finalOut[k][2];
-                acc[k][3] = outbuf[k][out_idx].s3 + finalOut[k][3];
-                acc[k][4] = outbuf[k][out_idx].s4 + finalOut[k][4];
-                acc[k][5] = outbuf[k][out_idx].s5 + finalOut[k][5];
-                acc[k][6] = outbuf[k][out_idx].s6 + finalOut[k][6];
-                acc[k][7] = outbuf[k][out_idx].s7 + finalOut[k][7];
-                acc[k][8] = outbuf[k][out_idx].s8 + finalOut[k][8];
-                acc[k][9] = outbuf[k][out_idx].s9 + finalOut[k][9];
-                acc[k][10] = outbuf[k][out_idx].sa + finalOut[k][10];
-                acc[k][11] = outbuf[k][out_idx].sb + finalOut[k][11];
-                acc[k][12] = outbuf[k][out_idx].sc + finalOut[k][12];
-                acc[k][13] = outbuf[k][out_idx].sd + finalOut[k][13];
-                acc[k][14] = outbuf[k][out_idx].se + finalOut[k][14];
-                acc[k][15] = outbuf[k][out_idx].sf + finalOut[k][15];
-                relu_fw(outbuf[k], outbuf_relu[k], acc[k], out_idx, reluf);
-              } 
+                outbuf[k][out_idx].s0 += finalOut[k][0];
+                outbuf[k][out_idx].s1 += finalOut[k][1];
+                outbuf[k][out_idx].s2 += finalOut[k][2];
+                outbuf[k][out_idx].s3 += finalOut[k][3];
+                outbuf[k][out_idx].s4 += finalOut[k][4];
+                outbuf[k][out_idx].s5 += finalOut[k][5];
+                outbuf[k][out_idx].s6 += finalOut[k][6];
+                outbuf[k][out_idx].s7 += finalOut[k][7];
+                outbuf[k][out_idx].s8 += finalOut[k][8];
+                outbuf[k][out_idx].s9 += finalOut[k][9];
+                outbuf[k][out_idx].sa += finalOut[k][10];
+                outbuf[k][out_idx].sb += finalOut[k][11];
+                outbuf[k][out_idx].sc += finalOut[k][12];
+                outbuf[k][out_idx].sd += finalOut[k][13];
+                outbuf[k][out_idx].se += finalOut[k][14];
+                outbuf[k][out_idx].sf += finalOut[k][15];
+              }               
             }
           }
           for (int k = 0; k < OCFACT; ++k) {
@@ -554,6 +550,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 
             if (relu && (o * OCFACT + k < outchannels) && (!mode) &&
                 (n == rpo - 1)) {
+              relu_fw(outbuf, outbuf_relu, k, out_size);
               memcpy(track_relu + out_idx, outbuf_relu[k], sizeof(short) *
                   out_size);
             }
