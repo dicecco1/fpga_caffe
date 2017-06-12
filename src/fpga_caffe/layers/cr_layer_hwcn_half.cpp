@@ -16,6 +16,22 @@
  * output:        output of the convolution
  */ 
 
+int mode_select_idx(int idx_fw, int idx_bw, bool mode) {
+#pragma HLS INLINE
+  if (mode)
+    return idx_bw;
+  else
+    return idx_fw;
+}
+
+short mode_select_size(short size_fw, short size_bw, bool mode) {
+#pragma HLS INLINE
+  if (mode)
+    return size_bw;
+  else
+    return size_fw;
+}
+
 chalf relu_bw(chalf input, bool enable) {
 #pragma HLS INLINE off
   chalf res = (enable) ? input : chalf(0);
@@ -25,24 +41,7 @@ chalf relu_bw(chalf input, bool enable) {
 void relu_fw(chalf16 outbuf[256], short outbuf_relu[256], int num_iter) {
   RELU_FW: for (int i = 0; i < num_iter; ++i) {
   #pragma HLS pipeline
-    chalf16 val;
-    val.s0 = max(outbuf[i].s0);
-    val.s1 = max(outbuf[i].s1);
-    val.s2 = max(outbuf[i].s2);
-    val.s3 = max(outbuf[i].s3);
-    val.s4 = max(outbuf[i].s4);
-    val.s5 = max(outbuf[i].s5);
-    val.s6 = max(outbuf[i].s6);
-    val.s7 = max(outbuf[i].s7);
-    val.s8 = max(outbuf[i].s8);
-    val.s9 = max(outbuf[i].s9);
-    val.sa = max(outbuf[i].sa);
-    val.sb = max(outbuf[i].sb);
-    val.sc = max(outbuf[i].sc);
-    val.sd = max(outbuf[i].sd);
-    val.se = max(outbuf[i].se);
-    val.sf = max(outbuf[i].sf);
-
+    chalf16 val = max(outbuf[i]);
     outbuf[i] = val;
     short relu_out = 0;
     relu_out |= (val.s0 != chalf(0)) ? 1 << 0 : 0;
@@ -163,6 +162,10 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
   short rfw[16];
 #pragma HLS ARRAY_PARTITION variable=rfw complete dim=1
 
+  bool relu_en[OCFACT][16];
+#pragma HLS ARRAY_PARTITION variable=relu_en complete dim=1
+#pragma HLS ARRAY_PARTITION variable=relu_en complete dim=2
+
   short inchannels = params[0];
   short outchannels = params[1];
   short burstchannels = params[2];
@@ -217,7 +220,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             if (in_y >= 0 && in_y < ydim) {
               if (q == 0)
                 yksize++;
-              if (yk_off == 0 && !ykset) {
+              if (!ykset) {
                 yk_off = p;
                 ykset = true;
               }
@@ -225,7 +228,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             if (in_x >= 0 && in_x < xdim) {
               if (p == 0)
                 xksize++;
-              if (xk_off == 0 && !xkset) {
+              if (!xkset) {
                 xk_off = q;
                 xkset = true;
               }
@@ -270,13 +273,9 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             ksize * ic_fact + n * ksize * ksize * wc_fact;
           w_size_f = ksize * ksize * wc_fact;
 
-          if (mode) {
-            w_idx = w_idx_b;
-            w_size = w_size_b;
-          } else {
-            w_idx = w_idx_f;
-            w_size = w_size_f;
-          }
+          w_idx = mode_select_idx(w_idx_f, w_idx_b, mode);
+          w_size = mode_select_size(w_size_f, w_size_b, mode);
+
           if (o * OCFACT + k < outchannels)
             memcpy(wbuf[0][k], weights + w_idx, sizeof(chalf16) * w_size);
         }
@@ -300,13 +299,9 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                 outchannels + (o * OCFACT) + k) * img_fact;
               out_size_f = img_fact;
 
-              if (mode) {
-                out_idx = out_idx_b;
-                out_size = out_size_b;
-              } else {
-                out_idx = out_idx_f;
-                out_size = out_size_f;
-              }
+              out_idx = mode_select_idx(out_idx_f, out_idx_b, mode);
+              out_size = mode_select_size(out_size_f, out_size_b, mode);
+
               if (o * OCFACT + k < outchannels)
                 memcpy(outbuf[k], output + out_idx, sizeof(chalf16) *
                     out_size);
@@ -404,39 +399,27 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 
                 short relu_val = inbuf_relu[m][in_idx];
                 bool fw_mode = (backward == 0);
-                bool relu0 = (relu_on && ((relu_val >> 0) & 0x1)) || fw_mode;
-                bool relu1 = (relu_on && ((relu_val >> 1) & 0x1)) || fw_mode;
-                bool relu2 = (relu_on && ((relu_val >> 2) & 0x1)) || fw_mode;
-                bool relu3 = (relu_on && ((relu_val >> 3) & 0x1)) || fw_mode;
-                bool relu4 = (relu_on && ((relu_val >> 4) & 0x1)) || fw_mode;
-                bool relu5 = (relu_on && ((relu_val >> 5) & 0x1)) || fw_mode;
-                bool relu6 = (relu_on && ((relu_val >> 6) & 0x1)) || fw_mode;
-                bool relu7 = (relu_on && ((relu_val >> 7) & 0x1)) || fw_mode;
-                bool relu8 = (relu_on && ((relu_val >> 8) & 0x1)) || fw_mode;
-                bool relu9 = (relu_on && ((relu_val >> 9) & 0x1)) || fw_mode;
-                bool relua = (relu_on && ((relu_val >> 10) & 0x1)) || fw_mode;
-                bool relub = (relu_on && ((relu_val >> 11) & 0x1)) || fw_mode;
-                bool reluc = (relu_on && ((relu_val >> 12) & 0x1)) || fw_mode;
-                bool relud = (relu_on && ((relu_val >> 13) & 0x1)) || fw_mode;
-                bool relue = (relu_on && ((relu_val >> 14) & 0x1)) || fw_mode;
-                bool reluf = (relu_on && ((relu_val >> 15) & 0x1)) || fw_mode; 
 
-                in_val[m][0] = relu_bw(inbuf[m][in_idx].s0, relu0);
-                in_val[m][1] = relu_bw(inbuf[m][in_idx].s1, relu1);
-                in_val[m][2] = relu_bw(inbuf[m][in_idx].s2, relu2);
-                in_val[m][3] = relu_bw(inbuf[m][in_idx].s3, relu3);
-                in_val[m][4] = relu_bw(inbuf[m][in_idx].s4, relu4);
-                in_val[m][5] = relu_bw(inbuf[m][in_idx].s5, relu5);
-                in_val[m][6] = relu_bw(inbuf[m][in_idx].s6, relu6);
-                in_val[m][7] = relu_bw(inbuf[m][in_idx].s7, relu7);
-                in_val[m][8] = relu_bw(inbuf[m][in_idx].s8, relu8);
-                in_val[m][9] = relu_bw(inbuf[m][in_idx].s9, relu9);
-                in_val[m][10] = relu_bw(inbuf[m][in_idx].sa, relua);
-                in_val[m][11] = relu_bw(inbuf[m][in_idx].sb, relub);
-                in_val[m][12] = relu_bw(inbuf[m][in_idx].sc, reluc);
-                in_val[m][13] = relu_bw(inbuf[m][in_idx].sd, relud);
-                in_val[m][14] = relu_bw(inbuf[m][in_idx].se, relue);
-                in_val[m][15] = relu_bw(inbuf[m][in_idx].sf, reluf);
+                for (int j = 0; j < 16; ++j)
+                  relu_en[k][j] = (relu_on && ((relu_val >> j) & 0x1)) ||
+                    fw_mode;
+
+                in_val[m][0] = relu_bw(inbuf[m][in_idx].s0, relu_en[k][0]);
+                in_val[m][1] = relu_bw(inbuf[m][in_idx].s1, relu_en[k][1]);
+                in_val[m][2] = relu_bw(inbuf[m][in_idx].s2, relu_en[k][2]);
+                in_val[m][3] = relu_bw(inbuf[m][in_idx].s3, relu_en[k][3]);
+                in_val[m][4] = relu_bw(inbuf[m][in_idx].s4, relu_en[k][4]);
+                in_val[m][5] = relu_bw(inbuf[m][in_idx].s5, relu_en[k][5]);
+                in_val[m][6] = relu_bw(inbuf[m][in_idx].s6, relu_en[k][6]);
+                in_val[m][7] = relu_bw(inbuf[m][in_idx].s7, relu_en[k][7]);
+                in_val[m][8] = relu_bw(inbuf[m][in_idx].s8, relu_en[k][8]);
+                in_val[m][9] = relu_bw(inbuf[m][in_idx].s9, relu_en[k][9]);
+                in_val[m][10] = relu_bw(inbuf[m][in_idx].sa, relu_en[k][10]);
+                in_val[m][11] = relu_bw(inbuf[m][in_idx].sb, relu_en[k][11]);
+                in_val[m][12] = relu_bw(inbuf[m][in_idx].sc, relu_en[k][12]);
+                in_val[m][13] = relu_bw(inbuf[m][in_idx].sd, relu_en[k][13]);
+                in_val[m][14] = relu_bw(inbuf[m][in_idx].se, relu_en[k][14]);
+                in_val[m][15] = relu_bw(inbuf[m][in_idx].sf, relu_en[k][15]);
 
                 for (int j = 0; j < 16; ++j) 
                   multres[k][m][j] = in_val[m][j] * weight_val[m][j];
@@ -490,22 +473,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                   finalOut[k][j] = addres_s2[k][j];
               }
               if (acc_enable) {
-                outbuf[k][out_idx].s0 += finalOut[k][0];
-                outbuf[k][out_idx].s1 += finalOut[k][1];
-                outbuf[k][out_idx].s2 += finalOut[k][2];
-                outbuf[k][out_idx].s3 += finalOut[k][3];
-                outbuf[k][out_idx].s4 += finalOut[k][4];
-                outbuf[k][out_idx].s5 += finalOut[k][5];
-                outbuf[k][out_idx].s6 += finalOut[k][6];
-                outbuf[k][out_idx].s7 += finalOut[k][7];
-                outbuf[k][out_idx].s8 += finalOut[k][8];
-                outbuf[k][out_idx].s9 += finalOut[k][9];
-                outbuf[k][out_idx].sa += finalOut[k][10];
-                outbuf[k][out_idx].sb += finalOut[k][11];
-                outbuf[k][out_idx].sc += finalOut[k][12];
-                outbuf[k][out_idx].sd += finalOut[k][13];
-                outbuf[k][out_idx].se += finalOut[k][14];
-                outbuf[k][out_idx].sf += finalOut[k][15];
+                outbuf[k][out_idx] += finalOut[k];
               }               
             }
           }
@@ -528,17 +496,14 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               * ksize * ic_fact + n * ksize * ksize * wc_fact;
             w_size_f = ksize * ksize * wc_fact;
 
-            if (mode) {
-              w_idx = w_idx_b;
-              w_size = w_size_b;
-            } else {
-              w_idx = w_idx_f;
-              w_size = w_size_f;
-            }
+            w_idx = mode_select_idx(w_idx_f, w_idx_b, mode);
+            w_size = mode_select_size(w_size_f, w_size_b, mode);
+
             if ((o + 1) * OCFACT + k < outchannels && (o + 1 < ofm_iters))
               memcpy(wbuf[((o + 1) & 0x1)][k], weights + w_idx,
                 sizeof(chalf16) * w_size);
           }
+
           for (int k = 0; k < OCFACT; ++k) {
             int out_idx, out_idx_f, out_idx_b;
             short out_size, out_size_f, out_size_b;
@@ -549,13 +514,8 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                 outchannels + (o * OCFACT) + k) * img_fact;
             out_size_f = img_fact;
 
-            if (mode) {
-              out_idx = out_idx_b;
-              out_size = out_size_b;
-            } else {
-              out_idx = out_idx_f;
-              out_size = out_size_f;
-            }
+            out_idx = mode_select_idx(out_idx_f, out_idx_b, mode);
+            out_size = mode_select_size(out_size_f, out_size_b, mode);
 
             if (relu && (o * OCFACT + k < outchannels) && (!mode) &&
                 (n == rpo - 1)) {

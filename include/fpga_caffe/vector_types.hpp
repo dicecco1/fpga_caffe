@@ -59,5 +59,49 @@ struct chalf16{
     sf = rhs;
     return *this;
   }
+
+  chalf16& operator+=(const chalf rhs[16]) { 
+#pragma HLS INLINE
+    s0 += rhs[0];
+    s1 += rhs[1];
+    s2 += rhs[2];
+    s3 += rhs[3];
+    s4 += rhs[4];
+    s5 += rhs[5];
+    s6 += rhs[6];
+    s7 += rhs[7];
+    s8 += rhs[8];
+    s9 += rhs[9];
+    sa += rhs[10];
+    sb += rhs[11];
+    sc += rhs[12];
+    sd += rhs[13];
+    se += rhs[14];
+    sf += rhs[15];
+    return *this;
+  }
 };
+
+chalf16 max(const chalf16 rhs) {
+#pragma HLS INLINE
+  chalf16 val;
+  val.s0 = max(rhs.s0);
+  val.s1 = max(rhs.s1);
+  val.s2 = max(rhs.s2);
+  val.s3 = max(rhs.s3);
+  val.s4 = max(rhs.s4);
+  val.s5 = max(rhs.s5);
+  val.s6 = max(rhs.s6);
+  val.s7 = max(rhs.s7);
+  val.s8 = max(rhs.s8);
+  val.s9 = max(rhs.s9);
+  val.sa = max(rhs.sa);
+  val.sb = max(rhs.sb);
+  val.sc = max(rhs.sc);
+  val.sd = max(rhs.sd);
+  val.se = max(rhs.se);
+  val.sf = max(rhs.sf);
+  return val;
+}
+
 #endif // HVECTOR_TYPES_HPP
