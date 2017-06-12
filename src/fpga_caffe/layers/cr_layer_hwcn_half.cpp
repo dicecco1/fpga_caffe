@@ -38,29 +38,32 @@ chalf relu_bw(chalf input, bool enable) {
   return res;
 }
 
-void relu_fw(chalf16 outbuf[256], short outbuf_relu[256], int num_iter) {
+void relu_fw(chalf16 outbuf[OCFACT][256], short outbuf_relu[OCFACT][256],
+    int num_iter) {
   RELU_FW: for (int i = 0; i < num_iter; ++i) {
   #pragma HLS pipeline
-    chalf16 val = max(outbuf[i]);
-    outbuf[i] = val;
-    short relu_out = 0;
-    relu_out |= (val.s0 != chalf(0)) ? 1 << 0 : 0;
-    relu_out |= (val.s1 != chalf(0)) ? 1 << 1 : 0;
-    relu_out |= (val.s2 != chalf(0)) ? 1 << 2 : 0;
-    relu_out |= (val.s3 != chalf(0)) ? 1 << 3 : 0;
-    relu_out |= (val.s4 != chalf(0)) ? 1 << 4 : 0;
-    relu_out |= (val.s5 != chalf(0)) ? 1 << 5 : 0;
-    relu_out |= (val.s6 != chalf(0)) ? 1 << 6 : 0;
-    relu_out |= (val.s7 != chalf(0)) ? 1 << 7 : 0;
-    relu_out |= (val.s8 != chalf(0)) ? 1 << 8 : 0;
-    relu_out |= (val.s9 != chalf(0)) ? 1 << 9 : 0;
-    relu_out |= (val.sa != chalf(0)) ? 1 << 10 : 0;
-    relu_out |= (val.sb != chalf(0)) ? 1 << 11 : 0;
-    relu_out |= (val.sc != chalf(0)) ? 1 << 12 : 0;
-    relu_out |= (val.sd != chalf(0)) ? 1 << 13 : 0;
-    relu_out |= (val.se != chalf(0)) ? 1 << 14 : 0;
-    relu_out |= (val.sf != chalf(0)) ? 1 << 15 : 0;
-    outbuf_relu[i] = relu_out;
+    for (int k = 0; k < OCFACT; ++k) {
+      chalf16 val = max(outbuf[k][i]);
+      outbuf[k][i] = val;
+      short relu_out = 0;
+      relu_out |= (val.s0 != chalf(0)) ? 1 << 0 : 0;
+      relu_out |= (val.s1 != chalf(0)) ? 1 << 1 : 0;
+      relu_out |= (val.s2 != chalf(0)) ? 1 << 2 : 0;
+      relu_out |= (val.s3 != chalf(0)) ? 1 << 3 : 0;
+      relu_out |= (val.s4 != chalf(0)) ? 1 << 4 : 0;
+      relu_out |= (val.s5 != chalf(0)) ? 1 << 5 : 0;
+      relu_out |= (val.s6 != chalf(0)) ? 1 << 6 : 0;
+      relu_out |= (val.s7 != chalf(0)) ? 1 << 7 : 0;
+      relu_out |= (val.s8 != chalf(0)) ? 1 << 8 : 0;
+      relu_out |= (val.s9 != chalf(0)) ? 1 << 9 : 0;
+      relu_out |= (val.sa != chalf(0)) ? 1 << 10 : 0;
+      relu_out |= (val.sb != chalf(0)) ? 1 << 11 : 0;
+      relu_out |= (val.sc != chalf(0)) ? 1 << 12 : 0;
+      relu_out |= (val.sd != chalf(0)) ? 1 << 13 : 0;
+      relu_out |= (val.se != chalf(0)) ? 1 << 14 : 0;
+      relu_out |= (val.sf != chalf(0)) ? 1 << 15 : 0;
+      outbuf_relu[k][i] = relu_out;
+    }
   }
 }
 
@@ -107,7 +110,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS ARRAY_PARTITION variable=wbuf complete dim=2
 
   // Bias buffer
-  chalf biasbuf[1024];
+  chalf biasbuf[4096];
 DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 
   chalf multres[OCFACT][4][16];
@@ -170,11 +173,8 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
   short outchannels = params[1];
   short burstchannels = params[2];
   short rpo = params[3];
-  short rpofm = params[4];
-  ap_uint<10> burstydim = params[5];
   ap_uint<10> ydim = params[6];
   ap_uint<10> xdim = params[7];
-  ap_uint<10> xtile_pad = params[8];
   ap_uint<5> ksize = params[9];
   short numgroups = params[10];
   ap_uint<10> numimages = params[11];
@@ -184,6 +184,13 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
   ap_uint<4> stride = params[15];
   ap_uint<4> pad = params[16];
   bool mode = backward;
+
+  assert(ksize <= 11);
+  assert(ksize >= 1);
+  assert(burstchannels <= 2048);
+  assert(burstchannels >= 4);
+  assert(numimages >= 192);
+  assert(numimages <= 256);
 
   ap_uint<10> xdim_out = ((xdim - ksize + 2 * pad) / stride) + 1;
   ap_uint<10> ydim_out = xdim_out;
@@ -477,13 +484,8 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               }               
             }
           }
-          for (int k = 0; k < OCFACT; ++k) {
-#pragma HLS UNROLL
-            if (relu && (o * OCFACT + k < outchannels) && (!mode) &&
-                (n == rpo - 1)) {
-              short out_size = img_fact;
-              relu_fw(outbuf[k], outbuf_relu[k], out_size);
-            }
+          if (relu && (!mode) && (n == rpo - 1)) {
+            relu_fw(outbuf, outbuf_relu, img_fact);
           }
 
           for (int k = 0; k < OCFACT; ++k) {
