@@ -182,7 +182,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
   short backward = params[14];
   ap_uint<4> stride = params[15];
   ap_uint<4> pad = params[16];
-  bool mode = backward;
+  bool mode = (backward == 1);
 
   assert(ksize <= 11);
   assert(ksize >= 1);
@@ -249,7 +249,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 #pragma HLS dependence variable=inbuf_relu inter false
                   for (int j = 0; j < 4; ++j) {
                     inbuf[j][i + inbuf_idx] = inbuf[j][i + inbuf_idx + q_off];
-                    if (backward != 0)
+                    if ((backward != 0) && relu)
                       inbuf_relu[j][i + inbuf_idx] =
                         inbuf_relu[j][i + inbuf_idx + q_off];
                   }
@@ -259,7 +259,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                   int f_in_idx = in_idx + j * burst_fact * img_fact;
                   memcpy(inbuf[j] + inbuf_idx, input + f_in_idx,
                       sizeof(chalf16) * in_size);
-                  if (backward != 0)
+                  if ((backward != 0) && relu)
                     memcpy(inbuf_relu[j] + inbuf_idx, track_relu + f_in_idx,
                         sizeof(short) * in_size);
                 }
@@ -269,7 +269,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
         }
 
         for (int o = 0; o < ofm_iters; ++o) {
-          if (n == 0 && !mode) {
+          if (n == 0 && (backward != 1)) {
             for (int i = 0; i < img_fact; ++i) {
 #pragma HLS pipeline
               for (int k = 0; k < OCFACT; ++k) {
@@ -482,7 +482,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
               }               
             }
           }
-          if (relu && (!mode) && (n == rpo - 1)) {
+          if (relu && (backward == 0) && (n == rpo - 1)) {
             relu_fw(outbuf, outbuf_relu, img_fact);
           }
 
@@ -499,7 +499,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             out_idx = mode_select_idx(out_idx_f, out_idx_b, mode);
             out_size = mode_select_size(out_size_f, out_size_b, mode);
 
-            if (relu && (o * OCFACT + k < outchannels) && (!mode) &&
+            if (relu && (o * OCFACT + k < outchannels) && (backward == 0) &&
                 (n == rpo - 1)) {
               memcpy(track_relu + out_idx, outbuf_relu[k], sizeof(short) *
                   out_size);
