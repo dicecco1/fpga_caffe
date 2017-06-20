@@ -105,9 +105,8 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS ARRAY_PARTITION variable=outbuf complete dim=1
 
   // Weight buffer
-  chalf16 wbuf[2][OCFACT][256];
+  chalf16 wbuf[OCFACT][256];
 #pragma HLS ARRAY_PARTITION variable=wbuf complete dim=1
-#pragma HLS ARRAY_PARTITION variable=wbuf complete dim=2
 
   // Bias buffer
   chalf biasbuf[4096];
@@ -269,24 +268,6 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
           }
         }
 
-        for (int k = 0; k < OCFACT; ++k) {
-          int o = 0;
-          int w_idx_f, w_idx_b, w_idx;
-          short w_size_f, w_size_b, w_size;
-          w_idx_b = (((y * xdim_out + x) * numgroups + group_idx) *
-              outchannels + (o * OCFACT + k)) * img_fact;
-          w_size_b = img_fact;
-          w_idx_f = (o * OCFACT + k + outchannels * group_idx) * ksize *
-            ksize * ic_fact + n * ksize * ksize * wc_fact;
-          w_size_f = ksize * ksize * wc_fact;
-
-          w_idx = mode_select_idx(w_idx_f, w_idx_b, mode);
-          w_size = mode_select_size(w_size_f, w_size_b, mode);
-
-          if (o * OCFACT + k < outchannels)
-            memcpy(wbuf[0][k], weights + w_idx, sizeof(chalf16) * w_size);
-        }
-
         for (int o = 0; o < ofm_iters; ++o) {
           if (n == 0 && !mode) {
             for (int i = 0; i < img_fact; ++i) {
@@ -313,7 +294,24 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                 memcpy(outbuf[k], output + out_idx, sizeof(chalf16) *
                     out_size);
             }
-          }           
+          }
+          
+          for (int k = 0; k < OCFACT; ++k) {
+            int w_idx_f, w_idx_b, w_idx;
+            short w_size_f, w_size_b, w_size;
+            w_idx_b = (((y * xdim_out + x) * numgroups + group_idx) *
+                outchannels + (o * OCFACT + k)) * img_fact;
+            w_size_b = img_fact;
+            w_idx_f = (o * OCFACT + k + outchannels * group_idx) * ksize *
+              ksize * ic_fact + n * ksize * ksize * wc_fact;
+            w_size_f = ksize * ksize * wc_fact;
+
+            w_idx = mode_select_idx(w_idx_f, w_idx_b, mode);
+            w_size = mode_select_size(w_size_f, w_size_b, mode);
+
+            if (o * OCFACT + k < outchannels)
+              memcpy(wbuf[k], weights + w_idx, sizeof(chalf16) * w_size);
+          }
 
           ap_uint<8> w_off = 0;
           ap_uint<5> img_off = 0;
@@ -380,22 +378,22 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                 (backward == 2) || (backward == 3)));
 
             for (int k = 0; k < OCFACT; ++k) {
-              weight_fw[0] = wbuf[o & 0x1][k][w_idx].s0;
-              weight_fw[1] = wbuf[o & 0x1][k][w_idx].s1;
-              weight_fw[2] = wbuf[o & 0x1][k][w_idx].s2;
-              weight_fw[3] = wbuf[o & 0x1][k][w_idx].s3;   
-              weight_fw[4] = wbuf[o & 0x1][k][w_idx].s4;
-              weight_fw[5] = wbuf[o & 0x1][k][w_idx].s5;
-              weight_fw[6] = wbuf[o & 0x1][k][w_idx].s6;
-              weight_fw[7] = wbuf[o & 0x1][k][w_idx].s7;
-              weight_fw[8] = wbuf[o & 0x1][k][w_idx].s8;
-              weight_fw[9] = wbuf[o & 0x1][k][w_idx].s9;
-              weight_fw[10] = wbuf[o & 0x1][k][w_idx].sa;
-              weight_fw[11] = wbuf[o & 0x1][k][w_idx].sb;
-              weight_fw[12] = wbuf[o & 0x1][k][w_idx].sc;
-              weight_fw[13] = wbuf[o & 0x1][k][w_idx].sd;
-              weight_fw[14] = wbuf[o & 0x1][k][w_idx].se;
-              weight_fw[15] = wbuf[o & 0x1][k][w_idx].sf;
+              weight_fw[0] = wbuf[k][w_idx].s0;
+              weight_fw[1] = wbuf[k][w_idx].s1;
+              weight_fw[2] = wbuf[k][w_idx].s2;
+              weight_fw[3] = wbuf[k][w_idx].s3;   
+              weight_fw[4] = wbuf[k][w_idx].s4;
+              weight_fw[5] = wbuf[k][w_idx].s5;
+              weight_fw[6] = wbuf[k][w_idx].s6;
+              weight_fw[7] = wbuf[k][w_idx].s7;
+              weight_fw[8] = wbuf[k][w_idx].s8;
+              weight_fw[9] = wbuf[k][w_idx].s9;
+              weight_fw[10] = wbuf[k][w_idx].sa;
+              weight_fw[11] = wbuf[k][w_idx].sb;
+              weight_fw[12] = wbuf[k][w_idx].sc;
+              weight_fw[13] = wbuf[k][w_idx].sd;
+              weight_fw[14] = wbuf[k][w_idx].se;
+              weight_fw[15] = wbuf[k][w_idx].sf;
               for (int m = 0; m < 4; ++m) {
                 for (int j = 0; j < 16; ++j) {
                   if (mode)
@@ -486,24 +484,6 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
           }
           if (relu && (!mode) && (n == rpo - 1)) {
             relu_fw(outbuf, outbuf_relu, img_fact);
-          }
-
-          for (int k = 0; k < OCFACT; ++k) {
-            int w_idx_f, w_idx_b, w_idx;
-            short w_size_f, w_size_b, w_size;
-            w_idx_b = (((y * xdim_out + x) * numgroups + group_idx) *
-                outchannels + ((o + 1) * OCFACT + k)) * img_fact;
-            w_size_b = img_fact;
-            w_idx_f = ((o + 1) * OCFACT + k + outchannels * group_idx) * ksize
-              * ksize * ic_fact + n * ksize * ksize * wc_fact;
-            w_size_f = ksize * ksize * wc_fact;
-
-            w_idx = mode_select_idx(w_idx_f, w_idx_b, mode);
-            w_size = mode_select_size(w_size_f, w_size_b, mode);
-
-            if ((o + 1) * OCFACT + k < outchannels && (o + 1 < ofm_iters))
-              memcpy(wbuf[((o + 1) & 0x1)][k], weights + w_idx,
-                sizeof(chalf16) * w_size);
           }
 
           for (int k = 0; k < OCFACT; ++k) {
