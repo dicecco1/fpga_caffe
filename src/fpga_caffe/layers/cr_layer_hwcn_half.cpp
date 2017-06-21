@@ -269,7 +269,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
         }
 
         for (int o = 0; o < ofm_iters; ++o) {
-          if (n == 0 && (backward != 1)) {
+          if (n == 0 && (backward == 0)) {
             for (int i = 0; i < img_fact; ++i) {
 #pragma HLS pipeline
               for (int k = 0; k < OCFACT; ++k) {
@@ -374,8 +374,6 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             short out_idx_b = filt_off * wc_fact + (w_off >> 2);
             short out_idx = (mode) ? out_idx_b : out_idx_f;
             bool acc_enable = (mode) ? (counter_bw == 3) : true;
-            bool relu_on = (relu && ((backward == 1) ||
-                (backward == 2) || (backward == 3)));
 
             for (int k = 0; k < OCFACT; ++k) {
               weight_fw[0] = wbuf[k][w_idx].s0;
@@ -406,8 +404,8 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                 bool fw_mode = (backward == 0);
 
                 for (int j = 0; j < 16; ++j)
-                  relu_en[k][j] = (relu_on && ((relu_val >> j) & 0x1)) ||
-                    fw_mode;
+                  relu_en[k][j] = (relu && ((relu_val >> j) & 0x1)) ||
+                    fw_mode || (relu == 0);
 
                 in_val[m][0] = relu_bw(inbuf[m][in_idx].s0, relu_en[k][0]);
                 in_val[m][1] = relu_bw(inbuf[m][in_idx].s1, relu_en[k][1]);
