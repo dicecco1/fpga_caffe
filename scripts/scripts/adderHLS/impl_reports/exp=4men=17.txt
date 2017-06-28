@@ -1,0 +1,20 @@
+
+
+Implementation tool: Xilinx Vivado v.2016.3_sdx
+Project:             adders_prj
+Solution:            solution1
+Device target:       xc7a75tlftg256-2l
+Report date:         Mon Jun 26 10:53:01 CDT 2017
+
+#=== Post-Implementation Resource usage ===
+SLICE:          174
+LUT:            441
+FF:             624
+DSP:              0
+BRAM:             0
+SRL:             69
+#=== Final timing ===
+CP required:    4.000
+CP achieved post-synthesis:    3.850
+CP achieved post-implemetation:    3.851
+Timing met
