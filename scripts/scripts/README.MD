@@ -1,4 +1,4 @@
-These scripts does not run HLS three time, every HLS saves reports in impl_report and need to be manually copied to report1
+These scripts do not run HLS three time, every HLS saves reports in impl_report and need to be manually copied to report1
 and report2. Together with impl_report they consists three HLS results.
 
 Evey iteration takes approximatly 3-4h depending on hardware.
