@@ -15,7 +15,7 @@
 #endif
 
 #define EXP_SIZE 6 
-#define MANT_SIZE 13 
+#define MANT_SIZE 14 
 #define EXP_OFFSET ((1 << (EXP_SIZE - 1)) - 1)
 #define MAX_EXP ((1 << EXP_SIZE) - 1)
 #define MAX_MANT ((1 << MANT_SIZE) - 1)
@@ -521,6 +521,48 @@ ap_uint<4> LOD(ap_uint<MANT_SIZE + 2> sum_cpath, ap_uint<1> *zero_flag) {
         ((a[4] | a[3]) | (~a[4] & ~a[3] & ~a[2] & ~a[1] & a[0]))))));
   b[0] = ~a[14] & (a[13] | (~a[12] & (a[11] | (~a[10] & (a[9] | (~a[8] &
         (a[7] | (~a[6] & (a[5] | (~a[4] & (a[3] | (~a[2] & a[1]))))))))))));
+
+  ap_uint<4> result =  ((b[3] & 0x1) << 3) | ((b[2] & 0x1) << 2) |
+    ((b[1] & 0x1) << 1) | (b[0] & 0x1);
+  return result;
+}
+#endif
+
+#if MANT_SIZE == 14
+ap_uint<4> LOD(ap_uint<MANT_SIZE + 2> sum_cpath, ap_uint<1> *zero_flag) {
+#pragma HLS INLINE
+  ap_uint<1> a[MANT_SIZE + 2];
+  ap_uint<4> b[4];
+  a[15] = (sum_cpath >> 15) & 0x1;
+  a[14] = (sum_cpath >> 14) & 0x1;
+  a[13] = (sum_cpath >> 13) & 0x1;
+  a[12] = (sum_cpath >> 12) & 0x1;
+  a[11] = (sum_cpath >> 11) & 0x1;
+  a[10] = (sum_cpath >> 10) & 0x1;
+  a[9] = (sum_cpath >> 9) & 0x1;
+  a[8] = (sum_cpath >> 8) & 0x1;
+  a[7] = (sum_cpath >> 7) & 0x1;
+  a[6] = (sum_cpath >> 6) & 0x1;
+  a[5] = (sum_cpath >> 5) & 0x1;
+  a[4] = (sum_cpath >> 4) & 0x1;
+  a[3] = (sum_cpath >> 3) & 0x1;
+  a[2] = (sum_cpath >> 2) & 0x1;
+  a[1] = (sum_cpath >> 1) & 0x1;
+  a[0] = (sum_cpath >> 0) & 0x1;
+
+  *zero_flag = ~(a[10] | a[9] | a[8] | a[7] | a[6] | a[5] | a[4] | a[3] | a[2]
+      | a[1] | a[0] | a[11] | a[12] | a[13] | a[14] | a[15]);
+  b[3] = ~a[15] & ~a[14] & ~a[13] & ~a[12] & ~a[11] & ~a[10] & ~a[9] & ~a[8] &
+    (a[7] | a[6] | a[5] | a[4] | a[3] | a[2] | a[1] | a[0]);
+  b[2] = ~a[15] & ~a[14] & ~a[13] & ~a[12] & ((a[11] | a[10] | a[9] | a[8]) |
+      (~a[11] & ~a[10] & ~a[9] & ~a[8] & ~a[7] & ~a[6] & ~a[5] & ~a[4] &
+      (a[3] | a[2] | a[1] | a[0])));
+  b[1] = ~a[15] & ~a[14] & ((a[13] | a[12]) | (~a[13] & ~a[12] & ~a[11] &
+        ~a[10] & ((a[9] | a[8]) | (~a[9] & ~a[8] & ~a[7] & ~a[6] &
+        ((a[5] | a[4]) | (~a[5] & ~a[4] & ~a[3] & ~a[2] & (a[1] | a[0])))))));
+  b[0] = ~a[15] & (a[14] | (~a[13] & (a[12] | (~a[11] & (a[10] | (~a[9] &
+        (a[8] | (~a[7] & (a[6] | (~a[5] & (a[4] | (~a[3] & (a[2] |
+        (~a[1] & a[0]))))))))))))));
 
   ap_uint<4> result =  ((b[3] & 0x1) << 3) | ((b[2] & 0x1) << 2) |
     ((b[1] & 0x1) << 1) | (b[0] & 0x1);
