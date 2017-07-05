@@ -61,6 +61,7 @@ bool operator>(chalf T, chalf U);
 bool operator>=(chalf T, chalf U);
 bool operator==(chalf T, chalf U);
 bool operator!=(chalf T, chalf U);
+chalf max(chalf T, chalf U, short Tmask, short Umask, short *out_mask);
 chalf max(chalf T, chalf U);
 chalf max(chalf T);
 #ifdef SYNTHESIS
@@ -140,6 +141,8 @@ class chalf {
   friend chalf operator*(chalf T, int U);
   friend chalf operator*(chalf T, chalf U);
   friend chalf operator+(chalf T, chalf U);
+  friend chalf max(chalf T, chalf U, short Tmask, short Umask,
+      short *out_mask);
   friend chalf max(chalf T, chalf U);
   friend chalf max(chalf T);
   friend chalf operator/(chalf T, chalf U);
@@ -947,6 +950,46 @@ chalf max(chalf T, chalf U) {
   else
     res = T;
 #endif
+  return res;
+}
+
+#ifndef SYNTHESIS
+inline
+#endif
+chalf max(chalf T, chalf U, short Tmask, short Umask, short *out_mask) {
+#ifdef SYNTHESIS
+#pragma HLS INLINE off
+#pragma HLS pipeline
+  ap_int<FP_WIDTH> Tdata_ = T.data_;
+  ap_int<FP_WIDTH> Udata_ = U.data_;
+  chalf res;
+  short res_mask;
+  if (Tdata_ < Udata_) {
+    res = U;
+    res_mask = Umask;
+  } else {
+    res = T;
+    res_mask = Tmask;
+  }  
+#else
+  chalf res;
+  short res_mask;
+#if FP_WIDTH <= 16
+  int16 Tdata_ = T.data_;
+  int16 Udata_ = U.data_;
+#else
+  int32 Tdata_ = T.data_;
+  int32 Udata_ = U.data_;
+#endif
+  if (Tdata_ < Udata_) {
+    res = U;
+    res_mask = Umask;
+  } else {
+    res = T;
+    res_mask = Tmask;
+  }
+#endif
+  *out_mask = res_mask;
   return res;
 }
 

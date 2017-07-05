@@ -16,7 +16,7 @@
  * output:        output of the convolution
  */ 
 
-chalf16 max9(chalf16 pool_inbuf[9][16], int n) {
+chalf16 max9(chalf16 pool_inbuf[9][16], int n, short16 *out_mask) {
 #pragma HLS INLINE
   chalf16 reduce_s1[4];
 #pragma HLS ARRAY_PARTITION variable=reduce_s1 complete
@@ -25,15 +25,34 @@ chalf16 max9(chalf16 pool_inbuf[9][16], int n) {
   chalf16 reduce_s3;
   chalf16 reduce_s4;
 
+  short16 mask_s0[9];
+#pragma HLS ARRAY_PARTITION variable=mask_s0 complete
+  short16 mask_s1[4];
+#pragma HLS ARRAY_PARTITION variable=mask_s1 complete
+  short16 mask_s2[2];
+#pragma HLS ARRAY_PARTITION variable=mask_s2 complete
+  short16 mask_s3;
+
+  short16 mask_s4;
+
+  for (int i = 0; i < 9; ++i)
+    mask_s0[i] = i;
+
   for (int i = 0; i < 4; ++i)
-    reduce_s1[i] = max(pool_inbuf[i * 2][n], pool_inbuf[i * 2 + 1][n]);
+    reduce_s1[i] = max(pool_inbuf[i * 2][n], pool_inbuf[i * 2 + 1][n],
+        mask_s0[i * 2], mask_s0[i * 2 + 1], &mask_s1[i]);
 
   for (int i = 0; i < 2; ++i)
-    reduce_s2[i] = max(reduce_s1[i * 2], reduce_s1[i * 2 + 1]);
+    reduce_s2[i] = max(reduce_s1[i * 2], reduce_s1[i * 2 + 1],
+        mask_s1[i * 2], mask_s1[i * 2 + 1], &mask_s2[i]);
 
-  reduce_s3 = max(reduce_s2[0], reduce_s2[1]);
+  reduce_s3 = max(reduce_s2[0], reduce_s2[1], mask_s2[0], mask_s2[1],
+      &mask_s3);
 
-  reduce_s4 = max(reduce_s3, pool_inbuf[8][n]);
+  reduce_s4 = max(reduce_s3, pool_inbuf[8][n], mask_s3, mask_s0[8],
+      &mask_s4);
+
+  *out_mask = mask_s4;
 
   return reduce_s4;
 }
@@ -138,6 +157,17 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 #pragma HLS ARRAY_PARTITION variable=pool_inbuf complete dim=1
 
   chalf16 pool_outbuf[16];
+
+  chalf16 pool_inbuf_b[16];
+
+  chalf16 pool_outbuf_b[9][16];
+#pragma HLS ARRAY_PARTITION variable=pool_outbuf_b complete dim=1
+
+  short out_mask[256];
+#pragma HLS ARRAY_PARTITION variable=out_mask cyclic factor=16 dim=1
+
+  short in_mask[256];
+#pragma HLS ARRAY_PARTITION variable=in_mask cyclic factor=16 dim=1
 
   chalf multres[OCFACT][4][16];
 #pragma HLS ARRAY_PARTITION variable=multres complete dim=1
@@ -546,7 +576,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
     }
 
   } else {
-    short pooled_height = ydim_out - pksize;
+    short pooled_height = ydim - pksize;
     if ((pooled_height & 0x1) == 1)
       pooled_height = (pooled_height >> 1) + 2;
     else
@@ -554,31 +584,108 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 
     short pooled_width = pooled_height;
 
-    for (int ph = 0; ph < pooled_height; ++ph) {
-      for (int pw = 0; pw < pooled_width; ++pw) {
-        int hstart = ph * 2;
-        int wstart = pw * 2;
-        for (int c = 0; c < inchannels; ++c) {
-          for (int h = 0; h < 3; ++h) {
-            for (int w = 0; w < 3; ++w) {
-              int in_idx = (((hstart + h) * xdim_out + (wstart + w)) *
-                  inchannels + c) * img_fact;
-              if ((hstart + h < ydim_out) && (wstart + w < xdim_out) &&
-                  (h < pksize) && (w < pksize))
-                memcpy(pool_inbuf[h * 3 + w], input + in_idx,
-                    sizeof(chalf16) * img_fact);
-              else
-                for (int n = 0; n < img_fact; ++n)
+    if (backward == 0) {
+      for (int ph = 0; ph < pooled_height; ++ph) {
+        for (int pw = 0; pw < pooled_width; ++pw) {
+          int hstart = ph * 2;
+          int wstart = pw * 2;
+          for (int c = 0; c < inchannels; ++c) {
+            for (int h = 0; h < 3; ++h) {
+              for (int w = 0; w < 3; ++w) {
+                int in_idx = (((hstart + h) * xdim + (wstart + w)) *
+                    inchannels + c) * img_fact;
+                if ((hstart + h < ydim) && (wstart + w < xdim) &&
+                    (h < pksize) && (w < pksize))
+                  memcpy(pool_inbuf[h * 3 + w], input + in_idx,
+                      sizeof(chalf16) * img_fact);
+                else
+                  for (int n = 0; n < img_fact; ++n)
 #pragma HLS pipeline
-                  pool_inbuf[h * 3 + w][n] = chalf(CHALF_MIN_VAL);
+                    pool_inbuf[h * 3 + w][n] = chalf(CHALF_MIN_VAL);
+              }
             }
-          }
-          POOL_LOOP: for (int n = 0; n < img_fact; ++n) {
+            POOL_LOOP: for (int n = 0; n < img_fact; ++n) {
 #pragma HLS pipeline
-            pool_outbuf[n] = max9(pool_inbuf, n);
+              short16 mask;
+              pool_outbuf[n] = max9(pool_inbuf, n, &mask);
+              out_mask[n * 16 + 0] = mask.s0;
+              out_mask[n * 16 + 1] = mask.s1;
+              out_mask[n * 16 + 2] = mask.s2;
+              out_mask[n * 16 + 3] = mask.s3;
+              out_mask[n * 16 + 4] = mask.s4;
+              out_mask[n * 16 + 5] = mask.s5;
+              out_mask[n * 16 + 6] = mask.s6;
+              out_mask[n * 16 + 7] = mask.s7;
+              out_mask[n * 16 + 8] = mask.s8;
+              out_mask[n * 16 + 9] = mask.s9;
+              out_mask[n * 16 + 10] = mask.sa;
+              out_mask[n * 16 + 11] = mask.sb;
+              out_mask[n * 16 + 12] = mask.sc;
+              out_mask[n * 16 + 13] = mask.sd;
+              out_mask[n * 16 + 14] = mask.se;
+              out_mask[n * 16 + 15] = mask.sf;
+            }
+            int out_idx = ((ph * pooled_width + pw) * inchannels + c)
+              * img_fact;
+            memcpy(output + out_idx, pool_outbuf, sizeof(chalf16) * img_fact);
+            memcpy(track_relu + out_idx * 16, out_mask,
+                sizeof(short) * numimages);
           }
-          int out_idx = ((ph * pooled_width + pw) * inchannels + c) * img_fact;
-          memcpy(output + out_idx, pool_outbuf, sizeof(chalf16) * img_fact);
+        }
+      }
+    } else {
+      for (int ph = 0; ph < pooled_height; ++ph) {
+        for (int pw = 0; pw < pooled_width; ++pw) {
+          for (int c = 0; c < inchannels; ++c) {
+            int hstart = ph * 2;
+            int wstart = pw * 2;
+            int in_idx = ((ph * pooled_width + pw) * inchannels + c)
+              * img_fact;
+            memcpy(pool_inbuf_b, input + in_idx, sizeof(chalf16) * img_fact);
+            memcpy(in_mask, track_relu + in_idx * 16,
+                sizeof(short) * numimages);
+            for (int h = 0; h < 3; ++h) {
+              for (int w = 0; w < 3; ++w) {
+                int out_idx = (((hstart + h) * xdim + (wstart + w))
+                    * inchannels + c) * img_fact;
+                if ((hstart + h < ydim) && (wstart + w < xdim) &&
+                    (h < pksize) && (w < pksize))
+                  memcpy(pool_outbuf_b[h * 3 + w], output + out_idx,
+                      sizeof(chalf16) * img_fact);
+              }
+            }
+            for (int n = 0; n < img_fact; ++n) {
+#pragma HLS pipeline
+#pragma HLS DEPENDENCE variable pool_outbuf_b inter false
+              pool_outbuf_b[in_mask[n * 16 + 0]][n].s0 += pool_inbuf_b[n].s0;
+              pool_outbuf_b[in_mask[n * 16 + 1]][n].s1 += pool_inbuf_b[n].s1;
+              pool_outbuf_b[in_mask[n * 16 + 2]][n].s2 += pool_inbuf_b[n].s2;
+              pool_outbuf_b[in_mask[n * 16 + 3]][n].s3 += pool_inbuf_b[n].s3;
+              pool_outbuf_b[in_mask[n * 16 + 4]][n].s4 += pool_inbuf_b[n].s4;
+              pool_outbuf_b[in_mask[n * 16 + 5]][n].s5 += pool_inbuf_b[n].s5;
+              pool_outbuf_b[in_mask[n * 16 + 6]][n].s6 += pool_inbuf_b[n].s6;
+              pool_outbuf_b[in_mask[n * 16 + 7]][n].s7 += pool_inbuf_b[n].s7;
+              pool_outbuf_b[in_mask[n * 16 + 8]][n].s8 += pool_inbuf_b[n].s8;
+              pool_outbuf_b[in_mask[n * 16 + 9]][n].s9 += pool_inbuf_b[n].s9;
+              pool_outbuf_b[in_mask[n * 16 + 10]][n].sa += pool_inbuf_b[n].sa;
+              pool_outbuf_b[in_mask[n * 16 + 11]][n].sb += pool_inbuf_b[n].sb;
+              pool_outbuf_b[in_mask[n * 16 + 12]][n].sc += pool_inbuf_b[n].sc;
+              pool_outbuf_b[in_mask[n * 16 + 13]][n].sd += pool_inbuf_b[n].sd;
+              pool_outbuf_b[in_mask[n * 16 + 14]][n].se += pool_inbuf_b[n].se;
+              pool_outbuf_b[in_mask[n * 16 + 15]][n].sf += pool_inbuf_b[n].sf;
+            }
+            for (int h = 0; h < 3; ++h) {
+              for (int w = 0; w < 3; ++w) {
+                int out_idx = (((hstart + h) * xdim + (wstart + w))
+                    * inchannels + c) * img_fact;
+                if ((hstart + h < ydim) && (wstart + w < xdim) &&
+                    (h < pksize) && (w < pksize))
+                  memcpy(output + out_idx, pool_outbuf_b[h * 3 + w],
+                      sizeof(chalf16) * img_fact);
+
+              }
+            } 
+          }
         }
       }
     }
