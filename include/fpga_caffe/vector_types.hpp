@@ -22,7 +22,7 @@ struct char16{
   char sf;
 };
 
-struct chalf16{
+struct chalf16 {
   chalf s0;
   chalf s1;
   chalf s2;
@@ -103,5 +103,31 @@ chalf16 max(const chalf16 rhs) {
   val.sf = max(rhs.sf);
   return val;
 }
+
+chalf16 max(const chalf16 T, const chalf16 U) {
+#pragma HLS INLINE
+  chalf16 val;
+  val.s0 = max(T.s0, U.s0);
+  val.s1 = max(T.s1, U.s1);
+  val.s2 = max(T.s2, U.s2);
+  val.s3 = max(T.s3, U.s3);
+  val.s4 = max(T.s4, U.s4);
+  val.s5 = max(T.s5, U.s5);
+  val.s6 = max(T.s6, U.s6);
+  val.s7 = max(T.s7, U.s7);
+  val.s8 = max(T.s8, U.s8);
+  val.s9 = max(T.s9, U.s9);
+  val.sa = max(T.sa, U.sa);
+  val.sb = max(T.sb, U.sb);
+  val.sc = max(T.sc, U.sc);
+  val.sd = max(T.sd, U.sd);
+  val.se = max(T.se, U.se);
+  val.sf = max(T.sf, U.sf);
+  return val;
+}
+
+struct chalf32 {
+  chalf16 l, u;
+};
 
 #endif // HVECTOR_TYPES_HPP

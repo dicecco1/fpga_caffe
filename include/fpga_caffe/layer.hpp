@@ -25,6 +25,8 @@ typedef struct {
   int backward;
   int stride;
   int pad;
+  int pool;
+  int pksize;
 } kernel_params;
 
 #endif  // LAYER_HPP_

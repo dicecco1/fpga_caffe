@@ -1,5 +1,5 @@
-#ifndef CAFFE_PAD_LAYER_HPP_
-#define CAFFE_PAD_LAYER_HPP_
+#ifndef CAFFE_HWCN_LAYER_HPP_
+#define CAFFE_HWCN_LAYER_HPP_
 
 #include <vector>
 
@@ -10,17 +10,15 @@
 namespace caffe {
 
 /**
- * @brief Pads the input blob on the x-dimension to a multiple of pad_val or
- * unpads the input blob such that the x-dimension is the same as the
- * y-dimension.
+ * @brief Converts from NCHW to HWCN data layout. 
  */
 template <typename Dtype>
-class PadLayer : public Layer<Dtype> {
+class HWCNLayer : public Layer<Dtype> {
  public:
   /**
    * @param   
    */
-  explicit PadLayer(const LayerParameter& param)
+  explicit HWCNLayer(const LayerParameter& param)
       : Layer<Dtype>(param) {}
   virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
@@ -39,14 +37,9 @@ class PadLayer : public Layer<Dtype> {
   virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   vector<int> bottom_shape_;
-  bool pad_;
-  int pad_to_;
-  int pad_val_;
-  int dim_;
-  int dim_pad_;
-  int axis_;
+  bool convert_to_;
 };
 
 }  // namespace caffe
 
-#endif  // CAFFE_PAD_LAYER_HPP_
+#endif  // CAFFE_HWCN_LAYER_HPP_

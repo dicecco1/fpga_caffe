@@ -313,6 +313,7 @@ message LayerParameter {
   repeated string bottom = 3; // the name of each bottom blob
   repeated string top = 4; // the name of each top blob
   optional bool ocl_enable = 147; //flag for bypassing ocl layers
+  optional bool hwcn = 153; //flag for specifying layer is in hwcn format
   // The train / test phase for computation.
   optional Phase phase = 10;
 
@@ -407,6 +408,7 @@ message LayerParameter {
   optional PadParameter pad_param = 149;
   optional CRParameter cr_param = 150;
   optional XCLParameter xcl_param = 151;
+  optional HWCNParameter hwcn_param = 152;
 }
 
 // Message that stores parameters used to apply transformation
@@ -1420,11 +1422,13 @@ message HalfConversionParameter {
 
 message PadParameter {
   // Pad specification parameters
-  // pad = true: pad x-dimension
-  // pad = false: unpad x-dimension using pad_to value or y-dimension if unset
+  // pad = true: pad axis dimension
+  // pad = false: unpad axis dimension using pad_to value or axis dim - 1
+  // if unset
   optional bool pad = 1 [default = true];
   optional uint32 pad_val = 2 [default = 16];
   optional uint32 pad_to = 3 [default = 0];
+  optional uint32 axis = 4 [default = 3];
 }
 
 message CRParameter {
@@ -1442,3 +1446,11 @@ message XCLParameter {
   optional string xcl_name = 2; //the name of the xcl file
   optional string kernel_name = 3; //the name of the ocl kernel
 }
+
+message HWCNParameter {
+  // HWCN conversion specification parameter
+  // convert_to = true: convert to hwcn
+  // convert_to = false: convert from hwcn to nchw
+  optional bool convert_to = 1 [default = true];
+}
+

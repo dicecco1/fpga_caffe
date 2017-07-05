@@ -15,7 +15,7 @@
 #endif
 
 #define EXP_SIZE 6 
-#define MANT_SIZE 14 
+#define MANT_SIZE 7 
 #define EXP_OFFSET ((1 << (EXP_SIZE - 1)) - 1)
 #define MAX_EXP ((1 << EXP_SIZE) - 1)
 #define MAX_MANT ((1 << MANT_SIZE) - 1)
@@ -29,9 +29,8 @@
 #define FP_WIDTH (EXP_SIZE + MANT_SIZE + 1)
 #define ROUND_NEAREST_MULT 0
 #define ROUND_NEAREST_ADD 1 
-#define OVFL_ROOM 4
-#define SHIFT_SIZE ((MANT_SIZE + 1) * 2 + 1 + OVFL_ROOM) 
-
+#define CHALF_MIN_VAL (1 << SIGN_SHIFT) | (MAX_EXP << EXP_SHIFT) | MAX_MANT
+#define CHALF_MAX_VAL (MAX_EXP << EXP_SHIFT) | MAX_MANT
 
 #if (EXP_SIZE + MANT_SIZE + 1) > 16
   #define DIFF_SIZE (32 - EXP_SIZE - MANT_SIZE - 1)
@@ -996,13 +995,17 @@ inline chalf operator/(chalf T, int U) {
 
 inline bool operator>(chalf T, chalf U) {
 #if (EXP_SIZE + MANT_SIZE + 1) > 16
-  int32 Tdata, Udata;
+  uint32 Tdata, Udata, Tsign, Usign;
 #else
-  int16 Tdata, Udata;
+  uint16 Tdata, Udata, Tsign, Usign;
 #endif
-  Tdata = T.data_ << DIFF_SIZE;
-  Udata = U.data_ << DIFF_SIZE;
-  return Tdata > Udata;
+  Tsign = T.data_ >> SIGN_SHIFT;
+  Usign = U.data_ >> SIGN_SHIFT;
+  Tdata = T.data_ ^ SIGN_MASK;// << DIFF_SIZE;
+  Udata = U.data_ ^ SIGN_MASK;// << DIFF_SIZE;
+  return ((Tdata > Udata) && (Tsign == 0) && (Usign == 0)) ||
+    ((Tdata < Udata) && (Tsign == 1) && (Usign == 1)) ||
+    ((Tsign == 0) && (Usign == 1));
 }
 
 inline bool operator>=(chalf T, chalf U) {

@@ -173,4 +173,41 @@ TYPED_TEST(PadLayerTest, TestForwardUnpadTo) {
   }
 }
 
+TYPED_TEST(PadLayerTest, TestForwardPadToAxis) {
+  typedef typename TypeParam::Dtype Dtype;
+  LayerParameter layer_param;
+  PadParameter* pad_param =
+      layer_param.mutable_pad_param();
+  pad_param->set_pad(true);
+  pad_param->set_pad_to(4);
+  pad_param->set_axis(1);
+  shared_ptr<Layer<Dtype> > layer(
+      new PadLayer<Dtype>(layer_param));
+  layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
+  layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
+
+  int channel_ = this->blob_bottom_->shape(1);
+  int channel_pad_ = this->blob_top_->shape(1);
+
+  const Dtype *bottom_data = this->blob_bottom_->cpu_data();
+  const Dtype *top_data = this->blob_top_->cpu_data();
+
+  std::vector<int> shape = this->blob_top_->shape();
+
+  for (int n = 0; n < shape[0]; ++n) {
+    for (int c = 0; c < shape[1]; ++c) {
+      for (int h = 0; h < shape[2]; ++h) {
+        for (int w = 0; w < shape[3]; ++w) {
+          int bot_idx = ((n * channel_ + c) * shape[2] + h) * shape[3] + w;
+          int top_idx = ((n * shape[1] + c) * shape[2] + h) * shape[3] + w;
+          if (c < channel_)
+            EXPECT_NEAR(bottom_data[bot_idx], top_data[top_idx], 1e-3);
+          else
+            EXPECT_NEAR(top_data[top_idx], 0, 1e-3);
+        }
+      }
+    }
+  }
+}
+
 }  // namespace caffe

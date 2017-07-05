@@ -613,7 +613,7 @@ void OCLInnerProductLayer<Dtype>::backward_data(
       reinterpret_cast<chalf *>(bottom[i]->mutable_cpu_diff());
 
     for (int j = 0; j < this->M_; ++j)
-      for (int k = 0; k < this->K_; ++k)
+      for (int k = 0; k < this->K_; ++k) 
         bottom_diff_t[j * this->K_ + k] = bottom_diff_h[k * this->M_ + j];
   }
 }
