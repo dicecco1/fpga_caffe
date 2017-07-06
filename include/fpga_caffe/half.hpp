@@ -928,24 +928,15 @@ chalf max(chalf T, chalf U) {
 #ifdef SYNTHESIS
 #pragma HLS INLINE off
 #pragma HLS pipeline
-  ap_int<FP_WIDTH> Tdata_ = T.data_;
-  ap_int<FP_WIDTH> Udata_ = U.data_;
   chalf res;
 
-  if (Tdata_ < Udata_)
+  if (T < U)
     res = U;
   else
     res = T;  
 #else
   chalf res;
-#if FP_WIDTH <= 16
-  int16 Tdata_ = T.data_;
-  int16 Udata_ = U.data_;
-#else
-  int32 Tdata_ = T.data_;
-  int32 Udata_ = U.data_;
-#endif
-  if (Tdata_ < Udata_)
+  if (T < U)
     res = U;
   else
     res = T;
@@ -960,11 +951,9 @@ chalf max(chalf T, chalf U, short Tmask, short Umask, short *out_mask) {
 #ifdef SYNTHESIS
 #pragma HLS INLINE off
 #pragma HLS pipeline
-  ap_int<FP_WIDTH> Tdata_ = T.data_;
-  ap_int<FP_WIDTH> Udata_ = U.data_;
   chalf res;
   short res_mask;
-  if (Tdata_ < Udata_) {
+  if (T < U) {
     res = U;
     res_mask = Umask;
   } else {
@@ -974,14 +963,7 @@ chalf max(chalf T, chalf U, short Tmask, short Umask, short *out_mask) {
 #else
   chalf res;
   short res_mask;
-#if FP_WIDTH <= 16
-  int16 Tdata_ = T.data_;
-  int16 Udata_ = U.data_;
-#else
-  int32 Tdata_ = T.data_;
-  int32 Udata_ = U.data_;
-#endif
-  if (Tdata_ < Udata_) {
+  if (T < U) {
     res = U;
     res_mask = Umask;
   } else {
@@ -1044,44 +1026,34 @@ inline bool operator>(chalf T, chalf U) {
 #endif
   Tsign = T.data_ >> SIGN_SHIFT;
   Usign = U.data_ >> SIGN_SHIFT;
-  Tdata = T.data_ ^ SIGN_MASK;// << DIFF_SIZE;
-  Udata = U.data_ ^ SIGN_MASK;// << DIFF_SIZE;
+  Tdata = T.data_ ^ SIGN_MASK;
+  Udata = U.data_ ^ SIGN_MASK;
   return ((Tdata > Udata) && (Tsign == 0) && (Usign == 0)) ||
     ((Tdata < Udata) && (Tsign == 1) && (Usign == 1)) ||
     ((Tsign == 0) && (Usign == 1));
 }
 
 inline bool operator>=(chalf T, chalf U) {
-#if (EXP_SIZE + MANT_SIZE + 1) > 16
-  int32 Tdata, Udata;
-#else
-  int16 Tdata, Udata;
-#endif
-  Tdata = T.data_ << DIFF_SIZE;
-  Udata = U.data_ << DIFF_SIZE;
-  return Tdata >= Udata;
+  return (T > U) || (T == U);
 }
 
 inline bool operator<(chalf T, chalf U) {
 #if (EXP_SIZE + MANT_SIZE + 1) > 16
-  int32 Tdata, Udata;
+  uint32 Tdata, Udata, Tsign, Usign;
 #else
-  int16 Tdata, Udata;
+  uint16 Tdata, Udata, Tsign, Usign;
 #endif
-  Tdata = T.data_ << DIFF_SIZE;
-  Udata = U.data_ << DIFF_SIZE;
-  return Tdata < Udata;
+  Tsign = T.data_ >> SIGN_SHIFT;
+  Usign = U.data_ >> SIGN_SHIFT;
+  Tdata = T.data_ ^ SIGN_MASK;
+  Udata = U.data_ ^ SIGN_MASK;
+  return ((Tdata < Udata) && (Tsign == 0) && (Usign == 0)) ||
+    ((Tdata > Udata) && (Tsign == 1) && (Usign == 1)) ||
+    ((Tsign == 1) && (Usign == 0));
 }
 
 inline bool operator<=(chalf T, chalf U) {
-#if (EXP_SIZE + MANT_SIZE + 1) > 16
-  int32 Tdata, Udata;
-#else
-  int16 Tdata, Udata;
-#endif
-  Tdata = T.data_ << DIFF_SIZE;
-  Udata = U.data_ << DIFF_SIZE;
-  return Tdata <= Udata;
+  return (T < U) || (T == U);
 }
 
 #endif  // HALF_HPP_
