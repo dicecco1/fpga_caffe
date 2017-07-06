@@ -158,6 +158,11 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 
   chalf16 pool_outbuf[16 * 16];
 
+  chalf16 pool_outbuf_b[9][16 * 16];
+#pragma HLS ARRAY_PARTITION variable=pool_outbuf_b complete dim=1
+
+  chalf16 pool_inbuf_b[16 * 16];
+
   short out_mask[16 * 256];
 #pragma HLS ARRAY_PARTITION variable=out_mask cyclic factor=16 dim=1
 
@@ -236,8 +241,9 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
   ap_uint<4> pad = params[16];
   bool mode = (backward == 1);
   short pool = params[17];
-  short pksize = params[18];
+  ap_uint<3> pksize = params[18];
 
+  assert((pksize == 2) || (pksize == 3));
   assert(ksize <= 11);
   assert(ksize >= 1);
   assert(burstchannels <= 2048);
@@ -637,7 +643,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             int wstart = pw * 2;
             int in_idx = ((ph * pooled_width + pw) * inchannels + c *
                 burstchannels) * img_fact;
-            memcpy(pool_outbuf, input + in_idx, sizeof(chalf16) * img_fact
+            memcpy(pool_inbuf_b, input + in_idx, sizeof(chalf16) * img_fact
                 * burstchannels);
             memcpy(in_mask, track_relu + in_idx * 16,
                 sizeof(short) * numimages * burstchannels);
@@ -646,30 +652,37 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                 int out_idx = (((hstart + h) * xdim + (wstart + w))
                     * inchannels + c * burstchannels) * img_fact;
                 if ((hstart + h < ydim) && (wstart + w < xdim) &&
-                    (h < pksize) && (w < pksize))
-                  memcpy(pool_inbuf[h * 3 + w], output + out_idx,
+                    (h < pksize) && (w < pksize) && ((h == 0) || (w == 0)) &&
+                    (pksize == 3)) {
+                  memcpy(pool_outbuf_b[h * 3 + w], output + out_idx,
                       sizeof(chalf16) * img_fact * burstchannels);
+                } else {
+                  for (int n = 0; n < img_fact * burstchannels; ++n) {
+#pragma HLS pipeline
+                    pool_outbuf_b[h * 3 + w][n] = chalf(0);
+                  }
+                }
               }
             }
             for (int n = 0; n < img_fact * burstchannels; ++n) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable pool_inbuf inter false
-              pool_inbuf[in_mask[n * 16 + 0]][n].s0 += pool_outbuf[n].s0;
-              pool_inbuf[in_mask[n * 16 + 1]][n].s1 += pool_outbuf[n].s1;
-              pool_inbuf[in_mask[n * 16 + 2]][n].s2 += pool_outbuf[n].s2;
-              pool_inbuf[in_mask[n * 16 + 3]][n].s3 += pool_outbuf[n].s3;
-              pool_inbuf[in_mask[n * 16 + 4]][n].s4 += pool_outbuf[n].s4;
-              pool_inbuf[in_mask[n * 16 + 5]][n].s5 += pool_outbuf[n].s5;
-              pool_inbuf[in_mask[n * 16 + 6]][n].s6 += pool_outbuf[n].s6;
-              pool_inbuf[in_mask[n * 16 + 7]][n].s7 += pool_outbuf[n].s7;
-              pool_inbuf[in_mask[n * 16 + 8]][n].s8 += pool_outbuf[n].s8;
-              pool_inbuf[in_mask[n * 16 + 9]][n].s9 += pool_outbuf[n].s9;
-              pool_inbuf[in_mask[n * 16 + 10]][n].sa += pool_outbuf[n].sa;
-              pool_inbuf[in_mask[n * 16 + 11]][n].sb += pool_outbuf[n].sb;
-              pool_inbuf[in_mask[n * 16 + 12]][n].sc += pool_outbuf[n].sc;
-              pool_inbuf[in_mask[n * 16 + 13]][n].sd += pool_outbuf[n].sd;
-              pool_inbuf[in_mask[n * 16 + 14]][n].se += pool_outbuf[n].se;
-              pool_inbuf[in_mask[n * 16 + 15]][n].sf += pool_outbuf[n].sf;
+              pool_outbuf_b[in_mask[n * 16 + 0]][n].s0 += pool_inbuf_b[n].s0;
+              pool_outbuf_b[in_mask[n * 16 + 1]][n].s1 += pool_inbuf_b[n].s1;
+              pool_outbuf_b[in_mask[n * 16 + 2]][n].s2 += pool_inbuf_b[n].s2;
+              pool_outbuf_b[in_mask[n * 16 + 3]][n].s3 += pool_inbuf_b[n].s3;
+              pool_outbuf_b[in_mask[n * 16 + 4]][n].s4 += pool_inbuf_b[n].s4;
+              pool_outbuf_b[in_mask[n * 16 + 5]][n].s5 += pool_inbuf_b[n].s5;
+              pool_outbuf_b[in_mask[n * 16 + 6]][n].s6 += pool_inbuf_b[n].s6;
+              pool_outbuf_b[in_mask[n * 16 + 7]][n].s7 += pool_inbuf_b[n].s7;
+              pool_outbuf_b[in_mask[n * 16 + 8]][n].s8 += pool_inbuf_b[n].s8;
+              pool_outbuf_b[in_mask[n * 16 + 9]][n].s9 += pool_inbuf_b[n].s9;
+              pool_outbuf_b[in_mask[n * 16 + 10]][n].sa += pool_inbuf_b[n].sa;
+              pool_outbuf_b[in_mask[n * 16 + 11]][n].sb += pool_inbuf_b[n].sb;
+              pool_outbuf_b[in_mask[n * 16 + 12]][n].sc += pool_inbuf_b[n].sc;
+              pool_outbuf_b[in_mask[n * 16 + 13]][n].sd += pool_inbuf_b[n].sd;
+              pool_outbuf_b[in_mask[n * 16 + 14]][n].se += pool_inbuf_b[n].se;
+              pool_outbuf_b[in_mask[n * 16 + 15]][n].sf += pool_inbuf_b[n].sf;
             }
             for (int h = 0; h < 3; ++h) {
               for (int w = 0; w < 3; ++w) {
@@ -677,7 +690,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                     * inchannels + c * burstchannels) * img_fact;
                 if ((hstart + h < ydim) && (wstart + w < xdim) &&
                     (h < pksize) && (w < pksize))
-                  memcpy(output + out_idx, pool_inbuf[h * 3 + w],
+                  memcpy(output + out_idx, pool_outbuf_b[h * 3 + w],
                       sizeof(chalf16) * img_fact * burstchannels);
 
               }
