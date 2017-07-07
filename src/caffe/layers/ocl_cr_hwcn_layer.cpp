@@ -152,6 +152,11 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   // Propagate gradients to the parameters (as directed by backward pass).
   this->param_propagate_down_.resize(this->blobs_.size(), true);
 
+  if ((bottom[0]->shape(2) / this->group_) % 16 == 0)
+    weight_pad_ = bottom[0]->shape(2) / this->group_;
+  else
+    weight_pad_ = ((bottom[0]->shape(2) / this->group_) / 16 + 1) * 16;
+
   CRParameter cr_param = this->layer_param_.cr_param(); 
   kernel_params *forward_params = &ocl_params_;
   int num_ = bottom[0]->shape(3); 
@@ -173,7 +178,7 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       tchannel--;
     burstchannels_ = tchannel;
   }
-
+  
   forward_params->rpofm = 0;
   forward_params->xtile_pad = 0;
   forward_params->burstydim = 0;
@@ -238,6 +243,17 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   bias_params->numgroups = this->group_;
   bias_params->fc = 0;
   bias_params->relu = cr_param.relu();
+
+  vector<int> shape(4);
+  shape[0] = bottom[0]->shape(0);
+  shape[1] = bottom[0]->shape(1);
+  shape[2] = 1;
+  shape[3] = bottom[0]->shape(3);
+
+  weights_placeholder.Reshape(shape);
+
+  for (int i = 0; i < weights_placeholder.count(); ++i)
+    (weights_placeholder.mutable_cpu_data())[i] = chalf((float)1.0);
 }
 
 template <typename Dtype>
@@ -259,8 +275,7 @@ void OCLCRHWCNLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
 
   shape = (this->blobs_[0])->shape();
 
-  if (shape[1] % 16 != 0)
-    shape[1] = ((shape[1] / 16) + 1) * 16;
+  shape[1] = weight_pad_;
 
   weights_h.Reshape(shape);
 
@@ -273,7 +288,7 @@ void OCLCRHWCNLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
 
   bias_h.Reshape((this->blobs_[1])->shape());
 
-  // Since it's HWCN, N will be shape(3) and should be divisible by 16
+  // Since it's HWCN, N will be shape(3) and should be divisible by 32 
 
   shape[0] = top[0]->shape(0);
   shape[1] = top[0]->shape(1);
@@ -284,6 +299,7 @@ void OCLCRHWCNLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
     shape[3] = top[0]->shape(3) / 32;
 
   relu_indices.Reshape(shape);
+  bias_placeholder.Reshape(1, 1, 1, 1);
 }
 
 template <typename Dtype>
@@ -315,18 +331,24 @@ void OCLCRHWCNLayer<Dtype>::copyToHalfWeights(const Dtype *input,
   int oc = params.outchannels * params.numgroups;
   int ic = params.inchannels;
   int bc = params.burstchannels;
+  int ic_new = weight_pad_;
+  int bc_new = weight_pad_ / params.rpo;
   int ksize = params.ksize;
 
   for (int o = 0; o < oc; ++o) {
-    for (int n = 0; n < ic / bc; ++n) {
+    for (int n = 0; n < ic_new / bc_new; ++n) {
       for (int k = 0; k < params.ksize * params.ksize; ++k) {
-        for (int m = 0; m < bc / 4; ++m) {
+        for (int m = 0; m < bc_new / 4; ++m) {
           for (int j = 0; j < 4; ++j) {
             int in_idx = (o * ic + n * bc + m + j * (bc / 4)) * ksize * ksize
               + k;
-            int out_idx = o * ksize * ksize * ic + (n * ksize * ksize + k) *
-              bc + m * 4 + j;
-            output[out_idx] = chalf((float)input[in_idx]);
+            int out_idx = o * ksize * ksize * ic_new +
+              (n * ksize * ksize + k) * bc_new + m * 4 + j;
+            if ((n * bc + m + j * (bc / 4)) < ic) {
+              output[out_idx] = chalf((float)input[in_idx]);
+            } else {
+              output[out_idx] = chalf(0);
+            }
           }
         }
       }
@@ -387,47 +409,27 @@ void OCLCRHWCNLayer<Dtype>::backward_bias(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
   kernel_params *params = &ocl_params_bb_;
 
-  vector<int> shape(4);
-  shape[0] = bottom[0]->shape(0);
-  shape[1] = bottom[0]->shape(1);
-  shape[2] = 1;
-  shape[3] = bottom[0]->shape(3);
+  vector<int> shape(1);
+  const chalf *weights_data = weights_placeholder.ocl_data();
 
-  Blob<chalf>* weights = new Blob<chalf>(shape);
+  for (int i = 0; i < bias_h.count(); ++i)
+    (bias_h.mutable_cpu_diff())[i] = chalf(0);
 
-  for (int i = 0; i < weights->count(); ++i)
-    (weights->mutable_cpu_data())[i] = chalf((float)1.0);
-
-  const chalf *weights_data = weights->ocl_data();
-
-  shape[0] = 1;
-  shape[1] = 1;
-  shape[2] = 1;
-  shape[3] = this->num_output_;
-
-  Blob<chalf>* bias = new Blob<chalf>(shape);
-
-  for (int i = 0; i < bias->count(); ++i)
-    (bias->mutable_cpu_data())[i] = chalf(0);
-
-  chalf *bias_diff = bias->mutable_ocl_data();
+  chalf *bias_diff = bias_h.mutable_ocl_diff();
 
   params->backward = 1;
   int numgroups_ = params->numgroups;
 
-  shape[0] = 1;
-  shape[1] = 1;
-  shape[2] = 1;
-  shape[3] = sizeof(kernel_params) / sizeof(int);
-  Blob<int> *param_vals = new Blob<int>(shape);
+  shape[0] = sizeof(kernel_params) / sizeof(int);
+  param_vals.Reshape(shape);
 
-  int *conv_params = param_vals->mutable_cpu_data();
+  int *conv_params = param_vals.mutable_cpu_data();
 
-  for (int i = 0; i < shape[3]; ++i) {
+  for (int i = 0; i < shape[0]; ++i) {
     conv_params[i] = ((int *)params)[i];
   }
   
-  const int* cr_params_b = param_vals->ocl_data();
+  const int* cr_params_b = param_vals.ocl_data();
 
   size_t outsize = sizeof(chalf) * top[0]->count();
   std::vector<cl_event> events;
@@ -459,7 +461,7 @@ void OCLCRHWCNLayer<Dtype>::backward_bias(const vector<Blob<Dtype>*>& top,
     }
     clWaitForEvents(events.size(), events.data());
   }
-  bias_diff = bias->mutable_cpu_data();
+  bias_diff = bias_h.mutable_cpu_diff();
   Dtype *bias_diff_out = this->blobs_[1]->mutable_cpu_diff();
   for (int i = 0; i < this->blobs_[1]->count(); ++i) {
     bias_diff_out[i] = (Dtype)float(bias_diff[i]);
@@ -477,26 +479,21 @@ void OCLCRHWCNLayer<Dtype>::backward_data(const vector<Blob<Dtype>*>& top,
   vector<int> shape(1);
   shape[0] = bottom[0]->shape(2);
 
-  Blob<chalf>* bias = new Blob<chalf>(shape);
-
-  for (int i = 0; i < bias->count(); ++i)
-    (bias->mutable_cpu_data())[i] = chalf(0);
-
-  const chalf *bias_data = bias->ocl_data();
+  const chalf *bias_data = bias_placeholder.ocl_data();
 
   params->backward = 2;
   int numgroups_ = params->numgroups;
 
   shape[0] = sizeof(kernel_params) / sizeof(int);
-  Blob<int> *param_vals = new Blob<int>(shape);
+  param_vals.Reshape(shape);
 
-  int *conv_params = param_vals->mutable_cpu_data();
+  int *conv_params = param_vals.mutable_cpu_data();
 
   for (int i = 0; i < shape[0]; ++i) {
     conv_params[i] = ((int *)params)[i];
   }
   
-  const int* cr_params_b = param_vals->ocl_data();
+  const int* cr_params_b = param_vals.ocl_data();
 
   size_t insize = sizeof(chalf) * bottom[0]->count();
   size_t outsize = sizeof(chalf) * top[0]->count();
@@ -510,7 +507,7 @@ void OCLCRHWCNLayer<Dtype>::backward_data(const vector<Blob<Dtype>*>& top,
   for (int i = 0; i < bottom.size(); i++) {
     events.resize(events_size, 0);
     bottom_diff =
-      reinterpret_cast<chalf *>(bottom[i]->mutable_ocl_diff());
+      reinterpret_cast<chalf *>(bottom[i]->mutable_ocl_diff(insize));
     top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff(outsize));
     relu_vals = relu_indices.ocl_data();
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
@@ -548,27 +545,22 @@ void OCLCRHWCNLayer<Dtype>::backward_weights(const vector<Blob<Dtype>*>& top,
 
   weight_diff = weights_h.mutable_ocl_diff();
 
-  Blob<chalf>* bias = new Blob<chalf>(this->blobs_[1]->shape());
-
-  for (int i = 0; i < bias->count(); ++i)
-    (bias->mutable_cpu_data())[i] = chalf(0);
-
-  const chalf *bias_data = bias->ocl_data();
+  const chalf *bias_data = bias_placeholder.ocl_data();
 
   params->backward = 1;
   int numgroups_ = params->numgroups;
 
   vector<int> shape(1);
   shape[0] = sizeof(kernel_params) / sizeof(int);
-  Blob<int> *param_vals = new Blob<int>(shape);
+  param_vals.Reshape(shape);
 
-  int *conv_params = param_vals->mutable_cpu_data();
+  int *conv_params = param_vals.mutable_cpu_data();
 
   for (int i = 0; i < shape[0]; ++i) {
     conv_params[i] = ((int *)params)[i];
   }
   
-  const int* cr_params_b = param_vals->ocl_data();
+  const int* cr_params_b = param_vals.ocl_data();
 
   size_t insize = sizeof(chalf) * bottom[0]->count();
   size_t outsize = sizeof(chalf) * top[0]->count();
@@ -607,9 +599,6 @@ void OCLCRHWCNLayer<Dtype>::backward_weights(const vector<Blob<Dtype>*>& top,
   weight_diff = weights_h.mutable_cpu_diff();
   copyToFloatWeights(weight_diff, weight_diff_dtype,
       this->blobs_[0]->shape(), ocl_params_bi_);
-
-  delete bias;
-  delete param_vals;
 }
 
 
@@ -631,23 +620,20 @@ void OCLCRHWCNLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
 
   vector<int> shape(1);
   shape[0] = sizeof(kernel_params) / sizeof(int);
-  Blob<int> *param_vals = new Blob<int>(shape);
+  param_vals.Reshape(shape);
 
-  int *conv_params = param_vals->mutable_cpu_data();
+  int *conv_params = param_vals.mutable_cpu_data();
 
   for (int i = 0; i < shape[0]; ++i) {
     conv_params[i] = ((int *)params)[i];
   }
   
-  const int* cr_params = param_vals->ocl_data();
+  const int* cr_params = param_vals.ocl_data();
 
   size_t insize = sizeof(chalf) * bottom[0]->count();
   size_t outsize = sizeof(chalf) * top[0]->count();
   std::vector<cl_event> events;
   int events_size = numgroups_;
-
-//  for (int i = 0; i < relu_indices.count(); ++i)
-//    (relu_indices.mutable_cpu_data())[i] = -1;
 
   chalf *top_data;
   int *relu_vals;
@@ -655,8 +641,8 @@ void OCLCRHWCNLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
     events.resize(events_size, 0);
     const chalf* bottom_data =
       reinterpret_cast<const chalf *>(bottom[i]->ocl_data(insize));
-    top_data = reinterpret_cast<chalf *>(top[i]->mutable_ocl_data(0));
-    relu_vals = relu_indices.mutable_ocl_data();
+    top_data = reinterpret_cast<chalf *>(top[i]->mutable_ocl_data(0, outsize));
+    relu_vals = relu_indices.mutable_ocl_data(0);
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
       (const void *)&bottom_data);
     clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),

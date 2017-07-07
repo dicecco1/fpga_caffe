@@ -145,6 +145,13 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
   bias_params->numgroups = 1;
   bias_params->fc = 1;
   bias_params->relu = cr_param.relu();
+
+  vector<int> shape(1);
+  shape[0] = this->M_;
+  weights_placeholder.Reshape(shape);
+
+  for (int i = 0; i < weights_placeholder.count(); ++i)
+    (weights_placeholder.mutable_cpu_data())[i] = chalf((float)1.0);
 }
 
 template <typename Dtype>
@@ -190,7 +197,7 @@ void OCLHWCNInnerProductLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom
     this->bias_multiplier_.Reshape(bias_shape);
     caffe_set(this->M_, Dtype(1), this->bias_multiplier_.mutable_cpu_data());
   }
-
+  bias_placeholder.Reshape(1, 1, 1, 1);
 }
 
 template <typename Dtype>
@@ -244,15 +251,15 @@ void OCLHWCNInnerProductLayer<Dtype>::Forward_ocl(
 
   vector<int> shape(1);
   shape[0] = sizeof(kernel_params) / sizeof(int);
-  Blob<int> *param_vals = new Blob<int>(shape);
+  param_vals.Reshape(shape);
 
-  int *ip_params = param_vals->mutable_cpu_data();
+  int *ip_params = param_vals.mutable_cpu_data();
 
   for (int i = 0; i < shape[0]; ++i) {
     ip_params[i] = ((int *)params)[i];
   }
   
-  const int* k_params = param_vals->ocl_data();
+  const int* k_params = param_vals.ocl_data();
 
   size_t insize = sizeof(chalf) * bottom[0]->count();
   std::vector<cl_event> events;
@@ -285,7 +292,6 @@ void OCLHWCNInnerProductLayer<Dtype>::Forward_ocl(
         NULL, &(events[g]));
     clWaitForEvents(events.size(), events.data());
   }
-  delete param_vals;
 }
 
 template <typename Dtype>
@@ -304,23 +310,18 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_weights(
   weight_diff = weights_h_t.mutable_ocl_diff();
   vector<int> shape(1);
   shape[0] = this->blobs_[0]->shape(1);
-  Blob<chalf>* bias;
-  bias = new Blob<chalf>(shape);
 
-  for (int i = 0; i < bias->count(); ++i)
-    (bias->mutable_cpu_data())[i] = chalf(0);
-
-  const chalf *bias_data = bias->ocl_data();
+  const chalf *bias_data = bias_placeholder.ocl_data();
 
   shape[0] = sizeof(kernel_params) / sizeof(int);
-  Blob<int> *param_vals = new Blob<int>(shape);
+  param_vals.Reshape(shape);
 
-  int *ip_params = param_vals->mutable_cpu_data();
+  int *ip_params = param_vals.mutable_cpu_data();
   for (int i = 0; i < shape[0]; ++i) {
     ip_params[i] = ((int *)params)[i];
   }
   
-  const int* cr_params_b = param_vals->ocl_data();
+  const int* cr_params_b = param_vals.ocl_data();
 
   size_t insize = sizeof(chalf) * bottom[0]->count();
   size_t outsize = sizeof(chalf) * top[0]->count();
@@ -344,12 +345,13 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_weights(
               top_diff[j * top[i]->shape(1) + k];
           else
             top_diff_aux[j * top_aux.shape(1) + k] = 0;
-      top_diff = top_aux.ocl_diff();
+      outsize = top_aux.count();
+      top_diff = top_aux.ocl_diff(outsize);
     } else {
-      top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff());
+      top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff(outsize));
     }
     events.resize(events_size, 0);
-    bottom_data = reinterpret_cast<const chalf *>(bottom[i]->ocl_data());
+    bottom_data = reinterpret_cast<const chalf *>(bottom[i]->ocl_data(insize));
     relu_vals = relu_indices.ocl_data();
 
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
@@ -383,8 +385,6 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_weights(
             * inchannels + j] =
             (Dtype)float(weight_diff[j * weights_h_t.shape(1) + i * 4 + k]);
 
-  delete bias;
-  delete param_vals;
 }
 
 template <typename Dtype>
@@ -394,34 +394,26 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_bias(
   kernel_params *params = &ocl_params_bb_;
   params->backward = 1;
   vector<int> shape(1);
-  shape[0] = top[0]->shape(1);
 
-  Blob<chalf>* weights = new Blob<chalf>(shape);
-
-  for (int i = 0; i < weights->count(); ++i)
-    (weights->mutable_cpu_data())[i] = chalf((float)1.0);
-
-  const chalf *weights_data = weights->ocl_data();
+  const chalf *weights_data = weights_placeholder.ocl_data();
 
   shape[0] = weights_h_t.shape(1);
 
-  Blob<chalf>* bias = new Blob<chalf>(shape);
+  for (int i = 0; i < bias_h.count(); ++i)
+    (bias_h.mutable_cpu_diff())[i] = chalf(0);
 
-  for (int i = 0; i < bias->count(); ++i)
-    (bias->mutable_cpu_data())[i] = chalf(0);
-
-  chalf *bias_diff = bias->mutable_ocl_data();
+  chalf *bias_diff = bias_h.mutable_ocl_diff();
 
   shape[0] = sizeof(kernel_params) / sizeof(int);
-  Blob<int> *param_vals = new Blob<int>(shape);
+  param_vals.Reshape(shape);
 
-  int *ip_params = param_vals->mutable_cpu_data();
+  int *ip_params = param_vals.mutable_cpu_data();
 
   for (int i = 0; i < shape[0]; ++i) {
     ip_params[i] = ((int *)params)[i];
   }
   
-  const int* cr_params_b = param_vals->ocl_data();
+  const int* cr_params_b = param_vals.ocl_data();
 
   size_t outsize = sizeof(chalf) * top[0]->count();
   std::vector<cl_event> events;
@@ -442,9 +434,10 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_bias(
               top_diff[j * top[i]->shape(1) + k];
           else
             top_diff_aux[j * top_aux.shape(1) + k] = 0;
-      top_diff = top_aux.ocl_diff();
+      outsize = top_aux.count();
+      top_diff = top_aux.ocl_diff(outsize);
     } else {
-      top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff());
+      top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff(outsize));
     }
     events.resize(events_size, 0);
     relu_vals = relu_indices.ocl_data();
@@ -466,17 +459,14 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_bias(
         NULL, &(events[g]));
     clWaitForEvents(events.size(), events.data());
   }
-  bias_diff = bias->mutable_cpu_data();
+  bias_diff = bias_h.mutable_cpu_diff();
   Dtype *bias_diff_out = this->blobs_[1]->mutable_cpu_diff();
-  for (int i = 0; i < bias->count() / 4; ++i) {
+  for (int i = 0; i < bias_h.count() / 4; ++i) {
     for (int j = 0; j < 4; ++j)
-      if (i + j * bias->count() / 4 < this->blobs_[1]->count())
-        bias_diff_out[i + j * bias->count() / 4] =
+      if (i + j * bias_h.count() / 4 < this->blobs_[1]->count())
+        bias_diff_out[i + j * bias_h.count() / 4] =
           (Dtype)float(bias_diff[i * 4 + j]);
   }
-  delete bias;
-  delete param_vals;
-  delete weights;
 }
 
 template <typename Dtype>
@@ -506,23 +496,18 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_data(
   vector<int> shape(1);
   shape[0] = this->K_;
 
-  Blob<chalf>* bias = new Blob<chalf>(shape);
-
-  for (int i = 0; i < bias->count(); ++i)
-    (bias->mutable_cpu_data())[i] = chalf(0);
-
-  const chalf *bias_data = bias->ocl_data();
+  const chalf *bias_data = bias_placeholder.ocl_data();
 
   shape[0] = sizeof(kernel_params) / sizeof(int);
-  Blob<int> *param_vals = new Blob<int>(shape);
+  param_vals.Reshape(shape);
 
-  int *ip_params = param_vals->mutable_cpu_data();
+  int *ip_params = param_vals.mutable_cpu_data();
 
   for (int i = 0; i < shape[0]; ++i) {
     ip_params[i] = ((int *)params)[i];
   }
   
-  const int* cr_params_b = param_vals->ocl_data();
+  const int* cr_params_b = param_vals.ocl_data();
 
   size_t insize = sizeof(chalf) * bottom[0]->count();
   size_t outsize = sizeof(chalf) * top[0]->count();
@@ -546,12 +531,14 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_data(
               top_diff[j * top[i]->shape(1) + k];
           else
             top_diff_aux[j * top_aux.shape(1) + k] = 0;
-      top_diff = top_aux.ocl_diff();
+      outsize = top_aux.count();
+      top_diff = top_aux.ocl_diff(outsize);
     } else {
-      top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff());
+      top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff(outsize));
     }
     events.resize(events_size, 0);
-    bottom_diff = reinterpret_cast<chalf *>(bottom[i]->mutable_ocl_diff());
+    bottom_diff =
+      reinterpret_cast<chalf *>(bottom[i]->mutable_ocl_diff(insize));
     relu_vals = relu_indices.ocl_data();
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
       (const void *)&top_diff);
@@ -571,8 +558,6 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_data(
         NULL, &(events[g]));
     clWaitForEvents(events.size(), events.data());
   }
-  delete bias;
-  delete param_vals;
 }
 
 

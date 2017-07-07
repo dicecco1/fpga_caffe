@@ -84,10 +84,12 @@ class OCLCRHWCNLayer : public ConvolutionLayer<Dtype> {
   Blob<int> relu_indices; 
   Blob<chalf> weights_h;
   Blob<chalf> weights_h_r;
-  Blob<chalf> bias_h, bias_null;
+  Blob<chalf> bias_h, bias_placeholder, weights_placeholder;
+  Blob<int> param_vals;
   int conv_out_channels_;
   int conv_in_channels_;
   int conv_out_spatial_dim_;
+  int weight_pad_;
 };
 #endif
 

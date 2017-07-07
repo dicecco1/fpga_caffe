@@ -60,8 +60,9 @@ class OCLHWCNInnerProductLayer : public InnerProductLayer<Dtype> {
   Blob<int> relu_indices;
   Blob<chalf> weights_h;
   Blob<chalf> weights_h_t;
-  Blob<chalf> bias_h;
+  Blob<chalf> bias_h, bias_placeholder, weights_placeholder;
   Blob<chalf> top_aux;
+  Blob<int> param_vals;
 };
 #endif
 
