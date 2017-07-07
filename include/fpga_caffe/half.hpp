@@ -288,7 +288,136 @@ chalf operator*(chalf T, chalf U) {
   return chalf(float(T) * float(U));
 #endif
 }
+
 #ifdef SYNTHESIS
+#if MANT_SIZE == 1
+ap_uint<3> LOD(ap_uint<MANT_SIZE + 2> sum_cpath, ap_uint<1> *zero_flag){
+  ap_uint<1> a[MANT_SIZE + 2];
+  a[2] = (sum_cpath >> 2) & 0x1;
+  a[1] = (sum_cpath >> 1) & 0x1;
+  a[0] = (sum_cpath >> 0) & 0x1;
+
+  *zero_flag = ~a[2] & ~a[1] & ~a[0];
+  ap_uint<3> result;
+  ap_uint<3> b[3];
+  b[2] = 0;
+  b[1] = ~a[2] & ~a[1] & (a[0]);
+  b[0] = ~a[2] & a[1];
+  result = ((b[2] & 0x1) << 2) | ((b[1] & 0x1) << 1) | (b[0] & 0x1);
+  return result;
+}
+#endif
+
+#if MANT_SIZE == 2
+ap_uint<3> LOD(ap_uint<MANT_SIZE + 2> sum_cpath, ap_uint<1> *zero_flag){
+  ap_uint<1> a[MANT_SIZE + 2];
+  a[3] = (sum_cpath >> 3) & 0x1;
+  a[2] = (sum_cpath >> 2) & 0x1;
+  a[1] = (sum_cpath >> 1) & 0x1;
+  a[0] = (sum_cpath >> 0) & 0x1;
+
+  *zero_flag = ~a[3] & ~a[2] & ~a[1] & ~a[0];
+  ap_uint<3> result;
+  ap_uint<3> b[3];
+  b[2] = 0;
+  b[1] = ~a[3] & ~a[2] & (a[1] | a[0]);
+  b[0] = ~a[3] & (a[2] | ( ~a[1] & (a[0])));
+  result = ((b[2] & 0x1) << 2) | ((b[1] & 0x1) << 1) | (b[0] & 0x1);
+  return result;
+}
+#endif
+
+#if MANT_SIZE == 3 
+ap_uint<3> LOD(ap_uint<MANT_SIZE + 2> sum_cpath, ap_uint<1> *zero_flag){
+  ap_uint<1> a[MANT_SIZE + 2];
+  a[4] = (sum_cpath >> 4) & 0x1;
+  a[3] = (sum_cpath >> 3) & 0x1;
+  a[2] = (sum_cpath >> 2) & 0x1;
+  a[1] = (sum_cpath >> 1) & 0x1;
+  a[0] = (sum_cpath >> 0) & 0x1;
+
+  *zero_flag = ~a[4] & ~a[3] & ~a[2] & ~a[1] & ~a[0];
+  ap_uint<3> result;
+  ap_uint<3> b[3];
+  b[2] = ~a[4] & ~a[3] & ~a[2] & ~a[1] & (a[0]);
+  b[1] = ~a[4] & ~a[3] & (a[2] | a[1]);
+  b[0] = ~a[4] & (a[3] | ( ~a[2] & (a[1])));
+  result = ((b[2] & 0x1) << 2) | ((b[1] & 0x1) << 1) | (b[0] & 0x1);
+  return result;
+}
+#endif
+
+#if MANT_SIZE == 4
+ap_uint<3> LOD(ap_uint<MANT_SIZE + 2> sum_cpath, ap_uint<1> *zero_flag){
+  ap_uint<1> a[MANT_SIZE + 2];
+  a[5] = (sum_cpath >> 5) & 0x1;
+  a[4] = (sum_cpath >> 4) & 0x1;
+  a[3] = (sum_cpath >> 3) & 0x1;
+  a[2] = (sum_cpath >> 2) & 0x1;
+  a[1] = (sum_cpath >> 1) & 0x1;
+  a[0] = (sum_cpath >> 0) & 0x1;
+
+  *zero_flag = ~a[5] & ~a[4] & ~a[3] & ~a[2] & ~a[1] & ~a[0];
+  ap_uint<3> result;
+  ap_uint<3> b[3];
+  b[2] = ~a[5] & ~a[4] & ~a[3] & ~a[2] & (a[1] | a[0]);
+  b[1] = ~a[5] & ~a[4] & (a[3] | a[2]);
+  b[0] = ~a[5] & (a[4] | ( ~a[3] & (a[2] | (~a[1] & (a[0])))));
+  result = ((b[2] & 0x1) << 2) | ((b[1] & 0x1) << 1) | (b[0] & 0x1);
+  return result;
+}
+#endif
+
+#if MANT_SIZE == 5
+ap_uint<3> LOD (ap_uint<MANT_SIZE + 2> sum_cpath, ap_uint<1> *zero_flag){
+#pragma HLS INLINE
+  ap_uint<1> a[MANT_SIZE + 2];
+  a[6] = (sum_cpath >> 6) & 0x1;
+  a[5] = (sum_cpath >> 5) & 0x1;
+  a[4] = (sum_cpath >> 4) & 0x1;
+  a[3] = (sum_cpath >> 3) & 0x1;
+  a[2] = (sum_cpath >> 2) & 0x1;
+  a[1] = (sum_cpath >> 1) & 0x1;
+  a[0] = (sum_cpath >> 0) & 0x1;
+
+  *zero_flag = ~a[6] & ~a[5] & ~a[4] & ~a[3] & ~a[2] & ~a[1] & ~a[0];
+  ap_uint<3> result;
+  ap_uint<3> b[3];
+  b[2] = ~a[6] & ~a[5] & ~a[4] & ~a[3] & (a[2] | a[1] | a[0]);
+  b[1] = ~a[6] & ~a[5] & ((a[4] | a[3]) | (~a[4] & ~a[3] & ~a[2] & ~a[1] &
+         (a[0])));
+  b[0] = ~a[6] & (a[5] | ( ~a[4] & (a[3] | (~a[2] & (a[1])))));
+  result = ((b[2] & 0x1) << 2) | ((b[1] & 0x1) << 1) | (b[0] & 0x1);
+  return result;
+}
+#endif
+
+#if MANT_SIZE == 6
+ap_uint<3> LOD (ap_uint<MANT_SIZE + 2> sum_cpath, ap_uint<1> * zero_flag){
+#pragma HLS INLINE
+  ap_uint<1> a[MANT_SIZE + 2];
+  a[7] = (sum_cpath >> 7) & 0x1;
+  a[6] = (sum_cpath >> 6) & 0x1;
+  a[5] = (sum_cpath >> 5) & 0x1;
+  a[4] = (sum_cpath >> 4) & 0x1;
+  a[3] = (sum_cpath >> 3) & 0x1;
+  a[2] = (sum_cpath >> 2) & 0x1;
+  a[1] = (sum_cpath >> 1) & 0x1;
+  a[0] = (sum_cpath >> 0) & 0x1;
+
+  *zero_flag = ~a[7] & ~a[6] & ~a[5] & ~a[4] & ~a[3] & ~a[2] & ~a[1] & ~a[0];
+  ap_uint<3> result;
+  ap_uint<3> b[3];
+  b[2] = ~a[7] & ~a[6] & ~a[5] & ~a[4] & (a[3] | a[2] | a[1] | a[0]);
+  b[1] = ~a[7] & ~a[6] & ((a[5] | a[4]) | (~a[5] & ~a[4] & ~a[3] & ~a[2] &
+         (a[1] | a[0])));
+  b[0] = ~a[7] & (a[6] | (~a[5] & (a[4] | (~a[3] & (a[2] |
+         (~a[1] | a[0]))))));
+  result = ((b[2] & 0x1) << 2) | ((b[1] & 0x1) << 1) | (b[0] & 0x1);
+  return result;
+}
+#endif
+
 #if MANT_SIZE == 7
 ap_uint<4> LOD(ap_uint<MANT_SIZE + 2> sum_cpath, ap_uint<1> *zero_flag) {
 #pragma HLS INLINE
@@ -573,143 +702,7 @@ ap_uint<4> LOD(ap_uint<MANT_SIZE + 2> sum_cpath, ap_uint<1> *zero_flag) {
 #endif
 
 #endif
-/*
-#ifdef SYNTHESIS
-ap_uint<5> LOD(ap_uint<24> sum_cpath) {
-#pragma HLS INLINE 
-  ap_uint<5> one_pos;
-  ap_uint<5> b_3_o, b_2_o, b_1_o, b_0_o;
-  ap_uint<1> a[24];
-  ap_uint<5> b_3[5];
-  ap_uint<5> b_2[5];
-  ap_uint<5> b_1[5];
-  ap_uint<5> b_0[5];
-  for (int i = 0; i < 24; ++i)
-    a[i] = 0;
-#if MANT_SIZE >= 22
-  a[23] = (sum_cpath >> 23) & 0x1;
-#endif
-#if MANT_SIZE >= 21
-  a[22] = (sum_cpath >> 22) & 0x1;
-#endif
-#if MANT_SIZE >= 20
-  a[21] = (sum_cpath >> 21) & 0x1;
-#endif
-#if MANT_SIZE >= 19
-  a[20] = (sum_cpath >> 20) & 0x1;
-#endif
-#if MANT_SIZE >= 18
-  a[19] = (sum_cpath >> 19) & 0x1;
-#endif
-#if MANT_SIZE >= 17
-  a[18] = (sum_cpath >> 18) & 0x1;
-#endif
-#if MANT_SIZE >= 16
-  a[17] = (sum_cpath >> 17) & 0x1;
-#endif
-#if MANT_SIZE >= 15
-  a[16] = (sum_cpath >> 16) & 0x1;
-#endif
-#if MANT_SIZE >= 14
-  a[15] = (sum_cpath >> 15) & 0x1;
-#endif
-#if MANT_SIZE >= 13
-  a[14] = (sum_cpath >> 14) & 0x1;
-#endif
-#if MANT_SIZE >= 12
-  a[13] = (sum_cpath >> 13) & 0x1;
-#endif
-#if MANT_SIZE >= 11
-  a[12] = (sum_cpath >> 12) & 0x1;
-#endif
-#if MANT_SIZE >= 10
-  a[11] = (sum_cpath >> 11) & 0x1;
-#endif
-#if MANT_SIZE >= 9 
-  a[10] = (sum_cpath >> 10) & 0x1;
-#endif
-#if MANT_SIZE >= 8
-  a[9] = (sum_cpath >> 9) & 0x1;
-#endif
-#if MANT_SIZE >= 7
-  a[8] = (sum_cpath >> 8) & 0x1;
-#endif
-#if MANT_SIZE >= 6
-  a[7] = (sum_cpath >> 7) & 0x1;
-#endif
-#if MANT_SIZE >= 5
-  a[6] = (sum_cpath >> 6) & 0x1;
-#endif
-#if MANT_SIZE >= 4 
-  a[5] = (sum_cpath >> 5) & 0x1;
-#endif
-#if MANT_SIZE >= 3
-  a[4] = (sum_cpath >> 4) & 0x1;
-#endif
-#if MANT_SIZE >= 2
-  a[3] = (sum_cpath >> 3) & 0x1;
-#endif
-#if MANT_SIZE >= 1
-  a[2] = (sum_cpath >> 2) & 0x1;
-#endif
-  a[1] = (sum_cpath >> 1) & 0x1;
-  a[0] = (sum_cpath >> 0) & 0x1;
 
-  ap_uint<1> b_3_sel = a[23] | a[22] | a[21] | a[20] | a[19] | a[18];
-  ap_uint<1> b_2_sel = a[17] | a[16] | a[15] | a[14] | a[13] | a[12];
-  ap_uint<1> b_1_sel = a[11] | a[10] | a[9] | a[8] | a[7] | a[6];
-  ap_uint<1> b_0_sel = a[5] | a[4] | a[3] | a[2] | a[1] | a[0];
-
-  b_3[4] = 1;
-  b_3[3] = 0;
-  b_3[2] = a[23] | a[22] | a[21] | a[20];
-  b_3[1] = a[23] | a[22] | ~a[23] & ~a[22] & ~a[21] & ~a[20] & (a[19] | a[18]);
-  b_3[0] = a[23] | (~a[22] & (a[21] | (~a[20] & a[19])));
-
-  b_2[4] = a[17] | a[16];
-  b_2[3] = ~a[17] & ~a[16] & (a[15] | a[14] | a[13] | a[12]);
-  b_2[2] = b_2[3];
-  b_2[1] = ~a[17] & ~a[16] & (a[15] | a[14]);
-  b_2[0] = a[17] | (~a[16] & (a[15] | (~a[14] & a[13])));
-
-  b_1[4] = 0;
-  b_1[3] = a[11] | a[10] | a[9] | a[8];
-  b_1[2] = ~a[11] & ~a[10] & ~a[9] & ~a[8] & (a[7] | a[6]);
-  b_1[1] = b_1[2] | a[11] | a[10];
-  b_1[0] = a[11] | (~a[10] & (a[9] | (~a[8] & a[7])));
-
-  b_0[4] = 0;
-  b_0[3] = 0;
-  b_0[2] = a[5] | a[4];
-  b_0[1] = ~a[5] & ~a[4] & (a[3] | a[2]);
-  b_0[0] = a[5] | (~a[4] & (a[3] | (~a[2] & a[1])));
-
-  b_3_o = ((b_3[4] & 0x1) << 4) | ((b_3[3] & 0x1) << 3) |
-    ((b_3[2] & 0x1) << 2) | ((b_3[1] & 0x1) << 1) | (b_3[0] & 0x1);
-
-  b_2_o = ((b_2[4] & 0x1) << 4) | ((b_2[3] & 0x1) << 3) |
-    ((b_2[2] & 0x1) << 2) | ((b_2[1] & 0x1) << 1) | (b_2[0] & 0x1);
-
-  b_1_o = ((b_1[4] & 0x1) << 4) | ((b_1[3] & 0x1) << 3) |
-    ((b_1[2] & 0x1) << 2) | ((b_1[1] & 0x1) << 1) | (b_1[0] & 0x1);
-
-  b_0_o = ((b_0[4] & 0x1) << 4) | ((b_0[3] & 0x1) << 3) |
-    ((b_0[2] & 0x1) << 2) | ((b_0[1] & 0x1) << 1) | (b_0[0] & 0x1);
-
-  one_pos = 31;
-  if (b_3_sel)
-    one_pos = b_3_o;
-  else if (b_2_sel)
-    one_pos = b_2_o;
-  else if (b_1_sel)
-    one_pos = b_1_o;
-  else if (b_0_sel)
-    one_pos = b_0_o;
-
-  return one_pos;
-}
-#endif
-*/
 #ifndef SYNTHESIS
 inline
 #endif
