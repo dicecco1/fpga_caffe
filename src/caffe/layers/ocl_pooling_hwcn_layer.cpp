@@ -82,7 +82,7 @@ void OCLPoolingHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       tchannel--;
     burstchannels_ = tchannel;
   }
-
+  forward_params->backward = 0;
   forward_params->rpofm = 0;
   forward_params->xtile_pad = 0;
   forward_params->burstydim = 0;
@@ -148,7 +148,6 @@ template <typename Dtype>
 void OCLPoolingHWCNLayer<Dtype>::Forward_ocl(
     const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
   kernel_params *params = &ocl_params_;
-  params->backward = 0;
 
   vector<int> shape(1);
   shape[0] = sizeof(kernel_params) / sizeof(int);

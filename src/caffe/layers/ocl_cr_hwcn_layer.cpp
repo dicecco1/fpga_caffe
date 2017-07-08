@@ -189,6 +189,8 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   forward_params->numgroups = this->group_;
   forward_params->fc = 0;
   forward_params->relu = cr_param.relu();
+  forward_params->pool = 0;
+  forward_params->pksize = 2;
 
   // Backward params
   this->bottom_shape_ = &bottom[0]->shape();
@@ -226,7 +228,8 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   backward_params->numgroups = this->group_;
   backward_params->fc = 0;
   backward_params->relu = cr_param.relu();
-
+  backward_params->pool = 0;
+  backward_params->pksize = 2;
   // Set bias update parameters
   kernel_params *bias_params = &ocl_params_bb_;
 
@@ -243,6 +246,8 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   bias_params->numgroups = this->group_;
   bias_params->fc = 0;
   bias_params->relu = cr_param.relu();
+  bias_params->pool = 0;
+  bias_params->pksize = 2;
 
   vector<int> shape(4);
   shape[0] = bottom[0]->shape(0);
@@ -254,6 +259,21 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 
   for (int i = 0; i < weights_placeholder.count(); ++i)
     (weights_placeholder.mutable_cpu_data())[i] = chalf((float)1.0);
+
+  shape = (this->blobs_[0])->shape();
+
+  shape[1] = weight_pad_;
+
+  weights_h.Reshape(shape);
+
+  shape = (this->blobs_[0])->shape();
+
+  if (shape[0] % 16 != 0)
+    shape[0] = ((shape[0] / 16) + 1) * 16;
+
+  weights_h_r.Reshape(shape);
+
+  bias_h.Reshape((this->blobs_[1])->shape());
 }
 
 template <typename Dtype>
@@ -272,21 +292,6 @@ void OCLCRHWCNLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   }
 
   vector<int> shape(4);
-
-  shape = (this->blobs_[0])->shape();
-
-  shape[1] = weight_pad_;
-
-  weights_h.Reshape(shape);
-
-  shape = (this->blobs_[0])->shape();
-
-  if (shape[0] % 16 != 0)
-    shape[0] = ((shape[0] / 16) + 1) * 16;
-
-  weights_h_r.Reshape(shape);
-
-  bias_h.Reshape((this->blobs_[1])->shape());
 
   // Since it's HWCN, N will be shape(3) and should be divisible by 32 
 
@@ -344,7 +349,7 @@ void OCLCRHWCNLayer<Dtype>::copyToHalfWeights(const Dtype *input,
               + k;
             int out_idx = o * ksize * ksize * ic_new +
               (n * ksize * ksize + k) * bc_new + m * 4 + j;
-            if ((n * bc + m + j * (bc / 4)) < ic) {
+            if (m < bc / 4) {
               output[out_idx] = chalf((float)input[in_idx]);
             } else {
               output[out_idx] = chalf(0);
@@ -606,8 +611,6 @@ template <typename Dtype>
 void OCLCRHWCNLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
   kernel_params *params = &ocl_params_;
-  int wsize = params->outchannels * params->numgroups * params->inchannels;
-
   copyToHalfWeights(this->blobs_[0]->cpu_data(),
       weights_h.mutable_cpu_data(), ocl_params_);
   copyToHalf(this->blobs_[1]->mutable_cpu_data(), bias_h.mutable_cpu_data(),

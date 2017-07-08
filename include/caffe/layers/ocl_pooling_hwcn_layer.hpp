@@ -37,6 +37,7 @@ class OCLPoolingHWCNLayer : public PoolingLayer<Dtype> {
   Blob<chalf> weights_placeholder;
   Blob<chalf> bias_placeholder;
   Blob<int> param_vals;
+  int num_;
 };
 #endif
 

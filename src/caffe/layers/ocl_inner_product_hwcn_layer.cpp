@@ -85,6 +85,8 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
 
   params->burstchannels = burstchannels_;
   params->rpo = params->inchannels / burstchannels_;
+  params->pool = 0;
+  params->pksize = 2;
 
   // Backward params
   kernel_params *backward_params = &ocl_params_bi_;
@@ -128,7 +130,8 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
   backward_params->numgroups = 1;
   backward_params->fc = 1;
   backward_params->relu = cr_param.relu();
-
+  backward_params->pool = 0;
+  backward_params->pksize = 2;
   // Set bias update parameters
   kernel_params *bias_params = &ocl_params_bb_;
 
@@ -145,7 +148,8 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
   bias_params->numgroups = 1;
   bias_params->fc = 1;
   bias_params->relu = cr_param.relu();
-
+  bias_params->pool = 0;
+  bias_params->pksize = 2;
   vector<int> shape(1);
   shape[0] = this->M_;
   weights_placeholder.Reshape(shape);
