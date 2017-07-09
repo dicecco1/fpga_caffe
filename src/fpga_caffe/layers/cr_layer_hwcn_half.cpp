@@ -392,8 +392,8 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 #pragma HLS DEPENDENCE variable wUpdate inter false
               if (!mode) {
                 if (iter == img_fact) {
-                  counter_fw++;
                   if (w_off == burst_fact - 1) {
+                    counter_fw = 0;
                     w_off = 0;
                     if (xdim_off == xksize - 1) {
                       xdim_off = 0;
@@ -402,6 +402,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                       xdim_off++;
                     }
                   } else {
+                    counter_fw++;
                     w_off++;
                   }
                   iter = 0;
