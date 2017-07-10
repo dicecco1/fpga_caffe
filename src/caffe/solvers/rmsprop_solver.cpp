@@ -21,6 +21,7 @@ void RMSPropSolver<Dtype>::ComputeUpdateValue(int param_id, Dtype rate) {
   Dtype local_rate = rate * net_params_lr[param_id];
 
   switch (Caffe::mode()) {
+  case Caffe::OCL:
   case Caffe::CPU:
     // compute square of gradient in update
     caffe_powx(net_params[param_id]->count(),

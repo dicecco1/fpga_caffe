@@ -512,7 +512,7 @@ void OCLCRHWCNLayer<Dtype>::backward_data(const vector<Blob<Dtype>*>& top,
   for (int i = 0; i < bottom.size(); i++) {
     events.resize(events_size, 0);
     bottom_diff =
-      reinterpret_cast<chalf *>(bottom[i]->mutable_ocl_diff(insize));
+      reinterpret_cast<chalf *>(bottom[i]->mutable_ocl_diff(1, insize));
     top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff(outsize));
     relu_vals = relu_indices.ocl_data();
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),

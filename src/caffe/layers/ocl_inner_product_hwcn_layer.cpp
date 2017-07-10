@@ -542,7 +542,7 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_data(
     }
     events.resize(events_size, 0);
     bottom_diff =
-      reinterpret_cast<chalf *>(bottom[i]->mutable_ocl_diff(insize));
+      reinterpret_cast<chalf *>(bottom[i]->mutable_ocl_diff(1, insize));
     relu_vals = relu_indices.ocl_data();
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
       (const void *)&top_diff);
@@ -574,6 +574,7 @@ void OCLHWCNInnerProductLayer<Dtype>::Backward_ocl(
 
   for (int i = 0; i < bottom[0]->count(); ++i)
     (bottom[0]->mutable_cpu_diff())[i] = 0;
+
   if (propagate_down[0])
     backward_data(top, propagate_down, bottom);
 
