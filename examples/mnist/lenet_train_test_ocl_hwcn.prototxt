@@ -87,17 +87,14 @@ layer {
     kernel_size: 5
     stride: 1
     weight_filler {
-      type: "xavier"
+      type: "msra"
     }
     bias_filler {
       type: "constant"
     }
-    engine: OCL
-    subengine: DIRECT
   }
-  ocl_enable: true
   cr_param {
-    relu: 0 
+    relu: 1
   }
 }
 layer {
@@ -127,17 +124,14 @@ layer {
     kernel_size: 5
     stride: 1
     weight_filler {
-      type: "xavier"
+      type: "msra"
     }
     bias_filler {
       type: "constant"
     }
-    engine: OCL
-    subengine: DIRECT
   }
-  ocl_enable: true
   cr_param {
-    relu: 0 
+    relu: 1 
   }
 }
 layer {
@@ -165,7 +159,7 @@ layer {
   inner_product_param {
     num_output: 512 
     weight_filler {
-      type: "xavier"
+      type: "msra"
     }
     bias_filler {
       type: "constant"
