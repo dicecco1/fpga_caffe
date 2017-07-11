@@ -13,6 +13,7 @@ namespace caffe {
  * @brief Ignores bottom blobs while producing no top blobs. (This is useful
  *        to suppress outputs during testing.)
  */
+#ifdef USE_OCL
 template <typename Dtype>
 class XCLProgramLayer : public Layer<Dtype> {
  public:
@@ -32,12 +33,12 @@ class XCLProgramLayer : public Layer<Dtype> {
       const vector<Blob<Dtype>*>& top) {}
   virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
-#ifdef USE_OCL
   virtual void Forward_ocl(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
-#endif
   bool program_;
 };
+
+#endif
 
 }  // namespace caffe
 

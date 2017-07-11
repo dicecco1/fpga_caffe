@@ -2,7 +2,9 @@
 #define CAFFE_COMMON_HPP_
 
 #include <boost/shared_ptr.hpp>
+#ifdef USE_OCL
 #include <CL/opencl.h>
+#endif
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 

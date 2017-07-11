@@ -571,11 +571,13 @@ void Layer<Dtype>::ToProto(LayerParameter* param, bool write_diff) {
   }
 }
 
+#ifdef USE_OCL
 // Added by Griffin
 template <typename Dtype>
 cl_program Layer<Dtype>::ocl_layer_program = NULL;
 template <typename Dtype>
 cl_kernel  Layer<Dtype>::ocl_kernel  = NULL;
+#endif
 
 }  // namespace caffe
 

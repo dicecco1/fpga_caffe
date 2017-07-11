@@ -6,6 +6,8 @@
 
 namespace caffe {
 
+#ifdef USE_OCL
+
 template <typename Dtype>
 void XCLProgramLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top) {
@@ -49,5 +51,6 @@ void XCLProgramLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 
 INSTANTIATE_CLASS(XCLProgramLayer);
 REGISTER_LAYER_CLASS(XCLProgram);
+#endif
 
 }  // namespace caffe
