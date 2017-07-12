@@ -59,10 +59,10 @@ void GlobalInit(int* pargc, char*** pargv) {
   ::google::InstallFailureSignalHandler();
 }
 
-int convertToString(const char *filename, char **str) {
+int convertToString(const std::string filename, char **str) {
   size_t size;
-
-  FILE *f = fopen(filename, "rb");
+  
+  FILE *f = fopen(filename.c_str(), "rb");
 
   if (f != NULL) {
     fseek(f, 0, SEEK_END);

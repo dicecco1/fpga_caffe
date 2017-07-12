@@ -23,10 +23,11 @@ void XCLProgramLayer<Dtype>::Forward_ocl(const vector <Blob<Dtype>*>& bottom,
 
     string path(".build_release/opencl/src/caffe/layers/");
 
-    const char *filename = (path + xcl_param.xcl_name()).c_str();
-
+    //const char *filename = (path + xcl_param.xcl_name()).c_str();
+    //std::cout<<path + xcl_param.xcl_name()<<std::endl;
     char *sourceStr;
-    size_t sourceSize = caffe::convertToString(filename, &sourceStr);
+    size_t sourceSize = caffe::convertToString(path + xcl_param.xcl_name(),
+        &sourceStr);
 
     clReleaseKernel(this->ocl_kernel);
     clReleaseProgram(this->ocl_layer_program);
