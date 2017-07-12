@@ -601,31 +601,35 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                   memcpy(pool_inbuf[h * 3 + w], input + in_idx,
                       sizeof(chalf16) * img_fact * burstchannels);
                 else
-                  for (int n = 0; n < img_fact * burstchannels; ++n)
+                  for (int n = 0; n < (img_fact * burstchannels) >> 1; ++n)
 #pragma HLS pipeline
-                    pool_inbuf[h * 3 + w][n] = chalf(CHALF_MIN_VAL);
+                    for (int j = 0; j < 2; ++j)
+                      pool_inbuf[h * 3 + w][n * 2 + j] = chalf(CHALF_MIN_VAL);
               }
             }
-            POOL_LOOP: for (int n = 0; n < img_fact * burstchannels; ++n) {
+            POOL_LOOP: for (int n = 0; n < (img_fact * burstchannels) >> 1;
+              ++n) {
 #pragma HLS pipeline
-              short16 mask;
-              pool_outbuf[n] = max9(pool_inbuf, n, &mask);
-              out_mask[n * 16 + 0] = mask.s0;
-              out_mask[n * 16 + 1] = mask.s1;
-              out_mask[n * 16 + 2] = mask.s2;
-              out_mask[n * 16 + 3] = mask.s3;
-              out_mask[n * 16 + 4] = mask.s4;
-              out_mask[n * 16 + 5] = mask.s5;
-              out_mask[n * 16 + 6] = mask.s6;
-              out_mask[n * 16 + 7] = mask.s7;
-              out_mask[n * 16 + 8] = mask.s8;
-              out_mask[n * 16 + 9] = mask.s9;
-              out_mask[n * 16 + 10] = mask.sa;
-              out_mask[n * 16 + 11] = mask.sb;
-              out_mask[n * 16 + 12] = mask.sc;
-              out_mask[n * 16 + 13] = mask.sd;
-              out_mask[n * 16 + 14] = mask.se;
-              out_mask[n * 16 + 15] = mask.sf;
+              for (int j = 0; j < 2; ++j) {
+                short16 mask;
+                pool_outbuf[n * 2 + j] = max9(pool_inbuf, n * 2 + j, &mask);
+                out_mask[(n * 2 + j) * 16 + 0] = mask.s0;
+                out_mask[(n * 2 + j) * 16 + 1] = mask.s1;
+                out_mask[(n * 2 + j) * 16 + 2] = mask.s2;
+                out_mask[(n * 2 + j) * 16 + 3] = mask.s3;
+                out_mask[(n * 2 + j) * 16 + 4] = mask.s4;
+                out_mask[(n * 2 + j) * 16 + 5] = mask.s5;
+                out_mask[(n * 2 + j) * 16 + 6] = mask.s6;
+                out_mask[(n * 2 + j) * 16 + 7] = mask.s7;
+                out_mask[(n * 2 + j) * 16 + 8] = mask.s8;
+                out_mask[(n * 2 + j) * 16 + 9] = mask.s9;
+                out_mask[(n * 2 + j) * 16 + 10] = mask.sa;
+                out_mask[(n * 2 + j) * 16 + 11] = mask.sb;
+                out_mask[(n * 2 + j) * 16 + 12] = mask.sc;
+                out_mask[(n * 2 + j) * 16 + 13] = mask.sd;
+                out_mask[(n * 2 + j) * 16 + 14] = mask.se;
+                out_mask[(n * 2 + j) * 16 + 15] = mask.sf;
+              }
             }
             int out_idx = ((ph * pooled_width + pw) * inchannels +
                 c * burstchannels) * img_fact;
