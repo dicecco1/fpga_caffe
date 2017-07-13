@@ -150,8 +150,8 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS ARRAY_PARTITION variable=wbuf complete dim=1
 
   // Bias buffer
-  chalf biasbuf[4096];
-DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
+  chalf biasbuf[OCFACT][(6144 / OCFACT)];
+#pragma HLS ARRAY_PARTITION variable=biasbuf complete dim=1
 
   chalf16 pool_inbuf[9][16 * 16];
 #pragma HLS ARRAY_PARTITION variable=pool_inbuf complete dim=1
@@ -230,7 +230,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
   short burstchannels = params[2];
   short rpo = params[3];
   short ocrdfact = params[4];
-  short burstoc = params[5];
+  ap_uint<9> burstoc = params[5];
   ap_uint<10> ydim = params[6];
   ap_uint<10> xdim = params[7];
   ap_uint<5> ksize = params[9];
@@ -262,12 +262,28 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
     (inchannels >> 4) + 1;
   short wc_fact = (burstchannels % 16 == 0) ? (burstchannels >> 4) :
     (burstchannels >> 4) + 1;
-  int bias_offset = outchannels * group_idx;
-  memcpy(biasbuf, bias + bias_offset, sizeof(chalf) * outchannels);
   short out_div = ocrdfact / OCFACT;
   short ofm_iters = (ocrdfact % OCFACT == 0) ? out_div : out_div + 1;
- 
-  if (pool == 0) { 
+  
+  if (pool == 0) {
+    if (backward == 0) {
+      for (int o = 0; o < ofm_iters; ++o) {
+        for (int k = 0; k < OCFACT; ++k) {
+          int bias_offset = (o * OCFACT + k) * burstoc + outchannels
+            * group_idx;
+          int bias_size = burstoc;
+          if ((o * OCFACT + k) * burstoc + burstoc > outchannels) {
+            short new_burst = outchannels - (o * OCFACT + k) * burstoc;
+            bias_size = new_burst;
+          }
+          bool write_en = ((o * OCFACT + k) * burstoc < outchannels);
+          if (write_en) {
+            memcpy(biasbuf[k] + o * burstoc, bias + bias_offset,
+              sizeof(chalf) * bias_size);
+          }
+        }
+      }
+    }
     for (int n = 0; n < rpo; ++n) {
       for (int y = 0; y < ydim_out; ++y) {
         for (int x = 0; x < xdim_out; ++x) {
@@ -339,7 +355,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 #pragma HLS pipeline
                   for (int k = 0; k < OCFACT; ++k) {
                     outbuf[k][b * img_fact + i] =
-                      biasbuf[(o * OCFACT + k) * burstoc + b];
+                      biasbuf[k][o * burstoc + b];
                   }
                 }
               }
@@ -362,8 +378,9 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 
                 out_idx = mode_select_idx(out_idx_f, out_idx_b, mode);
                 out_size = mode_select_size(out_size_f, out_size_b, mode);
+                bool write_en = ((o * OCFACT + k) * burstoc < outchannels);
 
-                if ((o * OCFACT + k) * burstoc < outchannels)
+                if (write_en)
                   memcpy(outbuf[k], output + out_idx, sizeof(chalf16) *
                       out_size);
               }
@@ -622,35 +639,31 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                   memcpy(pool_inbuf[h * 3 + w], input + in_idx,
                       sizeof(chalf16) * img_fact * burstchannels);
                 else
-                  for (int n = 0; n < (img_fact * burstchannels) >> 1; ++n)
+                  for (int n = 0; n < img_fact * burstchannels; ++n)
 #pragma HLS pipeline
-                    for (int j = 0; j < 2; ++j)
-                      pool_inbuf[h * 3 + w][n * 2 + j] = chalf(CHALF_MIN_VAL);
+                    pool_inbuf[h * 3 + w][n] = chalf(CHALF_MIN_VAL);
               }
             }
-            POOL_LOOP: for (int n = 0; n < (img_fact * burstchannels) >> 1;
-              ++n) {
+            POOL_LOOP: for (int n = 0; n < (img_fact * burstchannels); ++n) {
 #pragma HLS pipeline
-              for (int j = 0; j < 2; ++j) {
-                short16 mask;
-                pool_outbuf[n * 2 + j] = max9(pool_inbuf, n * 2 + j, &mask);
-                out_mask[(n * 2 + j) * 16 + 0] = mask.s0;
-                out_mask[(n * 2 + j) * 16 + 1] = mask.s1;
-                out_mask[(n * 2 + j) * 16 + 2] = mask.s2;
-                out_mask[(n * 2 + j) * 16 + 3] = mask.s3;
-                out_mask[(n * 2 + j) * 16 + 4] = mask.s4;
-                out_mask[(n * 2 + j) * 16 + 5] = mask.s5;
-                out_mask[(n * 2 + j) * 16 + 6] = mask.s6;
-                out_mask[(n * 2 + j) * 16 + 7] = mask.s7;
-                out_mask[(n * 2 + j) * 16 + 8] = mask.s8;
-                out_mask[(n * 2 + j) * 16 + 9] = mask.s9;
-                out_mask[(n * 2 + j) * 16 + 10] = mask.sa;
-                out_mask[(n * 2 + j) * 16 + 11] = mask.sb;
-                out_mask[(n * 2 + j) * 16 + 12] = mask.sc;
-                out_mask[(n * 2 + j) * 16 + 13] = mask.sd;
-                out_mask[(n * 2 + j) * 16 + 14] = mask.se;
-                out_mask[(n * 2 + j) * 16 + 15] = mask.sf;
-              }
+              short16 mask;
+              pool_outbuf[n] = max9(pool_inbuf, n, &mask);
+              out_mask[n * 16 + 0] = mask.s0;
+              out_mask[n * 16 + 1] = mask.s1;
+              out_mask[n * 16 + 2] = mask.s2;
+              out_mask[n * 16 + 3] = mask.s3;
+              out_mask[n * 16 + 4] = mask.s4;
+              out_mask[n * 16 + 5] = mask.s5;
+              out_mask[n * 16 + 6] = mask.s6;
+              out_mask[n * 16 + 7] = mask.s7;
+              out_mask[n * 16 + 8] = mask.s8;
+              out_mask[n * 16 + 9] = mask.s9;
+              out_mask[n * 16 + 10] = mask.sa;
+              out_mask[n * 16 + 11] = mask.sb;
+              out_mask[n * 16 + 12] = mask.sc;
+              out_mask[n * 16 + 13] = mask.sd;
+              out_mask[n * 16 + 14] = mask.se;
+              out_mask[n * 16 + 15] = mask.sf;
             }
             int out_idx = ((ph * pooled_width + pw) * inchannels +
                 c * burstchannels) * img_fact;
