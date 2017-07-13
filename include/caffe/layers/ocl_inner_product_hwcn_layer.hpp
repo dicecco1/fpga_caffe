@@ -57,6 +57,7 @@ class OCLHWCNInnerProductLayer : public InnerProductLayer<Dtype> {
   kernel_params ocl_params_bi_;
   int pad_oc_;
   bool use_aux_;
+  int num_cu_;
   Blob<int> relu_indices;
   Blob<chalf> weights_h;
   Blob<chalf> weights_h_t;

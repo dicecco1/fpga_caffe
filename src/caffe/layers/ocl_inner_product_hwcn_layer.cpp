@@ -57,14 +57,13 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
   this->param_propagate_down_.resize(this->blobs_.size(), true);
 
   CRParameter cr_param = this->layer_param_.cr_param();
+  num_cu_ = cr_param.num_cu();
   kernel_params *params = &ocl_params_;
   params->inchannels = this->K_;
   params->numgroups = 1;
   params->xdim = 1;
   params->ydim = 1;
   params->ksize = 1;
-  params->rpofm = 0;
-  params->burstydim = 0;
   params->xtile_pad = 0;
   params->fc = 1;
   params->stride = 1;
@@ -82,14 +81,29 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
       tchannel--;
     burstchannels_ = tchannel;
   }
-
+  
+  int rpofm = num_cu_;
+  int burstoc = 1;
+  if (rpofm > params->outchannels) {
+    rpofm = params->outchannels;
+    burstoc = 1;
+  } else {
+    while (rpofm * burstoc < params->outchannels) {
+      if (burstoc < 16)
+        burstoc++;
+      else
+        rpofm++;
+    }
+  }
+  params->rpofm = rpofm;
+  params->burstydim = burstoc;
   params->burstchannels = burstchannels_;
   params->rpo = params->inchannels / burstchannels_;
   params->pool = 0;
   params->pksize = 2;
 
   // Backward params
-  kernel_params *backward_params = &ocl_params_bi_;
+  kernel_params *backward_params = &ocl_params_bw_;
   backward_params->ydim = 1;
   backward_params->xdim = 1;
   backward_params->inchannels = this->N_;
@@ -120,9 +134,7 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
     use_aux_ = true;
   }
 
-  backward_params->rpofm = 0;
   backward_params->xtile_pad = 0;
-  backward_params->burstydim = 0;
   backward_params->stride = 1;
   backward_params->pad = 0;
   backward_params->burstchannels = burstchannels_;
@@ -132,9 +144,60 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
   backward_params->relu = cr_param.relu();
   backward_params->pool = 0;
   backward_params->pksize = 2;
+
+  // We don't support outputs larger than 256 * 16 so this shouldn't cause problems
+  burstoc = 256 * 16 / backward_params->burstchannels;
+  if (burstoc > backward_params->outchannels) {
+    burstoc = backward_params->outchannels;
+  } else {
+    int tburst = burstoc;
+    while (backward_params->outchannels % tburst != 0)
+      tburst--;
+    burstoc = tburst;
+  }
+  backward_params->burstydim = burstoc;
+  backward_params->rpofm = backward_params->outchannels / burstoc;
+
+  // Backward params inputs
+  kernel_params *backward_params_bi = &ocl_params_bi_;
+  backward_params_bi->ydim = 1;
+  backward_params_bi->xdim = 1;
+  backward_params_bi->inchannels = this->N_;
+  backward_params_bi->outchannels = this->K_;
+  backward_params_bi->ksize = 1;
+  backward_params_bi->numimages = this->M_;
+
+  backward_params_bi->xtile_pad = 0;
+  backward_params_bi->stride = 1;
+  backward_params_bi->pad = 0;
+  backward_params_bi->burstchannels = burstchannels_;
+  backward_params_bi->rpo = backward_params->inchannels / burstchannels_;
+  backward_params_bi->numgroups = 1;
+  backward_params_bi->fc = 1;
+  backward_params_bi->relu = cr_param.relu();
+  backward_params_bi->pool = 0;
+  backward_params_bi->pksize = 2;
+
+  rpofm = num_cu_;
+  burstoc = 1;
+  if (rpofm > backward_params_bi->outchannels) {
+    rpofm = backward_params_bi->outchannels;
+    burstoc = 1;
+  } else {
+    while (rpofm * burstoc < backward_params_bi->outchannels) {
+      if (burstoc < 16)
+        burstoc++;
+      else
+        rpofm++;
+    }
+  }
+  backward_params_bi->burstydim = burstoc;
+  backward_params_bi->rpofm = rpofm;
+
   // Set bias update parameters
   kernel_params *bias_params = &ocl_params_bb_;
-
+  bias_params->burstydim = 1;
+  bias_params->rpofm = 1;
   bias_params->stride = 1;
   bias_params->pad = 0;
   bias_params->ydim = 1;
@@ -302,7 +365,7 @@ template <typename Dtype>
 void OCLHWCNInnerProductLayer<Dtype>::backward_weights(
     const vector<Blob<Dtype>*>& top, const vector<bool>& propagate_down,
     const vector<Blob<Dtype>*>& bottom) {
-  kernel_params *params = &ocl_params_bi_;
+  kernel_params *params = &ocl_params_bw_;
   params->backward = 1;
   Dtype* weight_diff_dtype = this->blobs_[0]->mutable_cpu_diff();
  

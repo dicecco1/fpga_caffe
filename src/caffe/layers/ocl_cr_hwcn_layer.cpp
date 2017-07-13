@@ -157,7 +157,8 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   else
     weight_pad_ = ((bottom[0]->shape(2) / this->group_) / 16 + 1) * 16;
 
-  CRParameter cr_param = this->layer_param_.cr_param(); 
+  CRParameter cr_param = this->layer_param_.cr_param();
+  num_cu_ = cr_param.num_cu(); 
   kernel_params *forward_params = &ocl_params_;
   int num_ = bottom[0]->shape(3); 
   forward_params->ydim = bottom[0]->shape(0);
@@ -178,10 +179,24 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       tchannel--;
     burstchannels_ = tchannel;
   }
-  
-  forward_params->rpofm = 0;
+ 
+  int rpofm = num_cu_;
+  int burstoc = 1;
+  if (rpofm > forward_params->outchannels) {
+    rpofm = forward_params->outchannels;
+    burstoc = 1;
+  } else {
+    while (rpofm * burstoc < forward_params->outchannels) {
+      if (burstoc < 16)
+        burstoc++;
+      else
+        rpofm++;
+    }
+  }
+
+  forward_params->rpofm = rpofm;
   forward_params->xtile_pad = 0;
-  forward_params->burstydim = 0;
+  forward_params->burstydim = burstoc;
   forward_params->stride = stride_data[0];
   forward_params->pad = pad_data[0];
   forward_params->burstchannels = burstchannels_;
@@ -195,7 +210,7 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   // Backward params
   this->bottom_shape_ = &bottom[0]->shape();
   compute_output_shape();
-  kernel_params *backward_params = &ocl_params_bi_;
+  kernel_params *backward_params = &ocl_params_bw_;
   backward_params->ydim = this->output_shape_[0];
   backward_params->xdim = this->output_shape_[1];
   backward_params->inchannels = this->num_output_ / this->group_;
@@ -214,9 +229,9 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     burstchannels_ = tchannel;
   }
 
-  backward_params->rpofm = 0;
+  backward_params->rpofm = backward_params->outchannels;
   backward_params->xtile_pad = 0;
-  backward_params->burstydim = 0;
+  backward_params->burstydim = 1;
   backward_params->stride = stride_data[0];
   if ((pad_data[0] == 0) && (stride_data[0] == 1)) {
     backward_params->pad = backward_params->ksize - 1;
@@ -230,9 +245,50 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   backward_params->relu = cr_param.relu();
   backward_params->pool = 0;
   backward_params->pksize = 2;
+
+  // backward wrt data
+  kernel_params *backward_params_bi = &ocl_params_bi_;
+  backward_params_bi->ydim = this->output_shape_[0];
+  backward_params_bi->xdim = this->output_shape_[1];
+  backward_params_bi->inchannels = this->num_output_ / this->group_;
+  backward_params_bi->outchannels = bottom[0]->shape(2) / this->group_;
+  backward_params_bi->ksize = (this->blobs_[0])->shape(3);
+  backward_params_bi->numimages = num_;
+  backward_params_bi->xtile_pad = 0;
+  backward_params_bi->stride = stride_data[0];
+  if ((pad_data[0] == 0) && (stride_data[0] == 1)) {
+    backward_params->pad = backward_params->ksize - 1;
+  } else {
+    backward_params->pad = pad_data[0];
+  }
+  backward_params_bi->burstchannels = burstchannels_;
+  backward_params_bi->rpo = backward_params_bi->inchannels / burstchannels_;
+  backward_params_bi->numgroups = this->group_;
+  backward_params_bi->fc = 0;
+  backward_params_bi->relu = cr_param.relu();
+  backward_params_bi->pool = 0;
+  backward_params_bi->pksize = 2;
+  rpofm = num_cu_;
+  burstoc = 1;
+  if (rpofm > backward_params_bi->outchannels) {
+    rpofm = backward_params_bi->outchannels;
+    burstoc = 1;
+  } else {
+    while (rpofm * burstoc < backward_params_bi->outchannels) {
+      if (burstoc < 16)
+        burstoc++;
+      else
+        rpofm++;
+    }
+  }
+  backward_params_bi->rpofm = rpofm;
+  backward_params_bi->burstydim = burstoc;
+
+
   // Set bias update parameters
   kernel_params *bias_params = &ocl_params_bb_;
-
+  bias_params->rpofm = 1;
+  bias_params->burstydim = 1;
   bias_params->stride = 1;
   bias_params->pad = 0;
   bias_params->ydim = backward_params->ydim;
@@ -539,7 +595,7 @@ void OCLCRHWCNLayer<Dtype>::backward_data(const vector<Blob<Dtype>*>& top,
 template <typename Dtype>
 void OCLCRHWCNLayer<Dtype>::backward_weights(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
-  kernel_params *params = &ocl_params_bi_;
+  kernel_params *params = &ocl_params_bw_;
 
   Dtype* weight_diff_dtype = this->blobs_[0]->mutable_cpu_diff();
  
