@@ -257,9 +257,9 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   backward_params_bi->xtile_pad = 0;
   backward_params_bi->stride = stride_data[0];
   if ((pad_data[0] == 0) && (stride_data[0] == 1)) {
-    backward_params->pad = backward_params->ksize - 1;
+    backward_params_bi->pad = backward_params_bi->ksize - 1;
   } else {
-    backward_params->pad = pad_data[0];
+    backward_params_bi->pad = pad_data[0];
   }
   backward_params_bi->burstchannels = burstchannels_;
   backward_params_bi->rpo = backward_params_bi->inchannels / burstchannels_;
@@ -659,7 +659,7 @@ void OCLCRHWCNLayer<Dtype>::backward_weights(const vector<Blob<Dtype>*>& top,
   }
   weight_diff = weights_h.mutable_cpu_diff();
   copyToFloatWeights(weight_diff, weight_diff_dtype,
-      this->blobs_[0]->shape(), ocl_params_bi_);
+      this->blobs_[0]->shape(), ocl_params_bw_);
 }
 
 

@@ -224,7 +224,7 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
 template <typename Dtype>
 void OCLHWCNInnerProductLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
-  kernel_params *backward_params = &ocl_params_bi_;
+  kernel_params *backward_params = &ocl_params_bw_;
  
   std::vector<int> top_shape(2);
   top_shape[0] = this->N_;
@@ -444,13 +444,14 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_weights(
   int outchannels = this->blobs_[0]->shape(0);
   int inchannels = this->blobs_[0]->shape(1);
 
-  for (int i = 0; i < weights_h_t.shape(1) / 4; ++i)
+  int outchannels_pad = weights_h_t.shape(1);
+  for (int i = 0; i < outchannels_pad / 4; ++i)
     for (int j = 0; j < inchannels; ++j)
       for (int k = 0; k < 4; ++k)
-        if (i + k * weights_h_t.shape(1) / 4 < outchannels)
-          weight_diff_dtype[(i + k * weights_h_t.shape(1) / 4)
+        if (i + k * outchannels_pad / 4 < outchannels)
+          weight_diff_dtype[(i + k * outchannels_pad / 4)
             * inchannels + j] =
-            (Dtype)float(weight_diff[j * weights_h_t.shape(1) + i * 4 + k]);
+            (Dtype)float(weight_diff[j * outchannels_pad + i * 4 + k]);
 
 }
 
@@ -547,16 +548,16 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_data(
 
   const Dtype *weight_data = this->blobs_[0]->cpu_data();
   chalf *weight_data_h_t = weights_h_t.mutable_cpu_data();
-
-  for (int i = 0; i < weights_h_t.shape(1) / 4; ++i)
+  int outchannels_pad = weights_h_t.shape(1);
+  for (int i = 0; i < outchannels_pad / 4; ++i)
     for (int j = 0; j < inchannels; ++j)
       for (int k = 0; k < 4; ++k)
-        if (i + k * weights_h_t.shape(1) / 4 < outchannels)
-          weight_data_h_t[j * weights_h_t.shape(1) + i * 4 + k] =
-            chalf((float)weight_data[(i + k * weights_h_t.shape(1) / 4) *
+        if (i + k * outchannels_pad / 4 < outchannels)
+          weight_data_h_t[j * outchannels_pad + i * 4 + k] =
+            chalf((float)weight_data[(i + k * outchannels_pad / 4) *
                 inchannels + j]);
         else
-          weight_data_h_t[j * weights_h_t.shape(1) + i * 4 + k] = 0;
+          weight_data_h_t[j * outchannels_pad + i * 4 + k] = 0;
 
   const chalf *weight_data_t = weights_h_t.ocl_data();
 
