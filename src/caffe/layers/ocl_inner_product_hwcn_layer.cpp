@@ -162,7 +162,7 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
   kernel_params *backward_params_bi = &ocl_params_bi_;
   backward_params_bi->ydim = 1;
   backward_params_bi->xdim = 1;
-  backward_params_bi->inchannels = this->N_;
+  backward_params_bi->inchannels = backward_params->inchannels;
   backward_params_bi->outchannels = this->K_;
   backward_params_bi->ksize = 1;
   backward_params_bi->numimages = this->M_;
