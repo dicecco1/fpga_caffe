@@ -95,6 +95,7 @@ layer {
   }
   cr_param {
     relu: 1
+    num_cu: 12
   }
 }
 layer {
@@ -131,7 +132,8 @@ layer {
     }
   }
   cr_param {
-    relu: 1 
+    relu: 1
+    num_cu: 12 
   }
 }
 layer {
@@ -167,6 +169,7 @@ layer {
   }
   cr_param {
     relu: 1
+    num_cu: 12
   }
 }
 layer {
@@ -191,6 +194,7 @@ layer {
   }
   cr_param {
     relu: 0
+    num_cu: 12
   }
 }
 layer {
