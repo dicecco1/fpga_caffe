@@ -53,6 +53,7 @@ void SoftmaxWithLossLayer<Dtype>::Reshape(
     // softmax output
     top[1]->ReshapeLike(*bottom[0]);
   }
+  scale_ = this->layer_param_.softmax_param().scale();
 }
 
 template <typename Dtype>
@@ -142,7 +143,7 @@ void SoftmaxWithLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       }
     }
     // Scale gradient
-    Dtype loss_weight = top[0]->cpu_diff()[0] /
+    Dtype loss_weight = top[0]->cpu_diff()[0] * scale_ /
                         get_normalizer(normalization_, count);
     caffe_scal(prob_.count(), loss_weight, bottom_diff);
   }
