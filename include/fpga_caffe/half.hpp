@@ -32,12 +32,6 @@
 #define CHALF_MIN_VAL (1 << SIGN_SHIFT) | (MAX_EXP << EXP_SHIFT) | MAX_MANT
 #define CHALF_MAX_VAL (MAX_EXP << EXP_SHIFT) | MAX_MANT
 
-#if (MANT_SIZE + 1) < 10
-  #define MULT_SIZE 10
-#else
-  #define MULT_SIZE (MANT_SIZE + 1)
-#endif
-
 #if (EXP_SIZE + MANT_SIZE + 1) > 16
   #define DIFF_SIZE (32 - EXP_SIZE - MANT_SIZE - 1)
 #else
@@ -233,8 +227,8 @@ chalf operator*(chalf T, chalf U) {
   ap_uint<FP_WIDTH> Udata_ = U.data_;
   ap_uint<EXP_SIZE> e1 = (Tdata_) >> EXP_SHIFT;
   ap_uint<EXP_SIZE> e2 = (Udata_) >> EXP_SHIFT;
-  ap_uint<MULT_SIZE> mant1 = Tdata_ | MANT_NORM;
-  ap_uint<MULT_SIZE> mant2 = Udata_ | MANT_NORM;
+  ap_uint<MANT_SIZE + 1> mant1 = Tdata_ | MANT_NORM;// 11 bits
+  ap_uint<MANT_SIZE + 1> mant2 = Udata_ | MANT_NORM;// 11 bits
   ap_uint<1> sign1 = (Tdata_) >> SIGN_SHIFT;
   ap_uint<1> sign2 = (Udata_) >> SIGN_SHIFT;
   ap_uint<1> sign_res = sign1 ^ sign2;
@@ -249,6 +243,7 @@ chalf operator*(chalf T, chalf U) {
   ap_uint<1> last = (product >> MANT_SIZE) & 0x1;
   ap_uint<1> guard = (product >> (MANT_SIZE - 1)) & 0x1;
   ap_uint<1> sticky = ((product & (MAX_MANT >> 1)) > 0);
+
 
   // normalize
   if ((mantres >> (MANT_SIZE + 1)) & 0x1) {
