@@ -114,7 +114,7 @@ inline void SyncedMemory::to_ocl(int RW, size_t size) {
     caffe_memset(size_, 0, cpu_ptr_);
     own_cpu_data_ = true;
     ocl_ptr_ = reinterpret_cast<void *>(clCreateBuffer(oclContext,
-        CL_MEM_READ_WRITE, tx_size_, NULL, NULL));
+        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, tx_size_, cpu_ptr_, NULL));
     if (RW)
       clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
           tx_size_, cpu_ptr_, 0, NULL, NULL);
@@ -123,7 +123,7 @@ inline void SyncedMemory::to_ocl(int RW, size_t size) {
   case HEAD_AT_CPU:
     if (ocl_ptr_ == NULL) {
       ocl_ptr_ = reinterpret_cast<void *>(clCreateBuffer(oclContext,
-          CL_MEM_READ_WRITE, tx_size_, NULL, NULL));
+          CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, tx_size_, cpu_ptr_, NULL));
       if (RW)
         clEnqueueWriteBuffer(oclCommandQueue, (cl_mem) ocl_ptr_, CL_TRUE, 0,
             tx_size_, cpu_ptr_, 0, NULL, NULL);
