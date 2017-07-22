@@ -7,7 +7,7 @@
 #include "../../../include/fpga_caffe/half.hpp"
 #include "../../../include/fpga_caffe/vector_types.hpp"
 
-#define OCFACT 12 
+#define OCFACT 1 
 
 /* Kernel used for computing direct convolution forward and backward. 
  * input:         flattened input array containing image data
@@ -288,7 +288,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
       }
     }
     for (int n = 0; n < rpo; ++n) {
-      for (int z = 0; z < ofm_iters_z; ++Z) {
+      for (int z = 0; z < ofm_iters_z; ++z) {
         for (int y = 0; y < ydim_out; ++y) {
           for (int x = 0; x < xdim_out; ++x) {
             ap_uint<8> yk_off = 0;
@@ -603,7 +603,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                   outchannels + (ofm_idx * OCFACT + k) * burstoc) * img_fact;
                 out_size_b = burstoc * ksize * ksize * wc_fact;
                 out_size_f = burstoc * img_fact;
-                if ((o * OCFACT + k) * burstoc + burstoc > outchannels) { 
+                if ((ofm_idx * OCFACT + k) * burstoc + burstoc > outchannels) { 
                   short new_burst = outchannels - (ofm_idx * OCFACT + k) *
                     burstoc;
                   out_size_b = new_burst * ksize * ksize * wc_fact;
@@ -615,7 +615,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 
                 bool write_en = ((ofm_idx * OCFACT + k) * burstoc <
                     outchannels) && ((fc == 0) || (!mode) || ((fc == 1) &&
-                    (x == xdim_out - 1) && (y = ydim_out - 1)));
+                    (x == xdim_out - 1) && (y == ydim_out - 1)));
 
                 if (relu && (write_en) && (backward == 0) &&
                     (n == rpo - 1)) {
@@ -748,7 +748,6 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                     (h < pksize) && (w < pksize))
                   memcpy(output + out_idx, pool_outbuf_b[h * 3 + w],
                       sizeof(chalf16) * img_fact * burstchannels);
-
               }
             } 
           }
