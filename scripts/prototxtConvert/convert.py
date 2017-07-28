@@ -5,14 +5,6 @@ import numpy as np
 import fileinput
 import re
 
-# Assumptions
-# batch size for input data use nearest approximation, so 100 will be approximated to 192 rather than 256
-# after invert half converting layers, this program has only handled Accuracy and SoftmaxWithLoss layers seperatly becasue they have two bottom layers and inherite top names from before invert half converting layers
-# assume pad is necessary because most images consists of 3 channels and the model required pictures with 4 channels
-# norm and dropout layers are included as it was in the output file
-# num_cu parameter need to be set manually
-
-
 def copyFromLinetoLine(start_line, end_line, original, destination, mode):
 	des = open(destination, mode)
 	with open(original) as myFile:
