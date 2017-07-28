@@ -54,11 +54,16 @@ def pooling_relu_detector (directory, line_number):
 			else:
 				return False
 
-directory = '/home/lin/Desktop/prototxt/lenet_train_test_2.prototxt'
+# change path to absolute path of input files
+# directory is the input original file
+directory = '/home/lin/Desktop/prototxt/test1_original.prototxt'
+# destination is the intermediate output file, keep the name as FPGA.txt
 destination = '/home/lin/Desktop/prototxt/FPGA.txt'
+# setup files paths
 program_pad = '/home/lin/Desktop/prototxt/setup_pad_layers.txt'
 program_noPad = '/home/lin/Desktop/prototxt/setup_noPad.txt'
 end_program_layers = '/home/lin/Desktop/prototxt/end_program.txt'
+# actual output file
 output_file = '/home/lin/Desktop/prototxt/FPGA_Caffe.prototxt'
 
 destination_append_mode = open(destination, 'a+')
