@@ -10,7 +10,7 @@ The programs in these folders (script.py) targets VivadoHLS 2016.3
 Testing resource utilization of customized precision operations with place and route exponent size 4-7 and mentissa size 2-14  
 Reports are available in impl_reports/ of every folder  
 
-script.py
+script.py  
 Run this script to test resource utilization of all exponent and mentissa range with place and route.  
 Graphs will be shown automatically after HLS finishes.  
 All results will also be stored in .csv file (adders_round.csv)  
@@ -38,7 +38,7 @@ halfPrecisionAdder: used to test half precision addition under different DSP uti
 singlePrecisionMul: used to test single precision multiplication under different DSP utilization  
 halfPrecisionMul: used to test half precision multilication under different DSP utilization  
 
-Description:
+Description:  
 These programs targets VivadoHLS 2017.1  
 Testing resource utilization of Single Precision addition with the use of different number of DSPs  
 Run with:
