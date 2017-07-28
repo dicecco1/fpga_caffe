@@ -1,0 +1,27 @@
+layer {
+  name: "PROGRAM3"
+  type: "XCLProgram"
+  xcl_param {
+    xcl_name: "cr_layer_hwcn_half.xclbin"
+    kernel_name: "cr_layer_hwcn_half"
+    once: true
+  }
+}
+layer {
+  name: "HWCN1"
+  type: "HWCN"
+  bottom: "data"
+  top: "hwcn1"
+  hwcn_param {
+    convert_to: true
+  }
+}
+layer {
+  name: "HALF1"
+  type: "HalfConversion"
+  bottom: "hwcn1"
+  top: "half1"
+  half_conversion_param {
+    convert_to: true
+  }
+}

@@ -1,0 +1,18 @@
+layer {
+  name: "HALF2"
+  type: "HalfConversion"
+  bottom: "ip2"
+  top: "half2"
+  half_conversion_param {
+    convert_to: false
+  }
+}
+layer {
+  name: "HWCN2"
+  type: "HWCN"
+  bottom: "half2"
+  top: "hwcn2"
+  hwcn_param {
+    convert_to: false
+  }
+}
