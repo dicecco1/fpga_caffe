@@ -1,7 +1,7 @@
 Assumptions:  
 
 1. Data layer batch size should be 192 to 256 and should be a multiple of 32
-2. Batch size for input data use nearest approximation to multiple of 32 between 192 and 256, so 100 will be 
+2. Data layer batch size for input data use nearest approximation to multiple of 32 between 192 and 256, so 100 will be 
    approximated to 192 rather than 256
 3. Input channel should be multiple of 4, if not, add pad layer to the front
 4. Assume pad is necessary because most images consists of 3 channels and the model required pictures with 4 channels
@@ -14,3 +14,6 @@ Assumptions:
    becasue they have two bottom layers and inherite top names from before invert half converting layers
 10. Norm and dropout layers are included as it was in the output file
 11. num_cu parameter needs to be set manually
+
+Output is in FLGA_Caffe.prototxt
+Two example input and output files are presented
