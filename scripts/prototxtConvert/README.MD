@@ -17,3 +17,7 @@ Assumptions:
 
 Output is in FLGA_Caffe.prototxt
 Two example input and output files are presented
+test1_original.txt and test2_original.txt are the original Caffe model files
+test1_output.txt and test2_output.txt are the output files after convertion
+
+end_program.txt setup_pad_layers.txt setup_noPad.txt are necessary files used to convert any prototxt
