@@ -7,7 +7,7 @@ adderHLS_roundOFF: custom precision addition with rounding to zero
 
 Description:
 The programs in these folders (script.py) targets VivadoHLS 2016.3  
-Testing resource utilization of customized precision operations with place and route exponent size 4 - 7 and mentissa size 2 - 14  
+Testing resource utilization of customized precision operations with place and route exponent size 4-7 and mentissa size 2-14  
 Reports are available in impl_reports/ of every folder  
 
 script.py
