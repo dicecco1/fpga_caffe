@@ -47,5 +47,5 @@ vivado_hls run_hls.tcl
 ```
 Reports are available in adders_prj/solution1/impl/report/verilog/adders_export.rpt  
 
-For difference core settings of DSPs, see README.MD inside each directory  
+For different core settings of DSPs, see README.MD inside each directory  
 
