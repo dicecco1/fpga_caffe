@@ -1,4 +1,5 @@
 Vivado 2016.3
+
 mulHLS: custom precision multiplication with rounding to nearest
 mulHLS_roundOFF: custom precision multiplication with rounding to zero
 adderHLS: custom precision addition with rounding to nearest
@@ -31,6 +32,7 @@ If need to generate graphs for partial results change report reading range as co
 
 
 Vivado 2017.1
+
 singlePrecisionAdder: used to test single precision addition under different DSP utilization
 halfPrecisionAdder: used to test half precision addition under different DSP utilization
 singlePrecisionMul: used to test single precision multiplication under different DSP utilization
