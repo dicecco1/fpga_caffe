@@ -1,0 +1,6 @@
+#define HALF 1
+#define NO_PARTITION 1
+#define EXP_SIZE 6
+#define MANT_SIZE 9
+#define ROUND_NEAREST_MULT 0
+#define ROUND_NEAREST_ADD 0

@@ -1,0 +1,236 @@
+name: "LeNet"
+layer {
+  name: "mnist"
+  type: "Data"
+  top: "data"
+  top: "label"
+  include {
+    phase: TRAIN
+  }
+  transform_param {
+    scale: 0.00390625
+  }
+  data_param {
+    source: "examples/mnist/mnist_train_lmdb"
+    batch_size: 256
+    backend: LMDB
+  }
+}
+layer {
+  name: "mnist"
+  type: "Data"
+  top: "data"
+  top: "label"
+  include {
+    phase: TEST
+  }
+  transform_param {
+    scale: 0.00390625
+  }
+  data_param {
+    source: "examples/mnist/mnist_test_lmdb"
+    batch_size: 256
+    backend: LMDB
+  }
+}
+layer {
+  name: "PROGRAM3"
+  type: "XCLProgram"
+  xcl_param {
+    xcl_name: "cr_layer_hwcn_half.xclbin"
+    kernel_name: "cr_layer_hwcn_half"
+    once: true
+  }
+}
+layer {
+  name: "HWCN1"
+  type: "HWCN"
+  bottom: "data"
+  top: "hwcn1"
+  hwcn_param {
+    convert_to: true
+  }
+}
+layer {
+  name: "PAD1"
+  type: "Pad"
+  bottom: "hwcn1"
+  top: "pad1"
+  pad_param {
+    pad: true
+    axis: 2 
+    pad_to: 4 
+  }
+}
+layer {
+  name: "HALF1"
+  type: "HalfConversion"
+  bottom: "pad1"
+  top: "half1"
+  half_conversion_param {
+    convert_to: true
+  }
+}
+layer {
+  name: "conv1"
+  type: "OCLCRHWCN"
+  bottom: "half1"
+  top: "conv1"
+  param {
+    lr_mult: 1
+  }
+  param {
+    lr_mult: 2
+  }
+  convolution_param {
+    engine: OCL
+    subengine: DIRECT
+    num_output: 32
+    kernel_size: 5
+    stride: 1
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+  ocl_enable: true
+  cr_param {
+    relu: 0
+  }
+}
+layer {
+  name: "pool1"
+  type: "OCLPoolingHWCN"
+  bottom: "conv1"
+  top: "pool1"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
+layer {
+  name: "conv2"
+  type: "OCLCRHWCN"
+  bottom: "pool1"
+  top: "conv2"
+  param {
+    lr_mult: 1
+  }
+  param {
+    lr_mult: 2
+  }
+  convolution_param {
+    engine: OCL
+    subengine: DIRECT
+    num_output: 64
+    kernel_size: 5
+    stride: 1
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+  ocl_enable: true
+  cr_param {
+    relu: 0
+  }
+}
+layer {
+  name: "pool2"
+  type: "OCLPoolingHWCN"
+  bottom: "conv2"
+  top: "pool2"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
+layer {
+  name: "ip1"
+  type: "OCLHWCNInnerProduct"
+  bottom: "pool2"
+  top: "ip1"
+  param {
+    lr_mult: 1
+  }
+  param {
+    lr_mult: 2
+  }
+  inner_product_param {
+    num_output: 512
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+  cr_param {
+    relu: 1
+  }
+}
+layer {
+  name: "ip2"
+  type: "OCLHWCNInnerProduct"
+  bottom: "ip1"
+  top: "ip2"
+  param {
+    lr_mult: 1
+  }
+  param {
+    lr_mult: 2
+  }
+  inner_product_param {
+    num_output: 10
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+  cr_param {
+    relu: 0
+  }
+}
+layer {
+  name: "HALF2"
+  type: "HalfConversion"
+  bottom: "ip2"
+  top: "half2"
+  half_conversion_param {
+    convert_to: false
+  }
+}
+layer {
+  name: "HWCN2"
+  type: "HWCN"
+  bottom: "half2"
+  top: "hwcn2"
+  hwcn_param {
+    convert_to: false
+  }
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "hwcn2"
+  bottom: "label"
+  top: "accuracy"
+  include {
+    phase: TEST
+  }
+}
+layer {
+  name: "loss"
+  type: "SoftmaxWithLoss"
+  bottom: "hwcn2"
+  bottom: "label"
+  top: "loss"
+}
