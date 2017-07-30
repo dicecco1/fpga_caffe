@@ -90,45 +90,50 @@ template <typename Dtype>
 void HWCNLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down,
     const vector<Blob<Dtype>*>& bottom) {
-  for (int i = 0; i < bottom.size(); ++i) {
-    Dtype* bottom_diff = bottom[i]->mutable_cpu_diff();
-    const Dtype* top_diff = top[i]->cpu_diff();
-    std::vector<int> shape = bottom_shape_;
-    if (convert_to_) {
-      if (shape.size() == 2) {
-        shape.push_back(1);
-        shape.push_back(1);
-      }
-      for (int n = 0; n < shape[0]; ++n) {
-        for (int c = 0; c < shape[1]; ++c) {
-          for (int h = 0; h < shape[2]; ++h) {
-            for (int w = 0; w < shape[3]; ++w) {
-              int bot_idx = ((n * shape[1] + c) * shape[2] + h) * shape[3] + w;
-              int top_idx = ((h * shape[3] + w) * shape[1] + c) * shape[0] + n;
-              bottom_diff[bot_idx] = top_diff[top_idx];
+  if (propagate_down[0]) {
+    for (int i = 0; i < bottom.size(); ++i) {
+      Dtype* bottom_diff = bottom[i]->mutable_cpu_diff();
+      const Dtype* top_diff = top[i]->cpu_diff();
+      std::vector<int> shape = bottom_shape_;
+      if (convert_to_) {
+        if (shape.size() == 2) {
+          shape.push_back(1);
+          shape.push_back(1);
+        }
+        for (int n = 0; n < shape[0]; ++n) {
+          for (int c = 0; c < shape[1]; ++c) {
+            for (int h = 0; h < shape[2]; ++h) {
+              for (int w = 0; w < shape[3]; ++w) {
+                int bot_idx = ((n * shape[1] + c) * shape[2] + h) * shape[3]
+                  + w;
+                int top_idx = ((h * shape[3] + w) * shape[1] + c) * shape[0]
+                  + n;
+                bottom_diff[bot_idx] = top_diff[top_idx];
+              }
             }
           }
         }
-      }
-    } else {
-      if (shape.size() == 2) {
-        shape.insert(shape.begin(), 1);
-        shape.insert(shape.begin(), 1);
-      }
-      for (int n = 0; n < shape[3]; ++n) {
-        for (int c = 0; c < shape[2]; ++c) {
-          for (int h = 0; h < shape[0]; ++h) {
-            for (int w = 0; w < shape[1]; ++w) {
-              int bot_idx = ((h * shape[1] + w) * shape[2] + c) * shape[3] + n;
-              int top_idx = ((n * shape[2] + c) * shape[0] + h) * shape[1] + w;
-              bottom_diff[bot_idx] = top_diff[top_idx];
+      } else {
+        if (shape.size() == 2) {
+          shape.insert(shape.begin(), 1);
+          shape.insert(shape.begin(), 1);
+        }
+        for (int n = 0; n < shape[3]; ++n) {
+          for (int c = 0; c < shape[2]; ++c) {
+            for (int h = 0; h < shape[0]; ++h) {
+              for (int w = 0; w < shape[1]; ++w) {
+                int bot_idx = ((h * shape[1] + w) * shape[2] + c) * shape[3]
+                  + n;
+                int top_idx = ((n * shape[2] + c) * shape[0] + h) * shape[1]
+                  + w;
+                bottom_diff[bot_idx] = top_diff[top_idx];
+              }
             }
           }
-        }
-      }     
+        }     
+      }
     }
   }
-
 }
 
 INSTANTIATE_CLASS(HWCNLayer);

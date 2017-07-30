@@ -50,21 +50,23 @@ template <typename Dtype>
 void HalfConversionLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down,
     const vector<Blob<Dtype>*>& bottom) {
-  for (int i = 0; i < bottom.size(); ++i) {  
-    const int count = bottom[i]->count();
-    if (convert_to_) {
-      Dtype *bottom_diff = bottom[i]->mutable_cpu_diff();
-      const chalf *top_diff =
-        reinterpret_cast<const chalf *>(top[i]->cpu_diff());
-      for (int j = 0; j < count; ++j) {
-        bottom_diff[j] = (Dtype)(float(top_diff[j]));
-      }
-    } else {
-      chalf *bottom_diff =
-        reinterpret_cast<chalf *>(bottom[i]->mutable_cpu_diff());
-      const Dtype *top_diff = top[i]->cpu_diff();
-      for (int j = 0; j < count; ++j) {
-        bottom_diff[j] = chalf((float)top_diff[j]);
+  if (propagate_down[0]) {
+    for (int i = 0; i < bottom.size(); ++i) {  
+      const int count = bottom[i]->count();
+      if (convert_to_) {
+        Dtype *bottom_diff = bottom[i]->mutable_cpu_diff();
+        const chalf *top_diff =
+          reinterpret_cast<const chalf *>(top[i]->cpu_diff());
+        for (int j = 0; j < count; ++j) {
+          bottom_diff[j] = (Dtype)(float(top_diff[j]));
+        }
+      } else {
+        chalf *bottom_diff =
+          reinterpret_cast<chalf *>(bottom[i]->mutable_cpu_diff());
+        const Dtype *top_diff = top[i]->cpu_diff();
+        for (int j = 0; j < count; ++j) {
+          bottom_diff[j] = chalf((float)top_diff[j]);
+        }
       }
     }
   }

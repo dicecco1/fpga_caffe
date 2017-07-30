@@ -91,23 +91,24 @@ void PadLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 
   std::vector<int> shape = bottom[0]->shape();
   std::vector<int> top_shape = top[0]->shape();
-
-  for (int i = 0; i < bottom.size(); ++i) {
-    Dtype *bottom_diff = bottom[i]->mutable_cpu_diff();
-    const Dtype *top_diff = top[i]->cpu_diff();
-    for (int n = 0; n < shape[0]; ++n) {
-      for (int c = 0; c < shape[1]; ++c) {
-        for (int h = 0; h < shape[2]; ++h) {
-          for (int w = 0; w < shape[3]; ++w) {
-            int bot_idx, top_idx;
-            bot_idx = ((n * shape[1] + c) * shape[2] + h) * shape[3] + w;
-            top_idx = ((n * top_shape[1] + c) * top_shape[2] + h) *
-              top_shape[3] + w;
-            if (((axis_ == 0) && n < dim_) || ((axis_ == 1) && c < dim_) ||
-                ((axis_ == 2) && h < dim_) || ((axis_ == 3) && w < dim_))
-              bottom_diff[bot_idx] = top_diff[top_idx];
-            else if (!pad_)
-              bottom_diff[bot_idx] = 0;
+  if (propagate_down[0]) {
+    for (int i = 0; i < bottom.size(); ++i) {
+      Dtype *bottom_diff = bottom[i]->mutable_cpu_diff();
+      const Dtype *top_diff = top[i]->cpu_diff();
+      for (int n = 0; n < shape[0]; ++n) {
+        for (int c = 0; c < shape[1]; ++c) {
+          for (int h = 0; h < shape[2]; ++h) {
+            for (int w = 0; w < shape[3]; ++w) {
+              int bot_idx, top_idx;
+              bot_idx = ((n * shape[1] + c) * shape[2] + h) * shape[3] + w;
+              top_idx = ((n * top_shape[1] + c) * top_shape[2] + h) *
+                top_shape[3] + w;
+              if (((axis_ == 0) && n < dim_) || ((axis_ == 1) && c < dim_) ||
+                  ((axis_ == 2) && h < dim_) || ((axis_ == 3) && w < dim_))
+                bottom_diff[bot_idx] = top_diff[top_idx];
+              else if (!pad_)
+                bottom_diff[bot_idx] = 0;
+            }
           }
         }
       }
