@@ -403,16 +403,7 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_weights(
 
   for (int i = 0; i < bottom.size(); i++) {
     if (use_aux_) {
-      top_diff = reinterpret_cast<const chalf *>(top[i]->cpu_diff());
-      chalf *top_diff_aux = top_aux.mutable_cpu_diff();
-      for (int j = 0; j < top_aux.shape(0); ++j)
-        for (int k = 0; k < top_aux.shape(1); ++k) 
-          if (j < top[i]->shape(0))
-            top_diff_aux[j * top_aux.shape(1) + k] =
-              top_diff[j * top[i]->shape(1) + k];
-          else
-            top_diff_aux[j * top_aux.shape(1) + k] = 0;
-      outsize = top_aux.count();
+      outsize = sizeof(chalf) * top_aux.count();
       top_diff = top_aux.ocl_diff(outsize);
     } else {
       top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff(outsize));
@@ -493,16 +484,7 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_bias(
   const int *relu_vals;
   for (int i = 0; i < bottom.size(); i++) {
     if (use_aux_) {
-      top_diff = reinterpret_cast<const chalf *>(top[i]->cpu_diff());
-      chalf *top_diff_aux = top_aux.mutable_cpu_diff();
-      for (int j = 0; j < top_aux.shape(0); ++j)
-        for (int k = 0; k < top_aux.shape(1); ++k) 
-          if (j < top[i]->shape(0))
-            top_diff_aux[j * top_aux.shape(1) + k] =
-              top_diff[j * top[i]->shape(1) + k];
-          else
-            top_diff_aux[j * top_aux.shape(1) + k] = 0;
-      outsize = top_aux.count();
+      outsize = sizeof(chalf) * top_aux.count();
       top_diff = top_aux.ocl_diff(outsize);
     } else {
       top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff(outsize));
@@ -590,16 +572,7 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_data(
 
   for (int i = 0; i < bottom.size(); i++) {
     if (use_aux_) {
-      top_diff = reinterpret_cast<const chalf *>(top[i]->cpu_diff());
-      chalf *top_diff_aux = top_aux.mutable_cpu_diff();
-      for (int j = 0; j < top_aux.shape(0); ++j)
-        for (int k = 0; k < top_aux.shape(1); ++k) 
-          if (j < top[i]->shape(0))
-            top_diff_aux[j * top_aux.shape(1) + k] =
-              top_diff[j * top[i]->shape(1) + k];
-          else
-            top_diff_aux[j * top_aux.shape(1) + k] = 0;
-      outsize = top_aux.count();
+      outsize = sizeof(chalf) * top_aux.count();
       top_diff = top_aux.ocl_diff(outsize);
     } else {
       top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff(outsize));
@@ -633,6 +606,19 @@ template <typename Dtype>
 void OCLHWCNInnerProductLayer<Dtype>::Backward_ocl(
     const vector<Blob<Dtype>*>& top, const vector<bool>& propagate_down,
     const vector<Blob<Dtype>*>& bottom) {
+  if (use_aux_) {
+    const chalf *top_diff =
+      reinterpret_cast<const chalf *>(top[0]->cpu_diff());
+    chalf *top_diff_aux = top_aux.mutable_cpu_diff();
+    for (int j = 0; j < top_aux.shape(0); ++j)
+      for (int k = 0; k < top_aux.shape(1); ++k) 
+        if (j < top[0]->shape(0))
+          top_diff_aux[j * top_aux.shape(1) + k] =
+            top_diff[j * top[0]->shape(1) + k];
+        else
+          top_diff_aux[j * top_aux.shape(1) + k] = 0;
+  }
+
   if (this->param_propagate_down_[0])
     backward_weights(top, propagate_down, bottom);
 
