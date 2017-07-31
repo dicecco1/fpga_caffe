@@ -1,11 +1,11 @@
 #include <cstdio>
 #include <cstring>
 #include <stdint.h>
-#include "../../../include/fpga_caffe/half.hpp"
+#include "../../../include/fpga_caffe/cpfp.hpp"
 
 extern "C" {
 
-void half_ops(float *input, float *weights, float *output,
+void cpfp_ops(float *input, float *weights, float *output,
     int * params, int op) {
 
 /* Ports */
@@ -28,9 +28,9 @@ void half_ops(float *input, float *weights, float *output,
   for (int i = 0; i < inchannels >> 4; ++i) {
     for (int j = 0; j < 16; ++j) {
       if (op == 0)
-        output[i * 16 + j] = float(chalf(input[i * 16 + j]) * chalf(weights[i * 16 + j]));
+        output[i * 16 + j] = float(cpfp(input[i * 16 + j]) * cpfp(weights[i * 16 + j]));
       else if (op == 1)
-        output[i * 16 + j] = float(chalf(input[i * 16 + j]) + chalf(weights[i * 16 + j]));
+        output[i * 16 + j] = float(cpfp(input[i * 16 + j]) + cpfp(weights[i * 16 + j]));
     }
   }
 

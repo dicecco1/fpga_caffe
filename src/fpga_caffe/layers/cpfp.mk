@@ -6,8 +6,8 @@ endif
 
 SDA_FLOW = cpu_emu
 XOCC = xocc
-KERNEL_SRCS = half_ops.cpp
-KERNEL_NAME = half_ops
+KERNEL_SRCS = cpfp_ops.cpp
+KERNEL_NAME = cpfp_ops
 NK = 1
 
 DSA = xilinx:adm-pcie-8k5:2ddr:3.2

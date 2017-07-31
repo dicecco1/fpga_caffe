@@ -6,7 +6,7 @@
 #include "caffe/common.hpp"
 #include "caffe/filler.hpp"
 #include "caffe/layers/pad_layer.hpp"
-#include "caffe/layers/half_conversion_layer.hpp"
+#include "caffe/layers/cpfp_conversion_layer.hpp"
 #include "caffe/layers/ocl_cr_layer.hpp"
 #include "caffe/layers/XCL_program_layer.hpp"
 #include "caffe/test/test_caffe_main.hpp"
@@ -157,9 +157,9 @@ class OCLCRLayerTest : public OCLDeviceTest<TypeParam> {
   OCLCRLayerTest()
       : blob_bottom_(new Blob<Dtype>(2, 3, 13, 13)),
         blob_top_pad_out(new Blob<Dtype>()),
-        blob_top_half_out(new Blob<Dtype>()),
+        blob_top_cpfp_out(new Blob<Dtype>()),
         blob_top_cr_out(new Blob<Dtype>()),
-        blob_top_half_out_2(new Blob<Dtype>()),
+        blob_top_cpfp_out_2(new Blob<Dtype>()),
         blob_top_pad_out_2(new Blob<Dtype>()) {}
   virtual void SetUp() {
     // fill the values
@@ -169,22 +169,22 @@ class OCLCRLayerTest : public OCLDeviceTest<TypeParam> {
     filler.Fill(this->blob_bottom_);
     blob_bottom_vec_pad.push_back(blob_bottom_);
     blob_top_vec_pad.push_back(blob_top_pad_out);
-    blob_bottom_vec_half.push_back(blob_top_pad_out);
-    blob_top_vec_half.push_back(blob_top_half_out);
-    blob_bottom_vec_cr.push_back(blob_top_half_out);
+    blob_bottom_vec_cpfp.push_back(blob_top_pad_out);
+    blob_top_vec_cpfp.push_back(blob_top_cpfp_out);
+    blob_bottom_vec_cr.push_back(blob_top_cpfp_out);
     blob_top_vec_cr.push_back(blob_top_cr_out);
-    blob_bottom_vec_half_2.push_back(blob_top_cr_out);
-    blob_top_vec_half_2.push_back(blob_top_half_out_2);
-    blob_bottom_vec_pad_2.push_back(blob_top_half_out_2);
+    blob_bottom_vec_cpfp_2.push_back(blob_top_cr_out);
+    blob_top_vec_cpfp_2.push_back(blob_top_cpfp_out_2);
+    blob_bottom_vec_pad_2.push_back(blob_top_cpfp_out_2);
     blob_top_vec_pad_2.push_back(blob_top_pad_out_2);
   }
 
   virtual ~OCLCRLayerTest() {
     delete blob_bottom_;
     delete blob_top_pad_out;
-    delete blob_top_half_out;
+    delete blob_top_cpfp_out;
     delete blob_top_cr_out;
-    delete blob_top_half_out_2;
+    delete blob_top_cpfp_out_2;
     delete blob_top_pad_out_2;
   }
 
@@ -196,19 +196,19 @@ class OCLCRLayerTest : public OCLDeviceTest<TypeParam> {
 
   Blob<Dtype>* const blob_bottom_;
   Blob<Dtype>* const blob_top_pad_out;
-  Blob<Dtype>* const blob_top_half_out;
+  Blob<Dtype>* const blob_top_cpfp_out;
   Blob<Dtype>* const blob_top_cr_out;
-  Blob<Dtype>* const blob_top_half_out_2;
+  Blob<Dtype>* const blob_top_cpfp_out_2;
   Blob<Dtype>* const blob_top_pad_out_2;
   shared_ptr<Blob<Dtype> > ref_blob_top_;
   vector<Blob<Dtype>*> blob_bottom_vec_pad;
   vector<Blob<Dtype>*> blob_top_vec_pad;
-  vector<Blob<Dtype>*> blob_bottom_vec_half;
-  vector<Blob<Dtype>*> blob_top_vec_half;
+  vector<Blob<Dtype>*> blob_bottom_vec_cpfp;
+  vector<Blob<Dtype>*> blob_top_vec_cpfp;
   vector<Blob<Dtype>*> blob_bottom_vec_cr;
   vector<Blob<Dtype>*> blob_top_vec_cr;
-  vector<Blob<Dtype>*> blob_bottom_vec_half_2;
-  vector<Blob<Dtype>*> blob_top_vec_half_2;
+  vector<Blob<Dtype>*> blob_bottom_vec_cpfp_2;
+  vector<Blob<Dtype>*> blob_top_vec_cpfp_2;
   vector<Blob<Dtype>*> blob_bottom_vec_pad_2;
   vector<Blob<Dtype>*> blob_top_vec_pad_2;
   vector<Blob<Dtype>*> prog_bot_;
@@ -223,8 +223,8 @@ TYPED_TEST(OCLCRLayerTest, TestForward1x1) {
 
   XCLParameter* xcl_param = layer_param.mutable_xcl_param();
 
-  xcl_param->set_xcl_name("cr_layer_fb_half.xclbin");
-  xcl_param->set_kernel_name("cr_layer_fb_half");
+  xcl_param->set_xcl_name("cr_layer_fb_cpfp.xclbin");
+  xcl_param->set_kernel_name("cr_layer_fb_cpfp");
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
@@ -241,9 +241,9 @@ TYPED_TEST(OCLCRLayerTest, TestForward1x1) {
   convolution_param->set_engine(ConvolutionParameter_Engine_OCL);
   convolution_param->set_subengine(ConvolutionParameter_SubEngine_WINOGRAD);
 
-  HalfConversionParameter* half_param =
-      layer_param.mutable_half_conversion_param();
-  half_param->set_convert_to(true);
+  CPFPConversionParameter* cpfp_param =
+      layer_param.mutable_cpfp_conversion_param();
+  cpfp_param->set_convert_to(true);
 
   PadParameter* pad_param =
       layer_param.mutable_pad_param();
@@ -254,10 +254,10 @@ TYPED_TEST(OCLCRLayerTest, TestForward1x1) {
   pad_layer->SetUp(this->blob_bottom_vec_pad, this->blob_top_vec_pad);
   pad_layer->Forward(this->blob_bottom_vec_pad, this->blob_top_vec_pad);
 
-  shared_ptr<Layer<Dtype> > half_layer(
-      new HalfConversionLayer<Dtype>(layer_param));
-  half_layer->SetUp(this->blob_bottom_vec_half, this->blob_top_vec_half);
-  half_layer->Forward(this->blob_bottom_vec_half, this->blob_top_vec_half);
+  shared_ptr<Layer<Dtype> > cpfp_layer(
+      new CPFPConversionLayer<Dtype>(layer_param));
+  cpfp_layer->SetUp(this->blob_bottom_vec_cpfp, this->blob_top_vec_cpfp);
+  cpfp_layer->Forward(this->blob_bottom_vec_cpfp, this->blob_top_vec_cpfp);
 
   CRParameter* cr_param = layer_param.mutable_cr_param();
   cr_param->set_relu(1);
@@ -267,13 +267,13 @@ TYPED_TEST(OCLCRLayerTest, TestForward1x1) {
   cr_layer->SetUp(this->blob_bottom_vec_cr, this->blob_top_vec_cr);
   cr_layer->Forward(this->blob_bottom_vec_cr, this->blob_top_vec_cr);
 
-  half_param->set_convert_to(false);
+  cpfp_param->set_convert_to(false);
 
-  shared_ptr<Layer<Dtype> > half_layer2(
-      new HalfConversionLayer<Dtype>(layer_param));
-  half_layer2->SetUp(this->blob_bottom_vec_half_2, this->blob_top_vec_half_2);
-  half_layer2->Forward(this->blob_bottom_vec_half_2,
-      this->blob_top_vec_half_2);
+  shared_ptr<Layer<Dtype> > cpfp_layer2(
+      new CPFPConversionLayer<Dtype>(layer_param));
+  cpfp_layer2->SetUp(this->blob_bottom_vec_cpfp_2, this->blob_top_vec_cpfp_2);
+  cpfp_layer2->Forward(this->blob_bottom_vec_cpfp_2,
+      this->blob_top_vec_cpfp_2);
 
   pad_param->set_pad(false);
 
@@ -300,8 +300,8 @@ TYPED_TEST(OCLCRLayerTest, TestForward3x3) {
 
   XCLParameter* xcl_param = layer_param.mutable_xcl_param();
 
-  xcl_param->set_xcl_name("cr_layer_fb_half.xclbin");
-  xcl_param->set_kernel_name("cr_layer_fb_half");
+  xcl_param->set_xcl_name("cr_layer_fb_cpfp.xclbin");
+  xcl_param->set_kernel_name("cr_layer_fb_cpfp");
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
@@ -318,9 +318,9 @@ TYPED_TEST(OCLCRLayerTest, TestForward3x3) {
   convolution_param->set_engine(ConvolutionParameter_Engine_OCL);
   convolution_param->set_subengine(ConvolutionParameter_SubEngine_WINOGRAD);
 
-  HalfConversionParameter* half_param =
-      layer_param.mutable_half_conversion_param();
-  half_param->set_convert_to(true);
+  CPFPConversionParameter* cpfp_param =
+      layer_param.mutable_cpfp_conversion_param();
+  cpfp_param->set_convert_to(true);
 
   PadParameter* pad_param =
       layer_param.mutable_pad_param();
@@ -331,10 +331,10 @@ TYPED_TEST(OCLCRLayerTest, TestForward3x3) {
   pad_layer->SetUp(this->blob_bottom_vec_pad, this->blob_top_vec_pad);
   pad_layer->Forward(this->blob_bottom_vec_pad, this->blob_top_vec_pad);
 
-  shared_ptr<Layer<Dtype> > half_layer(
-      new HalfConversionLayer<Dtype>(layer_param));
-  half_layer->SetUp(this->blob_bottom_vec_half, this->blob_top_vec_half);
-  half_layer->Forward(this->blob_bottom_vec_half, this->blob_top_vec_half);
+  shared_ptr<Layer<Dtype> > cpfp_layer(
+      new CPFPConversionLayer<Dtype>(layer_param));
+  cpfp_layer->SetUp(this->blob_bottom_vec_cpfp, this->blob_top_vec_cpfp);
+  cpfp_layer->Forward(this->blob_bottom_vec_cpfp, this->blob_top_vec_cpfp);
 
   CRParameter* cr_param = layer_param.mutable_cr_param();
   cr_param->set_relu(1);
@@ -344,13 +344,13 @@ TYPED_TEST(OCLCRLayerTest, TestForward3x3) {
   cr_layer->SetUp(this->blob_bottom_vec_cr, this->blob_top_vec_cr);
   cr_layer->Forward(this->blob_bottom_vec_cr, this->blob_top_vec_cr);
 
-  half_param->set_convert_to(false);
+  cpfp_param->set_convert_to(false);
 
-  shared_ptr<Layer<Dtype> > half_layer2(
-      new HalfConversionLayer<Dtype>(layer_param));
-  half_layer2->SetUp(this->blob_bottom_vec_half_2, this->blob_top_vec_half_2);
-  half_layer2->Forward(this->blob_bottom_vec_half_2,
-      this->blob_top_vec_half_2);
+  shared_ptr<Layer<Dtype> > cpfp_layer2(
+      new CPFPConversionLayer<Dtype>(layer_param));
+  cpfp_layer2->SetUp(this->blob_bottom_vec_cpfp_2, this->blob_top_vec_cpfp_2);
+  cpfp_layer2->Forward(this->blob_bottom_vec_cpfp_2,
+      this->blob_top_vec_cpfp_2);
 
   pad_param->set_pad(false);
 
@@ -377,8 +377,8 @@ TYPED_TEST(OCLCRLayerTest, TestForward5x5) {
 
   XCLParameter* xcl_param = layer_param.mutable_xcl_param();
 
-  xcl_param->set_xcl_name("cr_layer_fb_half.xclbin");
-  xcl_param->set_kernel_name("cr_layer_fb_half");
+  xcl_param->set_xcl_name("cr_layer_fb_cpfp.xclbin");
+  xcl_param->set_kernel_name("cr_layer_fb_cpfp");
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
@@ -395,9 +395,9 @@ TYPED_TEST(OCLCRLayerTest, TestForward5x5) {
   convolution_param->set_engine(ConvolutionParameter_Engine_OCL);
   convolution_param->set_subengine(ConvolutionParameter_SubEngine_WINOGRAD);
 
-  HalfConversionParameter* half_param =
-      layer_param.mutable_half_conversion_param();
-  half_param->set_convert_to(true);
+  CPFPConversionParameter* cpfp_param =
+      layer_param.mutable_cpfp_conversion_param();
+  cpfp_param->set_convert_to(true);
 
   PadParameter* pad_param = layer_param.mutable_pad_param();
   pad_param->set_pad(true);
@@ -406,10 +406,10 @@ TYPED_TEST(OCLCRLayerTest, TestForward5x5) {
   pad_layer->SetUp(this->blob_bottom_vec_pad, this->blob_top_vec_pad);
   pad_layer->Forward(this->blob_bottom_vec_pad, this->blob_top_vec_pad);
 
-  shared_ptr<Layer<Dtype> > half_layer(
-      new HalfConversionLayer<Dtype>(layer_param));
-  half_layer->SetUp(this->blob_bottom_vec_half, this->blob_top_vec_half);
-  half_layer->Forward(this->blob_bottom_vec_half, this->blob_top_vec_half);
+  shared_ptr<Layer<Dtype> > cpfp_layer(
+      new CPFPConversionLayer<Dtype>(layer_param));
+  cpfp_layer->SetUp(this->blob_bottom_vec_cpfp, this->blob_top_vec_cpfp);
+  cpfp_layer->Forward(this->blob_bottom_vec_cpfp, this->blob_top_vec_cpfp);
 
   CRParameter* cr_param = layer_param.mutable_cr_param();
   cr_param->set_relu(1);
@@ -418,13 +418,13 @@ TYPED_TEST(OCLCRLayerTest, TestForward5x5) {
   cr_layer->SetUp(this->blob_bottom_vec_cr, this->blob_top_vec_cr);
   cr_layer->Forward(this->blob_bottom_vec_cr, this->blob_top_vec_cr);
 
-  half_param->set_convert_to(false);
+  cpfp_param->set_convert_to(false);
 
-  shared_ptr<Layer<Dtype> > half_layer2(
-      new HalfConversionLayer<Dtype>(layer_param));
-  half_layer2->SetUp(this->blob_bottom_vec_half_2, this->blob_top_vec_half_2);
-  half_layer2->Forward(this->blob_bottom_vec_half_2,
-      this->blob_top_vec_half_2);
+  shared_ptr<Layer<Dtype> > cpfp_layer2(
+      new CPFPConversionLayer<Dtype>(layer_param));
+  cpfp_layer2->SetUp(this->blob_bottom_vec_cpfp_2, this->blob_top_vec_cpfp_2);
+  cpfp_layer2->Forward(this->blob_bottom_vec_cpfp_2,
+      this->blob_top_vec_cpfp_2);
 
   pad_param->set_pad(false);
 

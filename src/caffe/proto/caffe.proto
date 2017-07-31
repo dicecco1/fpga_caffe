@@ -403,7 +403,7 @@ message LayerParameter {
   optional ThresholdParameter threshold_param = 128;
   optional TileParameter tile_param = 138;
   optional WindowDataParameter window_data_param = 129;
-  optional HalfConversionParameter half_conversion_param = 148;
+  optional CPFPConversionParameter cpfp_conversion_param = 148;
   optional PadParameter pad_param = 149;
   optional CRParameter cr_param = 150;
   optional XCLParameter xcl_param = 151;
@@ -1413,10 +1413,10 @@ message PReLUParameter {
   optional bool channel_shared = 2 [default = false];
 }
 
-message HalfConversionParameter {
-  // Half conversion specification parameter
-  // convert_to = true: convert to half
-  // convert_to = false: convert from half
+message CPFPConversionParameter {
+  // CPFP conversion specification parameter
+  // convert_to = true: convert to cpfp 
+  // convert_to = false: convert from cpfp
   optional bool convert_to = 1 [default = true];
 }
 

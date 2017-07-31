@@ -20,7 +20,7 @@
 #include <vector>
 
 #include "caffe/util/device_alternate.hpp"
-#include "fpga_caffe/half.hpp"
+#include "fpga_caffe/cpfp.hpp"
 #include "fpga_caffe/layer.hpp"
 
 // Convert macro to string

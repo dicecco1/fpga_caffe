@@ -98,7 +98,7 @@ void caffe_copy(const int N, const Dtype* X, Dtype* Y) {
   }
 }
 
-template void caffe_copy<chalf>(const int N, const chalf* X, chalf* Y);
+template void caffe_copy<cpfp>(const int N, const cpfp* X, cpfp* Y);
 template void caffe_copy<char>(const int N, const char* X, char* Y);
 template void caffe_copy<int>(const int N, const int* X, int* Y);
 template void caffe_copy<unsigned int>(const int N, const unsigned int* X,

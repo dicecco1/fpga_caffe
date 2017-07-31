@@ -1264,8 +1264,8 @@ TYPED_TEST(oclConvolutionLayerTest, TestDirectConv3x3) {
   LayerParameter layer_param;
   XCLParameter* xcl_param = layer_param.mutable_xcl_param();
 
-  xcl_param->set_xcl_name("cr_layer_fb_half.xclbin");
-  xcl_param->set_kernel_name("cr_layer_fb_half");
+  xcl_param->set_xcl_name("cr_layer_fb_cpfp.xclbin");
+  xcl_param->set_kernel_name("cr_layer_fb_cpfp");
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
@@ -1306,8 +1306,8 @@ TYPED_TEST(oclConvolutionLayerTest, TestDirectConv5x5) {
   LayerParameter layer_param;
   XCLParameter* xcl_param = layer_param.mutable_xcl_param();
 
-  xcl_param->set_xcl_name("cr_layer_fb_half.xclbin");
-  xcl_param->set_kernel_name("cr_layer_fb_half");
+  xcl_param->set_xcl_name("cr_layer_fb_cpfp.xclbin");
+  xcl_param->set_kernel_name("cr_layer_fb_cpfp");
 
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
@@ -1349,8 +1349,8 @@ TYPED_TEST(oclConvolutionLayerTest, TestDirectConv1x1) {
   LayerParameter layer_param;
   XCLParameter* xcl_param = layer_param.mutable_xcl_param();
 
-  xcl_param->set_xcl_name("cr_layer_fb_half.xclbin");
-  xcl_param->set_kernel_name("cr_layer_fb_half");
+  xcl_param->set_xcl_name("cr_layer_fb_cpfp.xclbin");
+  xcl_param->set_kernel_name("cr_layer_fb_cpfp");
 
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));

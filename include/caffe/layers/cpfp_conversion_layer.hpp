@@ -1,5 +1,5 @@
-#ifndef CAFFE_HALF_CONVERSION_LAYER_HPP_
-#define CAFFE_HALF_CONVERSION_LAYER_HPP_
+#ifndef CAFFE_CPFP_CONVERSION_LAYER_HPP_
+#define CAFFE_CPFP_CONVERSION_LAYER_HPP_
 
 #include <vector>
 
@@ -15,19 +15,19 @@ namespace caffe {
  * 
  */
 template <typename Dtype>
-class HalfConversionLayer : public Layer<Dtype> {
+class CPFPConversionLayer : public Layer<Dtype> {
  public:
   /**
    * @param   
    */
-  explicit HalfConversionLayer(const LayerParameter& param)
+  explicit CPFPConversionLayer(const LayerParameter& param)
       : Layer<Dtype>(param) {}
   virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
   virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
 
-  virtual inline const char* type() const { return "Half Conversion"; }
+  virtual inline const char* type() const { return "CPFP Conversion"; }
 
   virtual inline int MinBottomBlobs() const { return 1; }
   virtual inline int MinTopBlobs() const { return 1; }
@@ -44,4 +44,4 @@ class HalfConversionLayer : public Layer<Dtype> {
 
 }  // namespace caffe
 
-#endif  // CAFFE_HALF_CONVERSION_LAYER_HPP_
+#endif  // CAFFE_CPFP_CONVERSION_LAYER_HPP_

@@ -6,13 +6,13 @@ endif
 
 SDA_FLOW = cpu_emu
 XOCC = xocc
-KERNEL_SRCS = cr_layer_fb_half.cpp
-KERNEL_NAME = cr_layer_fb_half
+KERNEL_SRCS = conv_layer_direct_cpfp.cpp
+KERNEL_NAME = conv_layer_direct_cpfp
 NK = 1
 
 DSA = xilinx:adm-pcie-8k5:2ddr:3.2
 
-XCLBIN_NAME=cr_layer_fb_half
+XCLBIN_NAME=conv_layer_direct
 
 INCLUDE_DIR=../../../include/
 
@@ -27,9 +27,9 @@ else ifeq (${SDA_FLOW}, hw)
 	XCLBIN = ${XCLBIN_NAME}.xclbin
 endif
 
-XCL_OPT += --platform ${DSA} --report estimate --nk ${KERNEL_NAME}:${NK} --kernel ${KERNEL_NAME} -I ${INCLUDE_DIR} -DSYNTHESIS -s -o ${XCLBIN}
+XCL_OPT += --platform ${DSA} --report estimate --nk ${KERNEL_NAME}:${NK} --kernel ${KERNEL_NAME} -I ${INCLUDE_DIR} -s -o ${XCLBIN}
 
-${XCLBIN}: ${KERNEL_SRCS}
+${XCLBIN}: ${KERNEL_SRCS} 
 	${XOCC} ${XCL_OPT} ${KERNEL_SRCS}
 
 clean:

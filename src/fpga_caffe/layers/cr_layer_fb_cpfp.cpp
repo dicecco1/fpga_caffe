@@ -4,16 +4,16 @@
 #include <stdbool.h>
 
 #include "../../../include/fpga_caffe/layer.hpp"
-#include "../../../include/fpga_caffe/half.hpp"
+#include "../../../include/fpga_caffe/cpfp.hpp"
 #include "../../../include/fpga_caffe/vector_types.hpp"
 
 #define OCFACT 1 
 
-void relu_fw(chalf16 outbuf[OCFACT][512], char16 outbuf_relu[OCFACT][512],
+void relu_fw(cpfp16 outbuf[OCFACT][512], char16 outbuf_relu[OCFACT][512],
   int k, int num_iter) {
   RELU_FW: for (int i = 0; i < num_iter; ++i) {
   #pragma HLS pipeline
-    chalf16 val;
+    cpfp16 val;
     val.s0 = max(outbuf[k][i].s0);
     val.s1 = max(outbuf[k][i].s1);
     val.s2 = max(outbuf[k][i].s2);
@@ -33,58 +33,58 @@ void relu_fw(chalf16 outbuf[OCFACT][512], char16 outbuf_relu[OCFACT][512],
 
     outbuf[k][i] = val;
 
-    outbuf_relu[k][i].s0 = (val.s0 != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].s1 = (val.s1 != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].s2 = (val.s2 != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].s3 = (val.s3 != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].s4 = (val.s4 != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].s5 = (val.s5 != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].s6 = (val.s6 != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].s7 = (val.s7 != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].s8 = (val.s8 != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].s9 = (val.s9 != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].sa = (val.sa != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].sb = (val.sb != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].sc = (val.sc != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].sd = (val.sd != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].se = (val.se != chalf(0)) ? 1 : 0;
-    outbuf_relu[k][i].sf = (val.sf != chalf(0)) ? 1 : 0;
+    outbuf_relu[k][i].s0 = (val.s0 != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].s1 = (val.s1 != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].s2 = (val.s2 != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].s3 = (val.s3 != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].s4 = (val.s4 != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].s5 = (val.s5 != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].s6 = (val.s6 != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].s7 = (val.s7 != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].s8 = (val.s8 != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].s9 = (val.s9 != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].sa = (val.sa != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].sb = (val.sb != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].sc = (val.sc != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].sd = (val.sd != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].se = (val.se != cpfp(0)) ? 1 : 0;
+    outbuf_relu[k][i].sf = (val.sf != cpfp(0)) ? 1 : 0;
   }
 }
 
-void relu_bw(chalf16 *inbuf, char16 *inbuf_relu, int inbuf_off, int num_iter) {
+void relu_bw(cpfp16 *inbuf, char16 *inbuf_relu, int inbuf_off, int num_iter) {
   RELU_BW: for (int i = 0; i < num_iter; ++i) {
   #pragma HLS dependence variable=inbuf inter false
   #pragma HLS pipeline
-    chalf16 val = inbuf[inbuf_off + i];
+    cpfp16 val = inbuf[inbuf_off + i];
     char16 relu_val = inbuf_relu[i];
-    inbuf[inbuf_off + i].s0 = (relu_val.s0 == 1) ? val.s0 : chalf(0);
-    inbuf[inbuf_off + i].s1 = (relu_val.s1 == 1) ? val.s1 : chalf(0);
-    inbuf[inbuf_off + i].s2 = (relu_val.s2 == 1) ? val.s2 : chalf(0);
-    inbuf[inbuf_off + i].s3 = (relu_val.s3 == 1) ? val.s3 : chalf(0);
-    inbuf[inbuf_off + i].s4 = (relu_val.s4 == 1) ? val.s4 : chalf(0);
-    inbuf[inbuf_off + i].s5 = (relu_val.s5 == 1) ? val.s5 : chalf(0);
-    inbuf[inbuf_off + i].s6 = (relu_val.s6 == 1) ? val.s6 : chalf(0);
-    inbuf[inbuf_off + i].s7 = (relu_val.s7 == 1) ? val.s7 : chalf(0);
-    inbuf[inbuf_off + i].s8 = (relu_val.s8 == 1) ? val.s8 : chalf(0);
-    inbuf[inbuf_off + i].s9 = (relu_val.s9 == 1) ? val.s9 : chalf(0);
-    inbuf[inbuf_off + i].sa = (relu_val.sa == 1) ? val.sa : chalf(0);
-    inbuf[inbuf_off + i].sb = (relu_val.sb == 1) ? val.sb : chalf(0);
-    inbuf[inbuf_off + i].sc = (relu_val.sc == 1) ? val.sc : chalf(0);
-    inbuf[inbuf_off + i].sd = (relu_val.sd == 1) ? val.sd : chalf(0);
-    inbuf[inbuf_off + i].se = (relu_val.se == 1) ? val.se : chalf(0);
-    inbuf[inbuf_off + i].sf = (relu_val.sf == 1) ? val.sf : chalf(0);
+    inbuf[inbuf_off + i].s0 = (relu_val.s0 == 1) ? val.s0 : cpfp(0);
+    inbuf[inbuf_off + i].s1 = (relu_val.s1 == 1) ? val.s1 : cpfp(0);
+    inbuf[inbuf_off + i].s2 = (relu_val.s2 == 1) ? val.s2 : cpfp(0);
+    inbuf[inbuf_off + i].s3 = (relu_val.s3 == 1) ? val.s3 : cpfp(0);
+    inbuf[inbuf_off + i].s4 = (relu_val.s4 == 1) ? val.s4 : cpfp(0);
+    inbuf[inbuf_off + i].s5 = (relu_val.s5 == 1) ? val.s5 : cpfp(0);
+    inbuf[inbuf_off + i].s6 = (relu_val.s6 == 1) ? val.s6 : cpfp(0);
+    inbuf[inbuf_off + i].s7 = (relu_val.s7 == 1) ? val.s7 : cpfp(0);
+    inbuf[inbuf_off + i].s8 = (relu_val.s8 == 1) ? val.s8 : cpfp(0);
+    inbuf[inbuf_off + i].s9 = (relu_val.s9 == 1) ? val.s9 : cpfp(0);
+    inbuf[inbuf_off + i].sa = (relu_val.sa == 1) ? val.sa : cpfp(0);
+    inbuf[inbuf_off + i].sb = (relu_val.sb == 1) ? val.sb : cpfp(0);
+    inbuf[inbuf_off + i].sc = (relu_val.sc == 1) ? val.sc : cpfp(0);
+    inbuf[inbuf_off + i].sd = (relu_val.sd == 1) ? val.sd : cpfp(0);
+    inbuf[inbuf_off + i].se = (relu_val.se == 1) ? val.se : cpfp(0);
+    inbuf[inbuf_off + i].sf = (relu_val.sf == 1) ? val.sf : cpfp(0);
   }
 }
 
-void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
+void input_stage(cpfp16 inbuf[8 * 256 * 16], unsigned short ksize,
     unsigned short xt_off, unsigned short xtile_pad, unsigned short yt_off, 
     unsigned short row_off, unsigned short ydim, unsigned short xdim, 
     unsigned short w_off, unsigned short burstchannels, int image_off,
-    bool fc, int numimages, bool backward_flag, chalf it[16][3]) {
+    bool fc, int numimages, bool backward_flag, cpfp it[16][3]) {
   unsigned short p, q, j, toff;
 
-  chalf tempbuf[34];
+  cpfp tempbuf[34];
 #pragma HLS ARRAY_PARTITION variable=tempbuf complete 
   
   short crow_off;
@@ -192,13 +192,13 @@ void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
   }
 }
 
-void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3], 
+void wt_set(cpfp16 wbuf[OCFACT][512], cpfp wt[OCFACT][16][3], 
     unsigned short w_off, unsigned short row_off, unsigned short ksize,
     unsigned short xt_off, unsigned short xdim, bool backward_flag, bool fc) {
-  chalf wvals[16]; 
+  cpfp wvals[16]; 
 #pragma HLS ARRAY_PARTITION variable=wvals complete dim=1
 
-  chalf it[3];
+  cpfp it[3];
   unsigned short weight_idx = (ksize == 1 && !backward_flag && !fc) ?
     w_off >> 3 : w_off;
   for (int k = 0; k < OCFACT; ++k) {
@@ -260,8 +260,8 @@ void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3],
 
 extern "C" {
 
-void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
-    chalf16 *output, char16 *track_relu, int *params, int group_idx,
+void cr_layer_fb_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
+    cpfp16 *output, char16 *track_relu, int *params, int group_idx,
     int image_idx) { 
 // Ports 
 #pragma HLS data_pack variable=weights
@@ -286,66 +286,66 @@ void cr_layer_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
   // Input tile buffer
-  chalf16 inbuf[8 * 256 * 16];
+  cpfp16 inbuf[8 * 256 * 16];
   char16 inbuf_relu[256 * 16];
   char16 outbuf_relu[OCFACT][512];
 
   // Output buffer used for writing
-  chalf16 outbuf[OCFACT][512];
+  cpfp16 outbuf[OCFACT][512];
 #pragma HLS ARRAY_PARTITION variable=outbuf complete dim=1
 
   // Weight buffer
-  chalf16 wbuf[OCFACT][512];
+  cpfp16 wbuf[OCFACT][512];
 #pragma HLS ARRAY_PARTITION variable=wbuf complete dim=1
 
   // Bias buffer
-  chalf biasbuf[1024];
+  cpfp biasbuf[1024];
 DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
 
   // Input tile registers post transform
-  chalf it[16][3];
+  cpfp it[16][3];
 #pragma HLS ARRAY_PARTITION variable=it complete dim=1
 #pragma HLS ARRAY_PARTITION variable=it complete dim=2
 
   // Temporary output tile registers
-  chalf ot[OCFACT][16][3];
+  cpfp ot[OCFACT][16][3];
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=2
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=3
 
-  chalf wt[OCFACT][16][3];
+  cpfp wt[OCFACT][16][3];
 #pragma HLS ARRAY_PARTITION variable=wt complete dim=1
 #pragma HLS ARRAY_PARTITION variable=wt complete dim=2
 #pragma HLS ARRAY_PARTITION variable=wt complete dim=3
 
   // Ouput tile transform stage 1 output
-  chalf ot_s1[OCFACT][24];
+  cpfp ot_s1[OCFACT][24];
 #pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=2
 
-  chalf ot_s2[OCFACT][3][4];
+  cpfp ot_s2[OCFACT][3][4];
 #pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=2
 #pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=3
 
-  chalf ot_s3[OCFACT][3][2];
+  cpfp ot_s3[OCFACT][3][2];
 #pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=2
 #pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=3
 
-  chalf ot_s4[OCFACT][3];
+  cpfp ot_s4[OCFACT][3];
 #pragma HLS ARRAY_PARTITION variable=ot_s4 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s4 complete dim=2
  
-  chalf otf[OCFACT][16];
+  cpfp otf[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=2
 
-  chalf otfc[OCFACT][16];
+  cpfp otfc[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otfc complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otfc complete dim=2
 
-  chalf otb[OCFACT][16];
+  cpfp otb[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otb complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otb complete dim=2
 
@@ -419,7 +419,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
   int bias_offset = outchannels * group_idx;
   int bias_size = outchannels;
 
-  memcpy(biasbuf, bias + bias_offset, sizeof(chalf) * bias_size);
+  memcpy(biasbuf, bias + bias_offset, sizeof(cpfp) * bias_size);
 
   int parallel_off = (backward_flag) ? (numimages >> 4) * xtile_pad * 2 :
     numimages * fact;
@@ -437,7 +437,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
         * inchannels) * ydim * fact + n * burstchannels * ydim * fact;
       inbuf_off = image_off * burstchannels * ydim * fact;
       in_size = burstchannels * ydim * fact;
-      memcpy(inbuf + inbuf_off, input + in_off, sizeof(chalf16) * in_size);
+      memcpy(inbuf + inbuf_off, input + in_off, sizeof(cpfp16) * in_size);
       if (relu && ((backward == 1) || (backward == 2) || (backward == 3))) {
         memcpy(inbuf_relu, track_relu + in_off, sizeof(char16) * in_size);
         relu_bw(inbuf, inbuf_relu, inbuf_off, in_size);
@@ -451,7 +451,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             for (int i = 0; i < out_size; ++i) {
             #pragma HLS pipeline
               for (int k = 0; k < OCFACT; ++k) {
-                chalf16 bias_;
+                cpfp16 bias_;
                 bias_ = biasbuf[o * OCFACT + k];
                 outbuf[k][i] = bias_;
               }
@@ -462,7 +462,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                 outchannels * ydim * fact + ((o * OCFACT + k + outchannels *
                 group_idx) * ydim + offy * burstydim) * fact;
               out_size = fact * burstydim;
-              memcpy(outbuf[k], output + out_offset, sizeof(chalf16) *
+              memcpy(outbuf[k], output + out_offset, sizeof(cpfp16) *
                   out_size);
             }
           } else if ((offy == 0) && (image_off == 0)) {
@@ -480,7 +480,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
                   out_size = out_size << 1;
                 }
               }
-              memcpy(outbuf[k], output + out_offset, sizeof(chalf16) *
+              memcpy(outbuf[k], output + out_offset, sizeof(cpfp16) *
                   out_size);
             } 
           }
@@ -521,7 +521,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             }
             if ((!backward_flag && (offy == 0) && image_off == 0) ||
               backward_flag)
-              memcpy(wbuf[k], weights + weight_offset, sizeof(chalf16) *
+              memcpy(wbuf[k], weights + weight_offset, sizeof(cpfp16) *
                 weight_size);
           }
           
@@ -727,7 +727,7 @@ DO_PRAGMA(HLS ARRAY_PARTITION variable=biasbuf cyclic factor=OCFACT)
             if ((o * OCFACT + k < outchannels &&
               ((backward_flag && (offy == rpofm - 1) && 
               (image_off == numimages_iter - 1)) || !backward_flag))) {
-              memcpy(output + out_offset, outbuf[k], sizeof(chalf16) *
+              memcpy(output + out_offset, outbuf[k], sizeof(cpfp16) *
                 out_size);
             }
           }

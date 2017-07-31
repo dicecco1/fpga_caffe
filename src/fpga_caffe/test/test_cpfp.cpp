@@ -6,12 +6,12 @@
 #include "fpga_caffe/test/test_fpga_caffe_main.hpp"
 
 template <typename TypeParam>
-class HalfTest : public OCLDeviceTest<TypeParam> {
+class CPFPTest : public OCLDeviceTest<TypeParam> {
   typedef typename TypeParam::Dtype Dtype;
 
  protected:
-  HalfTest()
-    : ocl("half_ops.xclbin", "half_ops") 
+  CPFPTest()
+    : ocl("cpfp_ops.xclbin", "cpfp_ops") 
   {}
   virtual void SetUp() {
     params.resize(1);
@@ -26,7 +26,7 @@ class HalfTest : public OCLDeviceTest<TypeParam> {
     params[0].numimages = 1;
   }
 
-  virtual ~HalfTest() {}
+  virtual ~CPFPTest() {}
   
   OCLUtil ocl;
   std::vector<Dtype> input;
@@ -39,9 +39,9 @@ class HalfTest : public OCLDeviceTest<TypeParam> {
   cl_mem ocl_params; 
 };
 
-TYPED_TEST_CASE(HalfTest, TestOCLDtypesAndDevices);
+TYPED_TEST_CASE(CPFPTest, TestOCLDtypesAndDevices);
 
-TYPED_TEST(HalfTest, TestMultRandom) {
+TYPED_TEST(CPFPTest, TestMultRandom) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   std::vector<kernel_params> params = this->params;
@@ -125,7 +125,7 @@ TYPED_TEST(HalfTest, TestMultRandom) {
   }
 }
 
-TYPED_TEST(HalfTest, TestMultZero) {
+TYPED_TEST(CPFPTest, TestMultZero) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   std::vector<kernel_params> params = this->params;
@@ -198,7 +198,7 @@ TYPED_TEST(HalfTest, TestMultZero) {
   }
 }
 
-TYPED_TEST(HalfTest, TestAdd) {
+TYPED_TEST(CPFPTest, TestAdd) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   std::vector<kernel_params> params = this->params;
@@ -284,7 +284,7 @@ TYPED_TEST(HalfTest, TestAdd) {
   }
 }
 
-TYPED_TEST(HalfTest, TestAddZero) {
+TYPED_TEST(CPFPTest, TestAddZero) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   std::vector<kernel_params> params = this->params;
@@ -355,7 +355,7 @@ TYPED_TEST(HalfTest, TestAddZero) {
 
     int size = params[i].inchannels;
     for (int j = 0; j < size; ++j) {
-      EXPECT_EQ(float(chalf(this->input[j]) + chalf(this->weights[j])),
+      EXPECT_EQ(float(cpfp(this->input[j]) + cpfp(this->weights[j])),
           this->hw_results[j]);
     }
     clReleaseMemObject(this->ocl_input);
@@ -364,7 +364,7 @@ TYPED_TEST(HalfTest, TestAddZero) {
   }
 }
 
-TYPED_TEST(HalfTest, TestSub) {
+TYPED_TEST(CPFPTest, TestSub) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   std::vector<kernel_params> params = this->params;

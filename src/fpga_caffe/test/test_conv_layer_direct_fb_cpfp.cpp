@@ -5,12 +5,12 @@
 #include "fpga_caffe/test/test_fpga_caffe_main.hpp"
 
 template <typename TypeParam>
-class ConvLayerDirectFBTest : public OCLDeviceTest<TypeParam> {
+class ConvLayerDirectFBCPFPTest : public OCLDeviceTest<TypeParam> {
   typedef typename TypeParam::Dtype Dtype;
 
  protected:
-  ConvLayerDirectFBTest()
-    : ocl("conv_layer_direct_fb.xclbin", "conv_layer_direct_fb") 
+  ConvLayerDirectFBCPFPTest()
+    : ocl("conv_layer_direct_fb_cpfp.xclbin", "conv_layer_direct_fb_cpfp") 
   {}
   virtual void SetUp() {
     params.resize(1);
@@ -21,12 +21,12 @@ class ConvLayerDirectFBTest : public OCLDeviceTest<TypeParam> {
     params[0].burstchannels = 256;
     params[0].rpo = 2;
     params[0].rpofm = 1;
-    params[0].burstydim = 16;
-    params[0].ydim = 16;
-    params[0].xdim = 16;
+    params[0].burstydim = 14;
+    params[0].ydim = 14;
+    params[0].xdim = 14;
     params[0].xtile_pad = 8;
-    params[0].numimages = 4;
-    batch_size[0] = 4;
+    params[0].numimages = 8;
+    batch_size[0] = 8; 
     /*    params[0].numgroups = 1;
     params[0].inchannels = 3;
     params[0].outchannels = 64;
@@ -62,15 +62,19 @@ class ConvLayerDirectFBTest : public OCLDeviceTest<TypeParam> {
     params[2].numimages = 2;*/
   }
 
-  virtual ~ConvLayerDirectFBTest() {}
+  virtual ~ConvLayerDirectFBCPFPTest() {}
   
   OCLUtil ocl;
   std::vector<Dtype> input;
   std::vector<Dtype> input_pad;
+  std::vector<cpfp> input_pad_cpfp;
   std::vector<Dtype> weights;
   std::vector<Dtype> weights_pad;
+  std::vector<cpfp> weights_pad_cpfp;
   std::vector<Dtype> bias;
+  std::vector<cpfp> bias_cpfp;
   std::vector<Dtype> hw_results;
+  std::vector<cpfp> hw_results_cpfp;
   std::vector<Dtype> sw_results;
   std::vector<kernel_params> params;
   std::vector<int> batch_size;
@@ -81,9 +85,9 @@ class ConvLayerDirectFBTest : public OCLDeviceTest<TypeParam> {
   cl_mem ocl_params; 
 };
 
-TYPED_TEST_CASE(ConvLayerDirectFBTest, TestOCLDtypesAndDevices);
+TYPED_TEST_CASE(ConvLayerDirectFBCPFPTest, TestOCLDtypesAndDevices);
 
-TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv1x1F) {
+TYPED_TEST(ConvLayerDirectFBCPFPTest, TestDirectConv1x1F_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 1;
@@ -110,51 +114,65 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv1x1F) {
     // Clear input vectors
     this->input.clear();
     this->input_pad.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
     this->weights_pad.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
     this->input_pad.resize(insize_pad, 0);
+    this->input_pad_cpfp.resize(insize_pad, cpfp(0));
     this->weights.resize(wsize, 0);
     this->weights_pad.resize(wsize_pad, 0);
+    this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
     this->bias.resize(bsize, 0);
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize_pad, 0);
+    this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
     events.resize(events_size);
     // Populate vectors
-    fillVector(this->input, 0.0, 1.0);
-    fillVector(this->weights, -1.0, 1.0);
-    fillVector(this->bias, -1.0, 1.0);
+    fillVectorCPFP(this->input, 0.0, 1.0);
+    fillVectorCPFP(this->weights, -1.0, 1.0);
+    fillVectorCPFP(this->bias, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyWeights(this->weights, this->weights_pad, ksize, ksize_pad,
         params[i]);
+   
+    toCPFP(this->input_pad, this->input_pad_cpfp);
+    toCPFP(this->weights_pad, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * insize_pad, NULL, NULL);
+        sizeof(cpfp) * insize_pad, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * wsize_pad, NULL, NULL);
+        sizeof(cpfp) * wsize_pad, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(Dtype) * outsize_pad, NULL, NULL);
+        sizeof(cpfp) * outsize_pad, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(Dtype) * insize_pad, this->input_pad.data(), 0, NULL, NULL);
+        0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
+        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(Dtype) * wsize_pad, this->weights_pad.data(), 0, NULL, NULL);
+        0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
+        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(Dtype) * bsize, this->bias.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(Dtype) * outsize_pad, this->hw_results.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_params, CL_TRUE,
         0, sizeof(kernel_params), &params[i], 0, NULL, NULL);
@@ -181,8 +199,11 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv1x1F) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(Dtype) * outsize_pad, this->hw_results.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
+
+    toFloat(this->hw_results_cpfp, this->hw_results);
+
     ref_conv_layer(this->input, this->weights, this->bias, this->sw_results,
         params[i]);
     int size = params[i].numimages * params[i].outchannels *
@@ -191,7 +212,7 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv1x1F) {
       for (int x = 0; x < params[i].xtile_pad * 2; ++x) {
         if (x < params[i].xdim) {
           EXPECT_TRUE(checkEQ(this->sw_results[j * params[i].xdim + x],
-              this->hw_results[j * params[i].xtile_pad * 2 + x], 1e-3, 1e-3));
+              this->hw_results[j * params[i].xtile_pad * 2 + x], 1e-1, 1e-1));
         }
       }
     }
@@ -202,7 +223,7 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv1x1F) {
   }
 }
 
-TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3F) {
+TYPED_TEST(ConvLayerDirectFBCPFPTest, TestDirectConv3x3F_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 3;
@@ -225,55 +246,69 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3F) {
     int outsize_pad = (outsize / params[i].xdim) * params[i].xtile_pad * 2;
     int bsize = params[i].outchannels * params[i].numgroups;
     int events_size = this->batch_size[i] / params[i].numimages *
-       params[i].numgroups;
+      params[i].numgroups;
     // Clear input vectors
     this->input.clear();
     this->input_pad.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
     this->weights_pad.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
     this->input_pad.resize(insize_pad, 0);
+    this->input_pad_cpfp.resize(insize_pad, cpfp(0));
     this->weights.resize(wsize, 0);
     this->weights_pad.resize(wsize_pad, 0);
+    this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
     this->bias.resize(bsize, 0);
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize_pad, 0);
+    this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
     events.resize(events_size);
     // Populate vectors
-    fillVector(this->input, 0.0, 1.0);
-    fillVector(this->weights, -1.0, 1.0);
-    fillVector(this->bias, -1.0, 1.0);
+    fillVectorCPFP(this->input, 0.0, 1.0);
+    fillVectorCPFP(this->weights, -1.0, 1.0);
+    fillVectorCPFP(this->bias, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyWeights(this->weights, this->weights_pad, ksize, ksize_pad,
         params[i]);
+   
+    toCPFP(this->input_pad, this->input_pad_cpfp);
+    toCPFP(this->weights_pad, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * insize_pad, NULL, NULL);
+        sizeof(cpfp) * insize_pad, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * wsize_pad, NULL, NULL);
+        sizeof(cpfp) * wsize_pad, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(Dtype) * outsize_pad, NULL, NULL);
+        sizeof(cpfp) * outsize_pad, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(Dtype) * insize_pad, this->input_pad.data(), 0, NULL, NULL);
+        0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
+        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(Dtype) * wsize_pad, this->weights_pad.data(), 0, NULL, NULL);
+        0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
+        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(Dtype) * bsize, this->bias.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(Dtype) * outsize_pad, this->hw_results.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_params, CL_TRUE,
         0, sizeof(kernel_params), &params[i], 0, NULL, NULL);
@@ -300,8 +335,11 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3F) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(Dtype) * outsize_pad, this->hw_results.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
+
+    toFloat(this->hw_results_cpfp, this->hw_results);
+
     ref_conv_layer(this->input, this->weights, this->bias, this->sw_results,
         params[i]);
     int size = params[i].numimages * params[i].outchannels *
@@ -310,7 +348,7 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3F) {
       for (int x = 0; x < params[i].xtile_pad * 2; ++x) {
         if (x < params[i].xdim) {
           EXPECT_TRUE(checkEQ(this->sw_results[j * params[i].xdim + x],
-              this->hw_results[j * params[i].xtile_pad * 2 + x], 1e-3, 1e-3));
+              this->hw_results[j * params[i].xtile_pad * 2 + x], 1e-1, 1e-1));
         }
       }
     }
@@ -321,7 +359,7 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3F) {
   }
 }
 
-TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5F) {
+TYPED_TEST(ConvLayerDirectFBCPFPTest, TestDirectConv5x5F_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 5;
@@ -338,61 +376,75 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5F) {
     int insize_pad = (insize / params[i].xdim) * params[i].xtile_pad * 2;
     int wsize = params[i].outchannels * params[i].numgroups *
       params[i].inchannels * ksize * ksize; 
-    int wsize_pad = (wsize / (ksize * ksize)) * ksize_pad;
+    int wsize_pad = wsize / (ksize * ksize) * ksize_pad;
     int outsize = params[i].numimages * params[i].outchannels * params[i].ydim
       * params[i].xdim * params[i].numgroups;
     int outsize_pad = (outsize / params[i].xdim) * params[i].xtile_pad * 2;
     int bsize = params[i].outchannels * params[i].numgroups;
     int events_size = this->batch_size[i] / params[i].numimages *
-       params[i].numgroups;
+      params[i].numgroups;
     // Clear input vectors
     this->input.clear();
     this->input_pad.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
     this->weights_pad.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
     this->input_pad.resize(insize_pad, 0);
+    this->input_pad_cpfp.resize(insize_pad, cpfp(0));
     this->weights.resize(wsize, 0);
     this->weights_pad.resize(wsize_pad, 0);
+    this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
     this->bias.resize(bsize, 0);
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize_pad, 0);
+    this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
     events.resize(events_size);
     // Populate vectors
-    fillVector(this->input, 0.0, 1.0);
-    fillVector(this->weights, -1.0, 1.0);
-    fillVector(this->bias, -1.0, 1.0);
+    fillVectorCPFP(this->input, 0.0, 1.0);
+    fillVectorCPFP(this->weights, -1.0, 1.0);
+    fillVectorCPFP(this->bias, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyWeights(this->weights, this->weights_pad, ksize, ksize_pad,
         params[i]);
+   
+    toCPFP(this->input_pad, this->input_pad_cpfp);
+    toCPFP(this->weights_pad, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * insize_pad, NULL, NULL);
+        sizeof(cpfp) * insize_pad, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * wsize_pad, NULL, NULL);
+        sizeof(cpfp) * wsize_pad, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(Dtype) * outsize_pad, NULL, NULL);
+        sizeof(cpfp) * outsize_pad, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(Dtype) * insize_pad, this->input_pad.data(), 0, NULL, NULL);
+        0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
+        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(Dtype) * wsize_pad, this->weights_pad.data(), 0, NULL, NULL);
+        0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
+        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(Dtype) * bsize, this->bias.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(Dtype) * outsize_pad, this->hw_results.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_params, CL_TRUE,
         0, sizeof(kernel_params), &params[i], 0, NULL, NULL);
@@ -419,8 +471,11 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5F) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(Dtype) * outsize_pad, this->hw_results.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
+
+    toFloat(this->hw_results_cpfp, this->hw_results);
+
     ref_conv_layer(this->input, this->weights, this->bias, this->sw_results,
         params[i]);
     int size = params[i].numimages * params[i].outchannels *
@@ -429,7 +484,7 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5F) {
       for (int x = 0; x < params[i].xtile_pad * 2; ++x) {
         if (x < params[i].xdim) {
           EXPECT_TRUE(checkEQ(this->sw_results[j * params[i].xdim + x],
-              this->hw_results[j * params[i].xtile_pad * 2 + x], 1e-3, 1e-3));
+              this->hw_results[j * params[i].xtile_pad * 2 + x], 1e-1, 1e-1));
         }
       }
     }
@@ -440,7 +495,7 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5F) {
   }
 }
 
-TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv1x1B) {
+TYPED_TEST(ConvLayerDirectFBCPFPTest, TestDirectConv1x1B_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 1;
@@ -467,46 +522,60 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv1x1B) {
     // Clear input vectors
     this->input.clear();
     this->input_pad.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
     this->weights_pad.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
     this->input_pad.resize(insize_pad, 0);
+    this->input_pad_cpfp.resize(insize_pad, cpfp(0));
     this->weights.resize(wsize, 0);
     this->weights_pad.resize(wsize_pad, 0);
+    this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
     this->bias.resize(bsize, 0);
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize_pad, 0);
+    this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
     events.resize(events_size);
     // Populate vectors
-    fillVector(this->input, -1.0, 1.0);
-    fillVector(this->weights, -1.0, 1.0);
+    fillVectorCPFP(this->input, -1.0, 1.0);
+    fillVectorCPFP(this->weights, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyVector(this->weights, this->weights_pad, params[i].xdim,
         params[i].xtile_pad * 2);
+    toCPFP(this->input_pad, this->input_pad_cpfp);
+    toCPFP(this->weights_pad, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
+
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * insize_pad, NULL, NULL);
+        sizeof(cpfp) * insize_pad, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * wsize_pad, NULL, NULL);
+        sizeof(cpfp) * wsize_pad, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(Dtype) * outsize_pad, NULL, NULL);
+        sizeof(cpfp) * outsize_pad, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(Dtype) * insize_pad, this->input_pad.data(), 0, NULL, NULL);
+        0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
+        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(Dtype) * wsize_pad, this->weights_pad.data(), 0, NULL, NULL);
+        0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
+        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(Dtype) * outsize_pad, this->hw_results.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_params, CL_TRUE,
         0, sizeof(kernel_params), &params[i], 0, NULL, NULL);
@@ -533,15 +602,18 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv1x1B) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(Dtype) * outsize_pad, this->hw_results.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
+
+    toFloat(this->hw_results_cpfp, this->hw_results);
+
     ref_backward_conv_layer(this->input, this->weights,
         this->sw_results, params[i]);
     int size = params[i].outchannels * params[i].numgroups *
       params[i].inchannels;
     for (int j = 0; j < size; ++j) {
       EXPECT_TRUE(checkEQ(this->sw_results[j], 
-            this->hw_results[j * ksize_pad + 1], 1e-3, 1e-3));
+            this->hw_results[j * ksize_pad + 1], 1e-1, 1e-1));
     }
     clReleaseMemObject(this->ocl_input);
     clReleaseMemObject(this->ocl_weights);
@@ -550,7 +622,7 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv1x1B) {
   }
 }
 
-TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3B) {
+TYPED_TEST(ConvLayerDirectFBCPFPTest, TestDirectConv3x3B_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 3;
@@ -577,46 +649,60 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3B) {
     // Clear input vectors
     this->input.clear();
     this->input_pad.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
     this->weights_pad.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
     this->input_pad.resize(insize_pad, 0);
+    this->input_pad_cpfp.resize(insize_pad, cpfp(0));
     this->weights.resize(wsize, 0);
     this->weights_pad.resize(wsize_pad, 0);
+    this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
     this->bias.resize(bsize, 0);
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize_pad, 0);
+    this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
     events.resize(events_size);
     // Populate vectors
-    fillVector(this->input, -1.0, 1.0);
-    fillVector(this->weights, -1.0, 1.0);
+    fillVectorCPFP(this->input, -1.0, 1.0);
+    fillVectorCPFP(this->weights, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyVector(this->weights, this->weights_pad, params[i].xdim,
         params[i].xtile_pad * 2);
+    toCPFP(this->input_pad, this->input_pad_cpfp);
+    toCPFP(this->weights_pad, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
+
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * insize_pad, NULL, NULL);
+        sizeof(cpfp) * insize_pad, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * wsize_pad, NULL, NULL);
+        sizeof(cpfp) * wsize_pad, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(Dtype) * outsize_pad, NULL, NULL);
+        sizeof(cpfp) * outsize_pad, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(Dtype) * insize_pad, this->input_pad.data(), 0, NULL, NULL);
+        0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
+        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(Dtype) * wsize_pad, this->weights_pad.data(), 0, NULL, NULL);
+        0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
+        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(Dtype) * outsize_pad, this->hw_results.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_params, CL_TRUE,
         0, sizeof(kernel_params), &params[i], 0, NULL, NULL);
@@ -643,8 +729,11 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3B) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(Dtype) * outsize_pad, this->hw_results.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
+
+    toFloat(this->hw_results_cpfp, this->hw_results);
+
     ref_backward_conv_layer(this->input, this->weights,
         this->sw_results, params[i]);
     int size = params[i].outchannels * params[i].numgroups *
@@ -652,7 +741,7 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3B) {
     for (int j = 0; j < size; ++j) {
       for (int k = 0; k < ksize * ksize; ++k) {
         EXPECT_TRUE(checkEQ(this->sw_results[j * ksize * ksize + k], 
-              this->hw_results[j * ksize_pad + k], 1e-3, 1e-3));
+              this->hw_results[j * ksize_pad + k], 1e-1, 1e-1));
       }
     }
     clReleaseMemObject(this->ocl_input);
@@ -663,7 +752,7 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv3x3B) {
 }
 
 
-TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5B) {
+TYPED_TEST(ConvLayerDirectFBCPFPTest, TestDirectConv5x5B_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 5;
@@ -690,46 +779,60 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5B) {
     // Clear input vectors
     this->input.clear();
     this->input_pad.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
     this->weights_pad.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
     this->input_pad.resize(insize_pad, 0);
+    this->input_pad_cpfp.resize(insize_pad, cpfp(0));
     this->weights.resize(wsize, 0);
     this->weights_pad.resize(wsize_pad, 0);
+    this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
     this->bias.resize(bsize, 0);
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize_pad, 0);
+    this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
     events.resize(events_size);
     // Populate vectors
-    fillVector(this->input, -1.0, 1.0);
-    fillVector(this->weights, -1.0, 1.0);
+    fillVectorCPFP(this->input, -1.0, 1.0);
+    fillVectorCPFP(this->weights, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyVector(this->weights, this->weights_pad, params[i].xdim,
         params[i].xtile_pad * 2);
+    toCPFP(this->input_pad, this->input_pad_cpfp);
+    toCPFP(this->weights_pad, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
+
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * insize_pad, NULL, NULL);
-    this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(Dtype) * wsize_pad, NULL, NULL);
+        sizeof(cpfp) * insize_pad, NULL, NULL);
+    this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
+        sizeof(cpfp) * wsize_pad, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(Dtype) * outsize_pad, NULL, NULL);
+        sizeof(cpfp) * outsize_pad, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(Dtype) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(Dtype) * insize_pad, this->input_pad.data(), 0, NULL, NULL);
+        0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
+        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(Dtype) * wsize_pad, this->weights_pad.data(), 0, NULL, NULL);
+        0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
+        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(Dtype) * outsize_pad, this->hw_results.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_params, CL_TRUE,
         0, sizeof(kernel_params), &params[i], 0, NULL, NULL);
@@ -756,8 +859,11 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5B) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(Dtype) * outsize_pad, this->hw_results.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
+
+    toFloat(this->hw_results_cpfp, this->hw_results);
+
     ref_backward_conv_layer(this->input, this->weights,
         this->sw_results, params[i]);
     int size = params[i].outchannels * params[i].numgroups *
@@ -768,10 +874,10 @@ TYPED_TEST(ConvLayerDirectFBTest, TestDirectConv5x5B) {
       for (int k = 0; k < ksize; ++k) {
         for (int l = 0; l < 3; ++l) {
           EXPECT_TRUE(checkEQ(this->sw_results[woff + k * 5 + l], 
-                this->hw_results[wtoff + k * 3 + l], 1e-3, 1e-3));
+                this->hw_results[wtoff + k * 3 + l], 1e-1, 1e-1));
           if (l < 2) {
             EXPECT_TRUE(checkEQ(this->sw_results[woff + k * 5 + l + 3], 
-                  this->hw_results[wtoff + k * 3 + l + 16], 1e-3, 1e-3));
+                  this->hw_results[wtoff + k * 3 + l + 16], 1e-1, 1e-1));
           }
         }
       }

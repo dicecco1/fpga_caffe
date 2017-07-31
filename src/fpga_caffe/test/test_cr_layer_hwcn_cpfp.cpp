@@ -205,48 +205,49 @@ void ref_backward_conv_layer_hwcn(std::vector<float> input,
   }
 }
 template <typename TypeParam>
-class CRLayerHWCNHalfTest : public OCLDeviceTest<TypeParam> {
+class CRLayerHWCNCPFPTest : public OCLDeviceTest<TypeParam> {
   typedef typename TypeParam::Dtype Dtype;
 
  protected:
-  CRLayerHWCNHalfTest()
-    : ocl("cr_layer_hwcn_half.xclbin", "cr_layer_hwcn_half") 
+  CRLayerHWCNCPFPTest()
+    : ocl("cr_layer_hwcn_cpfp.xclbin", "cr_layer_hwcn_cpfp") 
   {}
   virtual void SetUp() {
     params.resize(1);
     params[0].numgroups = 1;
-    params[0].inchannels = 32;
-    params[0].outchannels = 1;
+    params[0].inchannels = 16;
+    params[0].outchannels = 4;
     params[0].burstchannels = 16;
-    params[0].rpo = 2;
-    params[0].rpofm = 0;
-    params[0].burstydim = 0;
-    params[0].ydim = 24;
-    params[0].xdim = 24;
+    params[0].rpo = 1;
+    params[0].rpofm = 4;
+    params[0].burstydim = 1;
+    params[0].ydim = 4;
+    params[0].xdim = 4;
     params[0].xtile_pad = 0;
     params[0].numimages = 256;
     params[0].ksize = 3;
     params[0].backward = 0;
-    params[0].relu = 0;
+    params[0].relu = 1;
     params[0].stride = 1;
+    params[0].fc = 1;
     params[0].pad = 1;
     params[0].pool = 0;
     params[0].pksize = 2;
   }
 
-  virtual ~CRLayerHWCNHalfTest() {}
+  virtual ~CRLayerHWCNCPFPTest() {}
   
   OCLUtil ocl;
   std::vector<Dtype> input;
   std::vector<Dtype> input_pad;
-  std::vector<chalf> input_pad_half;
+  std::vector<cpfp> input_pad_cpfp;
   std::vector<Dtype> weights;
   std::vector<Dtype> weights_pad;
-  std::vector<chalf> weights_pad_half;
+  std::vector<cpfp> weights_pad_cpfp;
   std::vector<Dtype> bias;
-  std::vector<chalf> bias_half;
+  std::vector<cpfp> bias_cpfp;
   std::vector<Dtype> hw_results;
-  std::vector<chalf> hw_results_half;
+  std::vector<cpfp> hw_results_cpfp;
   std::vector<Dtype> sw_results;
   std::vector<kernel_params> params;
   std::vector<short> relu_vals;
@@ -259,9 +260,9 @@ class CRLayerHWCNHalfTest : public OCLDeviceTest<TypeParam> {
   cl_mem ocl_params;
 };
 
-TYPED_TEST_CASE(CRLayerHWCNHalfTest, TestOCLDtypesAndDevices);
+TYPED_TEST_CASE(CRLayerHWCNCPFPTest, TestOCLDtypesAndDevices);
 
-TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
+TYPED_TEST(CRLayerHWCNCPFPTest, TestCR1x1F_HALF) {
   this->ocl.Setup();
   std::vector<kernel_params> params = this->params;
   std::vector<cl_event> events;
@@ -280,63 +281,63 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
     int relusize = (outsize > insize) ? outsize : insize;
     // Clear input vectors
     this->input.clear();
-    this->input_pad_half.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
-    this->weights_pad_half.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
-    this->bias_half.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
-    this->hw_results_half.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     this->relu_vals.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
-    this->input_pad_half.resize(insize, chalf(0));
+    this->input_pad_cpfp.resize(insize, cpfp(0));
     this->weights.resize(wsize, 0);
-    this->weights_pad_half.resize(wsize, chalf(0));
+    this->weights_pad_cpfp.resize(wsize, cpfp(0));
     this->bias.resize(bsize, 0);
-    this->bias_half.resize(bsize, chalf(0));
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize, 0);
-    this->hw_results_half.resize(outsize, chalf(0));
+    this->hw_results_cpfp.resize(outsize, cpfp(0));
     this->relu_vals.resize(relusize / 16, 0);
     events.resize(events_size);
     // Populate vectors
-    fillVectorHalf(this->input, 0.0, 1.0);
-    fillVectorHalf(this->weights, -1.0, 1.0);
-    fillVectorHalf(this->bias, -1.0, 1.0);
+    fillVectorCPFP(this->input, 0.0, 1.0);
+    fillVectorCPFP(this->weights, -1.0, 1.0);
+    fillVectorCPFP(this->bias, -1.0, 1.0);
    
-    toHalf(this->input, this->input_pad_half);
-    toHalf(this->weights, this->weights_pad_half);
-    toHalf(this->bias, this->bias_half);
+    toCPFP(this->input, this->input_pad_cpfp);
+    toCPFP(this->weights, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * insize, NULL, NULL);
+        sizeof(cpfp) * insize, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * wsize, NULL, NULL);
+        sizeof(cpfp) * wsize, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(chalf) * outsize, NULL, NULL);
+        sizeof(cpfp) * outsize, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
         CL_MEM_READ_WRITE, sizeof(short) * relusize / 16, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(chalf) * insize, this->input_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * insize, this->input_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(chalf) * wsize, this->weights_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * wsize, this->weights_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
-    clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL, 
-        NULL);
+//    clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
+//        0, sizeof(cpfp) * outsize, this->hw_results_cpfp.data(), 0, NULL, 
+//        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(short) * relusize / 16, this->relu_vals.data(), 0,
         NULL, NULL);
@@ -365,17 +366,17 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(short) * relusize / 16, this->relu_vals.data(), 0,
         NULL, NULL);
 
-    toFloat(this->hw_results_half, this->hw_results);
+    toFloat(this->hw_results_cpfp, this->hw_results);
 
     ref_conv_layer_hwcn(this->input, this->weights, this->bias,
         this->sw_results, params[i]);
-    //ref_relu_layer(this->sw_results);
+    ref_relu_layer(this->sw_results);
     int size = params[i].numimages * params[i].outchannels *
       params[i].numgroups * params[i].ydim * params[i].xdim;
     for (int j = 0; j < size; ++j) {
@@ -393,7 +394,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1F_HALF) {
   }
 }
 
-TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1B_HALF) {
+TYPED_TEST(CRLayerHWCNCPFPTest, TestCR1x1B_HALF) {
   this->ocl.Setup();
   std::vector<kernel_params> params = this->params;
   std::vector<cl_event> events;
@@ -412,63 +413,63 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1B_HALF) {
     int events_size = params[i].numgroups;
     // Clear input vectors
     this->input.clear();
-    this->input_pad_half.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
-    this->weights_pad_half.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
-    this->bias_half.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
-    this->hw_results_half.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     this->relu_vals.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
-    this->input_pad_half.resize(insize, chalf(0));
+    this->input_pad_cpfp.resize(insize, cpfp(0));
     this->weights.resize(wsize, 0);
-    this->weights_pad_half.resize(wsize, chalf(0));
+    this->weights_pad_cpfp.resize(wsize, cpfp(0));
     this->bias.resize(bsize, 0);
-    this->bias_half.resize(bsize, chalf(0));
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize, 0);
-    this->hw_results_half.resize(outsize, chalf(0));
+    this->hw_results_cpfp.resize(outsize, cpfp(0));
     this->relu_vals.resize(insize / 16, -1);
     events.resize(events_size);
     // Populate vectors
-    fillVectorHalf(this->input, -1.0, 1.0);
-    fillVectorHalf(this->weights, 0.0, 1.0);
-    fillVectorHalf(this->bias, -1.0, 1.0);
+    fillVectorCPFP(this->input, -1.0, 1.0);
+    fillVectorCPFP(this->weights, 0.0, 1.0);
+    fillVectorCPFP(this->bias, -1.0, 1.0);
   
-    toHalf(this->input, this->input_pad_half);
-    toHalf(this->weights, this->weights_pad_half);
-    toHalf(this->bias, this->bias_half);
+    toCPFP(this->input, this->input_pad_cpfp);
+    toCPFP(this->weights, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * insize, NULL, NULL);
+        sizeof(cpfp) * insize, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * wsize, NULL, NULL);
+        sizeof(cpfp) * wsize, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(chalf) * outsize, NULL, NULL);
+        sizeof(cpfp) * outsize, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
         CL_MEM_READ_WRITE, sizeof(short) * insize / 16, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(chalf) * insize, this->input_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * insize, this->input_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(chalf) * wsize, this->weights_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * wsize, this->weights_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
-    clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL, 
-        NULL);
+//    clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
+//        0, sizeof(cpfp) * outsize, this->hw_results_cpfp.data(), 0, NULL, 
+//        NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(short) * insize / 16, this->relu_vals.data(), 0,
         NULL, NULL);
@@ -497,10 +498,10 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1B_HALF) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
 
-    toFloat(this->hw_results_half, this->hw_results);
+    toFloat(this->hw_results_cpfp, this->hw_results);
 
     ref_backward_conv_layer_hwcn(this->input, this->weights,
         this->sw_results, params[i]);
@@ -520,7 +521,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR1x1B_HALF) {
   }
 }
 
-TYPED_TEST(CRLayerHWCNHalfTest, TestCR2x2F_Pool_HALF) {
+TYPED_TEST(CRLayerHWCNCPFPTest, TestCR2x2F_Pool_HALF) {
   this->ocl.Setup();
   std::vector<kernel_params> params = this->params;
   std::vector<cl_event> events;
@@ -545,64 +546,64 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR2x2F_Pool_HALF) {
     int relusize = outsize;
     // Clear input vectors
     this->input.clear();
-    this->input_pad_half.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
-    this->weights_pad_half.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
-    this->bias_half.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
-    this->hw_results_half.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     this->relu_vals.clear();
     this->sw_relu_vals.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, -0.0);
-    this->input_pad_half.resize(insize, chalf(0));
+    this->input_pad_cpfp.resize(insize, cpfp(0));
     this->weights.resize(wsize, 0);
-    this->weights_pad_half.resize(wsize, chalf(0));
+    this->weights_pad_cpfp.resize(wsize, cpfp(0));
     this->bias.resize(bsize, 0);
-    this->bias_half.resize(bsize, chalf(0));
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize, 0);
-    this->hw_results_half.resize(outsize, chalf(0));
+    this->hw_results_cpfp.resize(outsize, cpfp(0));
     this->relu_vals.resize(relusize, 0);
     this->sw_relu_vals.resize(relusize, 0);
     events.resize(events_size);
     // Populate vectors
-    fillVectorHalf(this->input, -1e-7, 1e-7);
-    //fillVectorHalf(this->weights, -1.0, 1.0);
-    //fillVectorHalf(this->bias, -1.0, 1.0);
+    fillVectorCPFP(this->input, -1e-7, 1e-7);
+    //fillVectorCPFP(this->weights, -1.0, 1.0);
+    //fillVectorCPFP(this->bias, -1.0, 1.0);
    
-    toHalf(this->input, this->input_pad_half);
-    toHalf(this->weights, this->weights_pad_half);
-    toHalf(this->bias, this->bias_half);
+    toCPFP(this->input, this->input_pad_cpfp);
+    toCPFP(this->weights, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * insize, NULL, NULL);
+        sizeof(cpfp) * insize, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * wsize, NULL, NULL);
+        sizeof(cpfp) * wsize, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(chalf) * outsize, NULL, NULL);
+        sizeof(cpfp) * outsize, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
         CL_MEM_READ_WRITE, sizeof(short) * relusize, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(chalf) * insize, this->input_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * insize, this->input_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(chalf) * wsize, this->weights_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * wsize, this->weights_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(short) * relusize, this->relu_vals.data(), 0,
@@ -632,13 +633,13 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR2x2F_Pool_HALF) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(short) * relusize, this->relu_vals.data(), 0,
         NULL, NULL);
 
-    toFloat(this->hw_results_half, this->hw_results);
+    toFloat(this->hw_results_cpfp, this->hw_results);
 
     ref_pool_layer_hwcn(this->input, this->sw_results, this->sw_relu_vals,
         params[i]);
@@ -660,7 +661,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR2x2F_Pool_HALF) {
   }
 }
 
-TYPED_TEST(CRLayerHWCNHalfTest, TestCR2x2B_Pool_HALF) {
+TYPED_TEST(CRLayerHWCNCPFPTest, TestCR2x2B_Pool_HALF) {
   this->ocl.Setup();
   std::vector<kernel_params> params = this->params;
   std::vector<cl_event> events;
@@ -687,60 +688,60 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR2x2B_Pool_HALF) {
     int relusize = insize;
     // Clear input vectors
     this->input.clear();
-    this->input_pad_half.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
-    this->weights_pad_half.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
-    this->bias_half.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
-    this->hw_results_half.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     this->relu_vals.clear();
     this->sw_relu_vals.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
-    this->input_pad_half.resize(insize, chalf(0));
+    this->input_pad_cpfp.resize(insize, cpfp(0));
     this->weights.resize(wsize, 0);
-    this->weights_pad_half.resize(wsize, chalf(0));
+    this->weights_pad_cpfp.resize(wsize, cpfp(0));
     this->bias.resize(bsize, 0);
-    this->bias_half.resize(bsize, chalf(0));
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize, 0);
-    this->hw_results_half.resize(outsize, chalf(0));
+    this->hw_results_cpfp.resize(outsize, cpfp(0));
     this->relu_vals.resize(relusize, 0);
     this->sw_relu_vals.resize(relusize, 0);
     events.resize(events_size);
     // Populate vectors
-    fillVectorHalf(this->input, 0.0, 1.0);
+    fillVectorCPFP(this->input, 0.0, 1.0);
    
-    toHalf(this->input, this->input_pad_half);
+    toCPFP(this->input, this->input_pad_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * insize, NULL, NULL);
+        sizeof(cpfp) * insize, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * wsize, NULL, NULL);
+        sizeof(cpfp) * wsize, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(chalf) * outsize, NULL, NULL);
+        sizeof(cpfp) * outsize, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
         CL_MEM_READ_WRITE, sizeof(short) * relusize, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(chalf) * insize, this->input_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * insize, this->input_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(chalf) * wsize, this->weights_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * wsize, this->weights_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(short) * relusize, this->relu_vals.data(), 0,
@@ -770,10 +771,10 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR2x2B_Pool_HALF) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
 
-    toFloat(this->hw_results_half, this->hw_results);
+    toFloat(this->hw_results_cpfp, this->hw_results);
 
     ref_backward_pool_layer_hwcn(this->input, this->sw_results,
         this->relu_vals, params[i]);
@@ -793,7 +794,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR2x2B_Pool_HALF) {
   }
 }
 
-TYPED_TEST(CRLayerHWCNHalfTest, TestCR3x3F_Pool_HALF) {
+TYPED_TEST(CRLayerHWCNCPFPTest, TestCR3x3F_Pool_HALF) {
   this->ocl.Setup();
   std::vector<kernel_params> params = this->params;
   std::vector<cl_event> events;
@@ -818,60 +819,60 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR3x3F_Pool_HALF) {
     int relusize = outsize;
     // Clear input vectors
     this->input.clear();
-    this->input_pad_half.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
-    this->weights_pad_half.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
-    this->bias_half.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
-    this->hw_results_half.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     this->relu_vals.clear();
     this->sw_relu_vals.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
-    this->input_pad_half.resize(insize, chalf(0));
+    this->input_pad_cpfp.resize(insize, cpfp(0));
     this->weights.resize(wsize, 0);
-    this->weights_pad_half.resize(wsize, chalf(0));
+    this->weights_pad_cpfp.resize(wsize, cpfp(0));
     this->bias.resize(bsize, 0);
-    this->bias_half.resize(bsize, chalf(0));
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize, 0);
-    this->hw_results_half.resize(outsize, chalf(0));
+    this->hw_results_cpfp.resize(outsize, cpfp(0));
     this->relu_vals.resize(relusize, 0);
     this->sw_relu_vals.resize(relusize, 0);
     events.resize(events_size);
     // Populate vectors
-    fillVectorHalf(this->input, 0.0, 1.0);
+    fillVectorCPFP(this->input, 0.0, 1.0);
    
-    toHalf(this->input, this->input_pad_half);
+    toCPFP(this->input, this->input_pad_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * insize, NULL, NULL);
+        sizeof(cpfp) * insize, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * wsize, NULL, NULL);
+        sizeof(cpfp) * wsize, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(chalf) * outsize, NULL, NULL);
+        sizeof(cpfp) * outsize, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
         CL_MEM_READ_WRITE, sizeof(short) * relusize, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(chalf) * insize, this->input_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * insize, this->input_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(chalf) * wsize, this->weights_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * wsize, this->weights_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(short) * relusize, this->relu_vals.data(), 0,
@@ -901,13 +902,13 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR3x3F_Pool_HALF) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(short) * relusize, this->relu_vals.data(), 0,
         NULL, NULL);
 
-    toFloat(this->hw_results_half, this->hw_results);
+    toFloat(this->hw_results_cpfp, this->hw_results);
 
     ref_pool_layer_hwcn(this->input, this->sw_results, this->sw_relu_vals,
         params[i]);
@@ -929,7 +930,7 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR3x3F_Pool_HALF) {
   }
 }
 
-TYPED_TEST(CRLayerHWCNHalfTest, TestCR3x3B_Pool_HALF) {
+TYPED_TEST(CRLayerHWCNCPFPTest, TestCR3x3B_Pool_HALF) {
   this->ocl.Setup();
   std::vector<kernel_params> params = this->params;
   std::vector<cl_event> events;
@@ -956,27 +957,27 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR3x3B_Pool_HALF) {
     int relusize = insize;
     // Clear input vectors
     this->input.clear();
-    this->input_pad_half.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
-    this->weights_pad_half.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
-    this->bias_half.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
-    this->hw_results_half.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     this->relu_vals.clear();
     this->sw_relu_vals.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
-    this->input_pad_half.resize(insize, chalf(0));
+    this->input_pad_cpfp.resize(insize, cpfp(0));
     this->weights.resize(wsize, 0);
-    this->weights_pad_half.resize(wsize, chalf(0));
+    this->weights_pad_cpfp.resize(wsize, cpfp(0));
     this->bias.resize(bsize, 0);
-    this->bias_half.resize(bsize, chalf(0));
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize, 0);
-    this->hw_results_half.resize(outsize, chalf(0));
+    this->hw_results_cpfp.resize(outsize, cpfp(0));
     this->relu_vals.resize(relusize, 0);
     this->sw_relu_vals.resize(relusize, 0);
 
@@ -985,35 +986,35 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR3x3B_Pool_HALF) {
 
     events.resize(events_size);
     // Populate vectors
-    fillVectorHalf(this->input, 0.0, 1.0);
+    fillVectorCPFP(this->input, 0.0, 1.0);
    
-    toHalf(this->input, this->input_pad_half);
+    toCPFP(this->input, this->input_pad_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * insize, NULL, NULL);
+        sizeof(cpfp) * insize, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * wsize, NULL, NULL);
+        sizeof(cpfp) * wsize, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(chalf) * outsize, NULL, NULL);
+        sizeof(cpfp) * outsize, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
         CL_MEM_READ_WRITE, sizeof(short) * relusize, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(chalf) * insize, this->input_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * insize, this->input_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(chalf) * wsize, this->weights_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * wsize, this->weights_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(short) * relusize, this->relu_vals.data(), 0,
@@ -1043,10 +1044,10 @@ TYPED_TEST(CRLayerHWCNHalfTest, TestCR3x3B_Pool_HALF) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize, this->hw_results_half.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
 
-    toFloat(this->hw_results_half, this->hw_results);
+    toFloat(this->hw_results_cpfp, this->hw_results);
 
     ref_backward_pool_layer_hwcn(this->input, this->sw_results,
         this->relu_vals, params[i]);

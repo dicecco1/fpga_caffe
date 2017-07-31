@@ -4,39 +4,39 @@
 #include <stdbool.h>
 
 #include "../../../include/fpga_caffe/layers/conv_layer.hpp"
-#include "half.h"
+#include "cpfp.h"
 
 #define HADD_LATENCY 10 
 #define OCFACT 1 
-/* chalf16 data type definition */
+/* cpfp16 data type definition */
 
 typedef struct {
-  chalf s0;
-  chalf s1;
-  chalf s2;
-  chalf s3;
-  chalf s4;
-  chalf s5;
-  chalf s6;
-  chalf s7;
-  chalf s8;
-  chalf s9;
-  chalf sa;
-  chalf sb;
-  chalf sc;
-  chalf sd;
-  chalf se;
-  chalf sf;
-} chalf16;
+  cpfp s0;
+  cpfp s1;
+  cpfp s2;
+  cpfp s3;
+  cpfp s4;
+  cpfp s5;
+  cpfp s6;
+  cpfp s7;
+  cpfp s8;
+  cpfp s9;
+  cpfp sa;
+  cpfp sb;
+  cpfp sc;
+  cpfp sd;
+  cpfp se;
+  cpfp sf;
+} cpfp16;
 
-void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
+void input_stage(cpfp16 inbuf[8 * 256 * 16], unsigned short ksize,
     unsigned short xt_off, unsigned short xtile_pad, unsigned short yt_off, 
     unsigned short row_off, unsigned short ydim, unsigned short xdim, 
     unsigned short w_off, unsigned short burstchannels, int image_off,
-    chalf it[16][3]) {
+    cpfp it[16][3]) {
   unsigned short p, q, j, toff;
 
-  chalf tempbuf[21];
+  cpfp tempbuf[21];
 #pragma HLS ARRAY_PARTITION variable=tempbuf complete 
 
   short crow_off;
@@ -106,14 +106,14 @@ void input_stage(chalf16 inbuf[8 * 256 * 16], unsigned short ksize,
   }
 }
 
-void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3], 
+void wt_set(cpfp16 wbuf[OCFACT][512], cpfp wt[OCFACT][16][3], 
     unsigned short w_off, unsigned short row_off, unsigned short ksize,
     unsigned short xt_off, unsigned short xdim, bool backward_flag) { 
-  chalf wvals[16]; 
+  cpfp wvals[16]; 
 #pragma HLS ARRAY_PARTITION variable=wvals complete
 
-  chalf it[3];
-  chalf ot[3];
+  cpfp it[3];
+  cpfp ot[3];
 
   for (int k = 0; k < OCFACT; ++k) {
     wvals[0] = wbuf[k][w_off].s0;
@@ -170,8 +170,8 @@ void wt_set(chalf16 wbuf[OCFACT][512], chalf wt[OCFACT][16][3],
 
 extern "C" {
 
-void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
-    chalf16 *output, int *params, int group_idx, int image_idx) { 
+void conv_layer_direct_fb_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
+    cpfp16 *output, int *params, int group_idx, int image_idx) { 
 // Ports 
 #pragma HLS data_pack variable=weights
 #pragma HLS data_pack variable=output
@@ -192,60 +192,60 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
   // Input tile buffer
-  chalf16 inbuf[8 * 256 * 16]; 
+  cpfp16 inbuf[8 * 256 * 16]; 
 
   // Output buffer used for writing
-  chalf16 outbuf[OCFACT][512];
+  cpfp16 outbuf[OCFACT][512];
 #pragma HLS ARRAY_PARTITION variable=outbuf complete dim=1
 
   // Weight buffer
-  chalf16 wbuf[OCFACT][512];
+  cpfp16 wbuf[OCFACT][512];
 #pragma HLS ARRAY_PARTITION variable=wbuf complete dim=1
 
   // Bias buffer
-  chalf biasbuf[1024];
+  cpfp biasbuf[1024];
 #pragma HLS ARRAY_PARTITION variable=biasbuf cyclic factor=4
 
   // Input tile registers post transform
-  chalf it[16][3];
+  cpfp it[16][3];
 #pragma HLS ARRAY_PARTITION variable=it complete dim=1
 #pragma HLS ARRAY_PARTITION variable=it complete dim=2
 
   // Temporary output tile registers
-  chalf ot[OCFACT][16][3];
+  cpfp ot[OCFACT][16][3];
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=2
 #pragma HLS ARRAY_PARTITION variable=ot complete dim=3
 
-  chalf wt[OCFACT][16][3];
+  cpfp wt[OCFACT][16][3];
 #pragma HLS ARRAY_PARTITION variable=wt complete dim=1
 #pragma HLS ARRAY_PARTITION variable=wt complete dim=2
 #pragma HLS ARRAY_PARTITION variable=wt complete dim=3
 
   // Ouput tile transform stage 1 output
-  chalf ot_s1[OCFACT][24];
+  cpfp ot_s1[OCFACT][24];
 #pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s1 complete dim=2
 
-  chalf ot_s2[OCFACT][3][4];
+  cpfp ot_s2[OCFACT][3][4];
 #pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=2
 #pragma HLS ARRAY_PARTITION variable=ot_s2 complete dim=3
 
-  chalf ot_s3[OCFACT][3][2];
+  cpfp ot_s3[OCFACT][3][2];
 #pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=2
 #pragma HLS ARRAY_PARTITION variable=ot_s3 complete dim=3
 
-  chalf ot_s4[OCFACT][3];
+  cpfp ot_s4[OCFACT][3];
 #pragma HLS ARRAY_PARTITION variable=ot_s4 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=ot_s4 complete dim=2
  
-  chalf otf[OCFACT][16];
+  cpfp otf[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otf complete dim=2
 
-  chalf otb[OCFACT][16];
+  cpfp otb[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=otb complete dim=1
 #pragma HLS ARRAY_PARTITION variable=otb complete dim=2
 
@@ -325,7 +325,7 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
   mod_ydim = ((burstydim < HADD_LATENCY) && !(backward_flag)) ? HADD_LATENCY :
     burstydim; 
   // Read bias data into buffer 
-  memcpy(biasbuf, bias + (outchannels * group_idx), sizeof(chalf) *
+  memcpy(biasbuf, bias + (outchannels * group_idx), sizeof(cpfp) *
       outchannels);
 
   int mac_iterations = mod_channel * mod_ydim * fact * ksize;
@@ -339,7 +339,7 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
         * inchannels) * ydim * fact + n * burstchannels * ydim * fact;
 
       inbuf_off = image_off * burstchannels * ydim * fact;
-      memcpy(inbuf + inbuf_off, input + in_off, sizeof(chalf16) *
+      memcpy(inbuf + inbuf_off, input + in_off, sizeof(cpfp16) *
         burstchannels * ydim * fact); 
     }
     for (int o = 0; o < ofm_iters; ++o) {
@@ -374,7 +374,7 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 outchannels * ydim * fact + ((o * OCFACT + k + outchannels *
                 group_idx) * ydim + offy * burstydim) * fact;
               out_size = fact * burstydim;
-              memcpy(outbuf[k], output + out_offset, sizeof(chalf16) *
+              memcpy(outbuf[k], output + out_offset, sizeof(cpfp16) *
                   out_size);
             }
           } else if (offy == 0 && image_off == 0) {
@@ -387,7 +387,7 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 out_offset = out_offset << 1;
                 out_size = out_size << 1;
               }
-              memcpy(outbuf[k], output + out_offset, sizeof(chalf16) *
+              memcpy(outbuf[k], output + out_offset, sizeof(cpfp16) *
                   out_size);
             } 
           }
@@ -413,7 +413,7 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
             }
             if ((!backward_flag && (offy == 0) && image_off == 0) ||
               backward_flag)
-              memcpy(wbuf[k], weights + weight_offset, sizeof(chalf16) *
+              memcpy(wbuf[k], weights + weight_offset, sizeof(cpfp16) *
                   weight_size);
           }
           
@@ -557,7 +557,7 @@ void conv_layer_direct_fb_half(chalf16 *input, chalf16 *weights, chalf *bias,
             if (o * OCFACT + k < outchannels && 
               ((backward_flag && (offy == rpofm - 1) && 
               (image_off == numimages - 1)) || !backward_flag)) {
-              memcpy(output + out_offset, outbuf[k], sizeof(chalf16) *
+              memcpy(output + out_offset, outbuf[k], sizeof(cpfp16) *
                 out_size);
             }
           }

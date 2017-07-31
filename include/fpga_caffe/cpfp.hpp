@@ -1,5 +1,5 @@
-#ifndef HALF_HPP_
-#define HALF_HPP_
+#ifndef CPFP_HPP_
+#define CPFP_HPP_
 
 #include <algorithm>
 #include <iostream>
@@ -14,8 +14,8 @@
 #include "ap_int.h"
 #endif
 
-#define EXP_SIZE 6 
-#define MANT_SIZE 7 
+#define EXP_SIZE 6
+#define MANT_SIZE 8 
 #define EXP_OFFSET ((1 << (EXP_SIZE - 1)) - 1)
 #define MAX_EXP ((1 << EXP_SIZE) - 1)
 #define MAX_MANT ((1 << MANT_SIZE) - 1)
@@ -29,8 +29,8 @@
 #define FP_WIDTH (EXP_SIZE + MANT_SIZE + 1)
 #define ROUND_NEAREST_MULT 0
 #define ROUND_NEAREST_ADD 1 
-#define CHALF_MIN_VAL (1 << SIGN_SHIFT) | (MAX_EXP << EXP_SHIFT) | MAX_MANT
-#define CHALF_MAX_VAL (MAX_EXP << EXP_SHIFT) | MAX_MANT
+#define CPFP_MIN_VAL (1 << SIGN_SHIFT) | (MAX_EXP << EXP_SHIFT) | MAX_MANT
+#define CPFP_MAX_VAL (MAX_EXP << EXP_SHIFT) | MAX_MANT
 
 #if (EXP_SIZE + MANT_SIZE + 1) > 16
   #define DIFF_SIZE (32 - EXP_SIZE - MANT_SIZE - 1)
@@ -38,44 +38,35 @@
   #define DIFF_SIZE (16 - EXP_SIZE - MANT_SIZE - 1)
 #endif
 
-#ifndef HALF_ROUND_STYLE
-	#define HALF_ROUND_STYLE	1			// = std::round_indeterminate
-#endif
-
 typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef int16_t int16;
 typedef int32_t int32;
 
-class chalf;
+class cpfp;
 
-chalf operator*(chalf T, float U);
-chalf operator*(chalf T, int U);
-chalf operator*(chalf T, chalf U);
-chalf operator+(chalf T, chalf U);
-chalf operator/(chalf T, chalf U);
-chalf operator/(chalf T, int U);
-bool operator<(chalf T, chalf U);
-bool operator<=(chalf T, chalf U);
-bool operator>(chalf T, chalf U);
-bool operator>=(chalf T, chalf U);
-bool operator==(chalf T, chalf U);
-bool operator!=(chalf T, chalf U);
-chalf max(chalf T, chalf U, short Tmask, short Umask, short *out_mask);
-chalf max(chalf T, chalf U);
-chalf max(chalf T);
-#ifdef SYNTHESIS
-#endif
-/// Convert IEEE single-precision to chalf-precision.
-/// Credit for this goes to [Jeroen van der Zijp](ftp://ftp.fox-toolkit.org/pub/fastchalffloatconversion.pdf).
-/// \tparam R rounding mode to use, `std::round_indeterminate` for fastest rounding
-/// \param value single-precision value
-/// \return binary representation of chalf-precision value
-inline uint32 float2chalf_impl(float value)
+cpfp operator*(cpfp T, float U);
+cpfp operator*(cpfp T, int U);
+cpfp operator*(cpfp T, cpfp U);
+cpfp operator+(cpfp T, cpfp U);
+cpfp operator/(cpfp T, cpfp U);
+cpfp operator/(cpfp T, int U);
+bool operator<(cpfp T, cpfp U);
+bool operator<=(cpfp T, cpfp U);
+bool operator>(cpfp T, cpfp U);
+bool operator>=(cpfp T, cpfp U);
+bool operator==(cpfp T, cpfp U);
+bool operator!=(cpfp T, cpfp U);
+cpfp max(cpfp T, cpfp U, short Tmask, short Umask, short *out_mask);
+cpfp max(cpfp T, cpfp U);
+cpfp max(cpfp T);
+
+/// Convert IEEE single-precision to cpfp-precision.
+inline uint32 float2cpfp_impl(float value)
 {
-#if HALF_ENABLE_CPP11_STATIC_ASSERT
-  static_assert(std::numeric_limits<float>::is_iec559, "float to chalf conversion needs IEEE 754 conformant 'float' type");
-  static_assert(sizeof(uint32)==sizeof(float), "float to chalf conversion needs unsigned integer type of exactly the size of a 'float'");
+#if CPFP_ENABLE_CPP11_STATIC_ASSERT
+  static_assert(std::numeric_limits<float>::is_iec559, "float to cpfp conversion needs IEEE 754 conformant 'float' type");
+  static_assert(sizeof(uint32)==sizeof(float), "float to cpfp conversion needs unsigned integer type of exactly the size of a 'float'");
 #endif
   uint32 bits;		//violating strict aliasing!
   float *temp = &value;
@@ -97,23 +88,18 @@ inline uint32 float2chalf_impl(float value)
   return hbits;
 }
 
-/// Convert single-precision to chalf-precision.
-/// \param value single-precision value
-/// \return binary representation of chalf-precision value
-inline uint32 float2chalf(float value)
+/// Convert single-precision to cpfp-precision.
+inline uint32 float2cpfp(float value)
 {
-  return float2chalf_impl(value);
+  return float2cpfp_impl(value);
 }
 
-/// Convert chalf-precision to IEEE single-precision.
-/// Credit for this goes to [Jeroen van der Zijp](ftp://ftp.fox-toolkit.org/pub/fastchalffloatconversion.pdf).
-/// \param value binary representation of chalf-precision value
-/// \return single-precision value
-inline float chalf2float_impl(uint32 value)
+/// Convert cpfp-precision to IEEE single-precision.
+inline float cpfp2float_impl(uint32 value)
 {
-#if HALF_ENABLE_CPP11_STATIC_ASSERT
-  static_assert(std::numeric_limits<float>::is_iec559, "chalf to float conversion needs IEEE 754 conformant 'float' type");
-  static_assert(sizeof(uint32)==sizeof(float), "chalf to float conversion needs unsigned integer type of exactly the size of a 'float'");
+#if CPFP_ENABLE_CPP11_STATIC_ASSERT
+  static_assert(std::numeric_limits<float>::is_iec559, "cpfp to float conversion needs IEEE 754 conformant 'float' type");
+  static_assert(sizeof(uint32)==sizeof(float), "cpfp to float conversion needs unsigned integer type of exactly the size of a 'float'");
 #endif
   float out;
   uint32 sign = (value & SIGN_MASK) << (31 - SIGN_SHIFT);
@@ -128,46 +114,42 @@ inline float chalf2float_impl(uint32 value)
   return out;
 }
 
-/// Convert chalf-precision to single-precision.
-/// \param value binary representation of chalf-precision value
-/// \return single-precision value
-inline float chalf2float(uint32 value)
+/// Convert cpfp-precision to single-precision.
+inline float cpfp2float(uint32 value)
 {
-  return chalf2float_impl(value);
+  return cpfp2float_impl(value);
 }
 
-class chalf {
-  friend chalf operator*(chalf T, float U);
-  friend chalf operator*(chalf T, int U);
-  friend chalf operator*(chalf T, chalf U);
-  friend chalf operator+(chalf T, chalf U);
-  friend chalf max(chalf T, chalf U, short Tmask, short Umask,
+class cpfp {
+  friend cpfp operator*(cpfp T, float U);
+  friend cpfp operator*(cpfp T, int U);
+  friend cpfp operator*(cpfp T, cpfp U);
+  friend cpfp operator+(cpfp T, cpfp U);
+  friend cpfp max(cpfp T, cpfp U, short Tmask, short Umask,
       short *out_mask);
-  friend chalf max(chalf T, chalf U);
-  friend chalf max(chalf T);
-  friend chalf operator/(chalf T, chalf U);
-  friend chalf operator/(chalf T, int U);
-  friend bool operator<(chalf T, chalf U);
-  friend bool operator<=(chalf T, chalf U);
-  friend bool operator>(chalf T, chalf U);
-  friend bool operator>=(chalf T, chalf U);
-  friend bool operator==(chalf T, chalf U);
-  friend bool operator!=(chalf T, chalf U);
-#ifdef SYNTHESIS
-#endif
+  friend cpfp max(cpfp T, cpfp U);
+  friend cpfp max(cpfp T);
+  friend cpfp operator/(cpfp T, cpfp U);
+  friend cpfp operator/(cpfp T, int U);
+  friend bool operator<(cpfp T, cpfp U);
+  friend bool operator<=(cpfp T, cpfp U);
+  friend bool operator>(cpfp T, cpfp U);
+  friend bool operator>=(cpfp T, cpfp U);
+  friend bool operator==(cpfp T, cpfp U);
+  friend bool operator!=(cpfp T, cpfp U);
   public:
-    chalf() : data_() {}
+    cpfp() : data_() {}
 
-    chalf(float rhs) : data_(float2chalf(rhs)) {}
+    cpfp(float rhs) : data_(float2cpfp(rhs)) {}
     
-    chalf(uint16 rhs) : data_(rhs) {}
+    cpfp(uint16 rhs) : data_(rhs) {}
 
-    chalf(int rhs) : data_(rhs) {}
+    cpfp(int rhs) : data_(rhs) {}
 
-    chalf(uint32 rhs) : data_(rhs) {}
+    cpfp(uint32 rhs) : data_(rhs) {}
 
 #ifdef SYNTHESIS
-    chalf(ap_uint<FP_WIDTH> rhs) : data_(rhs) {}
+    cpfp(ap_uint<FP_WIDTH> rhs) : data_(rhs) {}
 #endif
 
 #ifdef SYNTHESIS
@@ -177,7 +159,7 @@ class chalf {
 #endif
 
     operator float() const {
-      return chalf2float(data_);
+      return cpfp2float(data_);
     }
 
     operator uint32() const {
@@ -188,22 +170,22 @@ class chalf {
       return data_;
     }
 
-    chalf& operator=(const int& rhs) {
+    cpfp& operator=(const int& rhs) {
       this->data_ = rhs;
       return *this;
     }
 
-    chalf& operator+=(const chalf& rhs) {
+    cpfp& operator+=(const cpfp& rhs) {
       *this = *this + rhs;
       return *this;
     }
 
-    chalf& operator/=(const chalf& rhs) {
+    cpfp& operator/=(const cpfp& rhs) {
       *this = *this / rhs;
       return *this;
     }
 
-    chalf& operator/=(const int& rhs) {
+    cpfp& operator/=(const int& rhs) {
       *this = *this / rhs;
       return *this;
     }
@@ -219,7 +201,7 @@ class chalf {
 #ifndef SYNTHESIS
 inline
 #endif
-chalf operator*(chalf T, chalf U) {
+cpfp operator*(cpfp T, cpfp U) {
 #ifdef SYNTHESIS
 #pragma HLS INLINE off
 #pragma HLS pipeline
@@ -283,9 +265,9 @@ chalf operator*(chalf T, chalf U) {
   res = ((sign << SIGN_SHIFT) & SIGN_MASK) |
     ((eresf << EXP_SHIFT) & EXP_MASK) | mantresf;
 
-  return chalf(res);
+  return cpfp(res);
 #else
-  return chalf(float(T) * float(U));
+  return cpfp(float(T) * float(U));
 #endif
 }
 
@@ -706,7 +688,7 @@ ap_uint<4> LOD(ap_uint<MANT_SIZE + 2> sum_cpath, ap_uint<1> *zero_flag) {
 #ifndef SYNTHESIS
 inline
 #endif
-chalf operator+(chalf T, chalf U) {
+cpfp operator+(cpfp T, cpfp U) {
 #ifdef SYNTHESIS
 #pragma HLS INLINE off
 #pragma HLS pipeline
@@ -880,16 +862,16 @@ chalf operator+(chalf T, chalf U) {
   res = ((sign << SIGN_SHIFT) & SIGN_MASK) |
     ((eresf << EXP_SHIFT) & EXP_MASK) | mantresf;
 
-  return chalf(res);
+  return cpfp(res);
 #else
-  return chalf(float(T) + float(U));
+  return cpfp(float(T) + float(U));
 #endif
 }
 
 #ifndef SYNTHESIS
 inline
 #endif
-bool operator==(chalf T, chalf U) {
+bool operator==(cpfp T, cpfp U) {
 #ifdef SYNTHESIS
   ap_uint<FP_WIDTH> Tdata_ = T.data_;
   ap_uint<FP_WIDTH> Udata_ = U.data_;
@@ -903,7 +885,7 @@ bool operator==(chalf T, chalf U) {
 #ifndef SYNTHESIS
 inline
 #endif
-bool operator!=(chalf T, chalf U) {
+bool operator!=(cpfp T, cpfp U) {
 #ifdef SYNTHESIS
   ap_uint<FP_WIDTH> Tdata_ = T.data_;
   ap_uint<FP_WIDTH> Udata_ = U.data_;
@@ -917,18 +899,18 @@ bool operator!=(chalf T, chalf U) {
 #ifndef SYNTHESIS
 inline
 #endif
-chalf max(chalf T, chalf U) {
+cpfp max(cpfp T, cpfp U) {
 #ifdef SYNTHESIS
 #pragma HLS INLINE off
 #pragma HLS pipeline
-  chalf res;
+  cpfp res;
 
   if (T < U)
     res = U;
   else
     res = T;  
 #else
-  chalf res;
+  cpfp res;
   if (T < U)
     res = U;
   else
@@ -940,11 +922,11 @@ chalf max(chalf T, chalf U) {
 #ifndef SYNTHESIS
 inline
 #endif
-chalf max(chalf T, chalf U, short Tmask, short Umask, short *out_mask) {
+cpfp max(cpfp T, cpfp U, short Tmask, short Umask, short *out_mask) {
 #ifdef SYNTHESIS
 #pragma HLS INLINE off
 #pragma HLS pipeline
-  chalf res;
+  cpfp res;
   short res_mask;
   if (T < U) {
     res = U;
@@ -954,7 +936,7 @@ chalf max(chalf T, chalf U, short Tmask, short Umask, short *out_mask) {
     res_mask = Tmask;
   }  
 #else
-  chalf res;
+  cpfp res;
   short res_mask;
   if (T < U) {
     res = U;
@@ -972,46 +954,46 @@ chalf max(chalf T, chalf U, short Tmask, short Umask, short *out_mask) {
 #ifndef SYNTHESIS
 inline
 #endif
-chalf max(chalf T) {
+cpfp max(cpfp T) {
 #ifdef SYNTHESIS
 #pragma HLS INLINE off
 #pragma HLS pipeline
   ap_uint<FP_WIDTH> Tdata_ = T.data_;
   ap_uint<1> sign1 = Tdata_ >> SIGN_SHIFT;
 
-  chalf res;
+  cpfp res;
   if (sign1)
-    res = chalf(0);
+    res = cpfp(0);
   else
     res = T;
 #else
-  chalf res;
+  cpfp res;
   uint32 sign = T.data_ >> SIGN_SHIFT;
   if (sign == 1)
-    res = chalf(0);
+    res = cpfp(0);
   else
     res = T;
 #endif
   return res;
 }
 
-inline chalf operator*(chalf T, float U) {
-  return chalf(float(T) * U);
+inline cpfp operator*(cpfp T, float U) {
+  return cpfp(float(T) * U);
 }
 
-inline chalf operator*(chalf T, int U) {
-  return chalf(float(T) * U);
+inline cpfp operator*(cpfp T, int U) {
+  return cpfp(float(T) * U);
 }
 
-inline chalf operator/(chalf T, chalf U) {
-  return chalf(float(T) / float(U));
+inline cpfp operator/(cpfp T, cpfp U) {
+  return cpfp(float(T) / float(U));
 }
 
-inline chalf operator/(chalf T, int U) {
-  return chalf(float(T) / U);
+inline cpfp operator/(cpfp T, int U) {
+  return cpfp(float(T) / U);
 }
 
-inline bool operator>(chalf T, chalf U) {
+inline bool operator>(cpfp T, cpfp U) {
 #if (EXP_SIZE + MANT_SIZE + 1) > 16
   uint32 Tdata, Udata, Tsign, Usign;
 #else
@@ -1026,11 +1008,11 @@ inline bool operator>(chalf T, chalf U) {
     ((Tsign == 0) && (Usign == 1));
 }
 
-inline bool operator>=(chalf T, chalf U) {
+inline bool operator>=(cpfp T, cpfp U) {
   return (T > U) || (T == U);
 }
 
-inline bool operator<(chalf T, chalf U) {
+inline bool operator<(cpfp T, cpfp U) {
 #if (EXP_SIZE + MANT_SIZE + 1) > 16
   uint32 Tdata, Udata, Tsign, Usign;
 #else
@@ -1045,8 +1027,8 @@ inline bool operator<(chalf T, chalf U) {
     ((Tsign == 1) && (Usign == 0));
 }
 
-inline bool operator<=(chalf T, chalf U) {
+inline bool operator<=(cpfp T, cpfp U) {
   return (T < U) || (T == U);
 }
 
-#endif  // HALF_HPP_
+#endif  // CPFP_HPP_

@@ -230,7 +230,7 @@ void Blob<Dtype>::ShareDiff(const Blob& other) {
 template <> void Blob<unsigned int>::Update() { NOT_IMPLEMENTED; }
 template <> void Blob<int>::Update() { NOT_IMPLEMENTED; }
 template <> void Blob<char>::Update() { NOT_IMPLEMENTED; }
-template <> void Blob<chalf>::Update() { NOT_IMPLEMENTED; }
+template <> void Blob<cpfp>::Update() { NOT_IMPLEMENTED; }
 
 template <typename Dtype>
 void Blob<Dtype>::Update() {
@@ -268,9 +268,9 @@ template <> int Blob<int>::asum_data() const {
   return 0;
 }
 
-template <> chalf Blob<chalf>::asum_data() const {
+template <> cpfp Blob<cpfp>::asum_data() const {
   NOT_IMPLEMENTED;
-  return chalf(0);
+  return cpfp(0);
 }
 
 template <> char Blob<char>::asum_data() const {
@@ -313,9 +313,9 @@ template <> int Blob<int>::asum_diff() const {
   return 0;
 }
 
-template <> chalf Blob<chalf>::asum_diff() const {
+template <> cpfp Blob<cpfp>::asum_diff() const {
   NOT_IMPLEMENTED;
-  return chalf(0);
+  return cpfp(0);
 }
 
 template <> char Blob<char>::asum_diff() const {
@@ -358,9 +358,9 @@ template <> int Blob<int>::sumsq_data() const {
   return 0;
 }
 
-template <> chalf Blob<chalf>::sumsq_data() const {
+template <> cpfp Blob<cpfp>::sumsq_data() const {
   NOT_IMPLEMENTED;
-  return chalf(0);
+  return cpfp(0);
 }
 
 template <> char Blob<char>::sumsq_data() const {
@@ -405,9 +405,9 @@ template <> int Blob<int>::sumsq_diff() const {
   return 0;
 }
 
-template <> chalf Blob<chalf>::sumsq_diff() const {
+template <> cpfp Blob<cpfp>::sumsq_diff() const {
   NOT_IMPLEMENTED;
-  return chalf(0);
+  return cpfp(0);
 }
 
 template <> char Blob<char>::sumsq_diff() const {
@@ -450,7 +450,7 @@ template <> void Blob<int>::scale_data(int scale_factor) {
   NOT_IMPLEMENTED;
 }
 
-template <> void Blob<chalf>::scale_data(chalf scale_factor) {
+template <> void Blob<cpfp>::scale_data(cpfp scale_factor) {
   NOT_IMPLEMENTED;
 }
 
@@ -491,7 +491,7 @@ template <> void Blob<int>::scale_diff(int scale_factor) {
   NOT_IMPLEMENTED;
 }
 
-template <> void Blob<chalf>::scale_diff(chalf scale_factor) {
+template <> void Blob<cpfp>::scale_diff(cpfp scale_factor) {
   NOT_IMPLEMENTED;
 }
 
@@ -676,6 +676,6 @@ INSTANTIATE_CLASS(Blob);
 template class Blob<int>;
 template class Blob<unsigned int>;
 template class Blob<char>;
-template class Blob<chalf>;
+template class Blob<cpfp>;
 }  // namespace caffe
 

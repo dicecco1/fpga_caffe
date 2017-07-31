@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 #include "../../../include/fpga_caffe/layer.hpp"
-#include "../../../include/fpga_caffe/half.hpp"
+#include "../../../include/fpga_caffe/cpfp.hpp"
 #include "../../../include/fpga_caffe/vector_types.hpp"
 
 #define OCFACT 1 
@@ -16,14 +16,14 @@
  * output:        output of the convolution
  */ 
 
-chalf16 max9(chalf16 poolInBuf[9][16 * 16], int n, short16 *outMask) {
+cpfp16 max9(cpfp16 poolInBuf[9][16 * 16], int n, short16 *outMask) {
 #pragma HLS INLINE
-  chalf16 reduce_s1[4];
+  cpfp16 reduce_s1[4];
 #pragma HLS ARRAY_PARTITION variable=reduce_s1 complete
-  chalf16 reduce_s2[2];
+  cpfp16 reduce_s2[2];
 #pragma HLS ARRAY_PARTITION variable=reduce_s2 complete
-  chalf16 reduce_s3;
-  chalf16 reduce_s4;
+  cpfp16 reduce_s3;
+  cpfp16 reduce_s4;
 
   short16 mask_s0[9];
 #pragma HLS ARRAY_PARTITION variable=mask_s0 complete
@@ -73,36 +73,36 @@ short mode_select_size(short size_fw, short size_bw, bool mode) {
     return size_fw;
 }
 
-chalf relu_bw(chalf input, bool enable) {
+cpfp relu_bw(cpfp input, bool enable) {
 #pragma HLS INLINE off
-  chalf res = (enable) ? input : chalf(0);
+  cpfp res = (enable) ? input : cpfp(0);
   return res;
 }
 
-void relu_fw(chalf16 outBuf[OCFACT][256], short outBufRelu[OCFACT][256],
+void relu_fw(cpfp16 outBuf[OCFACT][256], short outBufRelu[OCFACT][256],
     int num_iter) {
   RELU_FW: for (int i = 0; i < num_iter; ++i) {
   #pragma HLS pipeline
     for (int k = 0; k < OCFACT; ++k) {
-      chalf16 val = max(outBuf[k][i]);
+      cpfp16 val = max(outBuf[k][i]);
       outBuf[k][i] = val;
       short reluOut = 0;
-      reluOut |= (val.s0 != chalf(0)) ? 1 << 0 : 0;
-      reluOut |= (val.s1 != chalf(0)) ? 1 << 1 : 0;
-      reluOut |= (val.s2 != chalf(0)) ? 1 << 2 : 0;
-      reluOut |= (val.s3 != chalf(0)) ? 1 << 3 : 0;
-      reluOut |= (val.s4 != chalf(0)) ? 1 << 4 : 0;
-      reluOut |= (val.s5 != chalf(0)) ? 1 << 5 : 0;
-      reluOut |= (val.s6 != chalf(0)) ? 1 << 6 : 0;
-      reluOut |= (val.s7 != chalf(0)) ? 1 << 7 : 0;
-      reluOut |= (val.s8 != chalf(0)) ? 1 << 8 : 0;
-      reluOut |= (val.s9 != chalf(0)) ? 1 << 9 : 0;
-      reluOut |= (val.sa != chalf(0)) ? 1 << 10 : 0;
-      reluOut |= (val.sb != chalf(0)) ? 1 << 11 : 0;
-      reluOut |= (val.sc != chalf(0)) ? 1 << 12 : 0;
-      reluOut |= (val.sd != chalf(0)) ? 1 << 13 : 0;
-      reluOut |= (val.se != chalf(0)) ? 1 << 14 : 0;
-      reluOut |= (val.sf != chalf(0)) ? 1 << 15 : 0;
+      reluOut |= (val.s0 != cpfp(0)) ? 1 << 0 : 0;
+      reluOut |= (val.s1 != cpfp(0)) ? 1 << 1 : 0;
+      reluOut |= (val.s2 != cpfp(0)) ? 1 << 2 : 0;
+      reluOut |= (val.s3 != cpfp(0)) ? 1 << 3 : 0;
+      reluOut |= (val.s4 != cpfp(0)) ? 1 << 4 : 0;
+      reluOut |= (val.s5 != cpfp(0)) ? 1 << 5 : 0;
+      reluOut |= (val.s6 != cpfp(0)) ? 1 << 6 : 0;
+      reluOut |= (val.s7 != cpfp(0)) ? 1 << 7 : 0;
+      reluOut |= (val.s8 != cpfp(0)) ? 1 << 8 : 0;
+      reluOut |= (val.s9 != cpfp(0)) ? 1 << 9 : 0;
+      reluOut |= (val.sa != cpfp(0)) ? 1 << 10 : 0;
+      reluOut |= (val.sb != cpfp(0)) ? 1 << 11 : 0;
+      reluOut |= (val.sc != cpfp(0)) ? 1 << 12 : 0;
+      reluOut |= (val.sd != cpfp(0)) ? 1 << 13 : 0;
+      reluOut |= (val.se != cpfp(0)) ? 1 << 14 : 0;
+      reluOut |= (val.sf != cpfp(0)) ? 1 << 15 : 0;
       outBufRelu[k][i] = reluOut;
     }
   }
@@ -110,8 +110,8 @@ void relu_fw(chalf16 outBuf[OCFACT][256], short outBufRelu[OCFACT][256],
 
 extern "C" {
 
-void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
-    chalf16 *output, short *tagVals, int *params, int group_idx) { 
+void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
+    cpfp16 *output, short *tagVals, int *params, int group_idx) { 
 // Ports 
 #pragma HLS data_pack variable=weights
 #pragma HLS data_pack variable=output
@@ -132,7 +132,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
   // Input tile buffer
-  chalf16 inBuf[4][2 * 256 * 16];
+  cpfp16 inBuf[4][2 * 256 * 16];
 #pragma HLS ARRAY_PARTITION variable=inBuf complete dim=1
 
   short inBufRelu[4][2 * 256 * 16];
@@ -142,26 +142,26 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
 #pragma HLS ARRAY_PARTITION variable=outBufRelu complete dim=1
 
   // Output buffer used for writing
-  chalf16 outBuf[OCFACT][256];
+  cpfp16 outBuf[OCFACT][256];
 #pragma HLS ARRAY_PARTITION variable=outBuf complete dim=1
 
   // Weight buffer
-  chalf16 wBuf[OCFACT][256];
+  cpfp16 wBuf[OCFACT][256];
 #pragma HLS ARRAY_PARTITION variable=wBuf complete dim=1
 
   // Bias buffer
-  chalf biasBuf[OCFACT][(6144 / OCFACT)];
+  cpfp biasBuf[OCFACT][(6144 / OCFACT)];
 #pragma HLS ARRAY_PARTITION variable=biasBuf complete dim=1
 
-  chalf16 poolInBuf[9][16 * 16];
+  cpfp16 poolInBuf[9][16 * 16];
 #pragma HLS ARRAY_PARTITION variable=poolInBuf complete dim=1
 
-  chalf16 poolOutBuf[16 * 16];
+  cpfp16 poolOutBuf[16 * 16];
 
-  chalf16 poolOutBufBW[9][16 * 16];
+  cpfp16 poolOutBufBW[9][16 * 16];
 #pragma HLS ARRAY_PARTITION variable=poolOutBufBW complete dim=1
 
-  chalf16 poolInBufBW[16 * 16];
+  cpfp16 poolInBufBW[16 * 16];
 
   short outMask[16 * 256];
 #pragma HLS ARRAY_PARTITION variable=outMask cyclic factor=16 dim=1
@@ -169,48 +169,48 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
   short inMask[16 * 256];
 #pragma HLS ARRAY_PARTITION variable=inMask cyclic factor=16 dim=1
 
-  chalf multRes[OCFACT][4][16];
+  cpfp multRes[OCFACT][4][16];
 #pragma HLS ARRAY_PARTITION variable=multRes complete dim=1
 #pragma HLS ARRAY_PARTITION variable=multRes complete dim=2
 #pragma HLS ARRAY_PARTITION variable=multRes complete dim=3
 
-  chalf weightFW[16];
+  cpfp weightFW[16];
 #pragma HLS ARRAY_PARTITION variable=weightFW complete
 
-  chalf weightVal[4][16];
+  cpfp weightVal[4][16];
 #pragma HLS ARRAY_PARTITION variable=weightVal complete dim=1
 #pragma HLS ARRAY_PARTITION variable=weightVal complete dim=2
 
-  chalf inVal[4][16];
+  cpfp inVal[4][16];
 #pragma HLS ARRAY_PARTITION variable=inVal complete dim=1
 #pragma HLS ARRAY_PARTITION variable=inVal complete dim=2
 
-  chalf addTreeS1[OCFACT][32];
+  cpfp addTreeS1[OCFACT][32];
 #pragma HLS ARRAY_PARTITION variable=addTreeS1 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=addTreeS1 complete dim=2
 
-  chalf addTreeS2[OCFACT][16];
+  cpfp addTreeS2[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=addTreeS2 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=addTreeS2 complete dim=2
 
-  chalf addTreeS3[OCFACT][4][2];
+  cpfp addTreeS3[OCFACT][4][2];
 #pragma HLS ARRAY_PARTITION variable=addTreeS3 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=addTreeS3 complete dim=2
 #pragma HLS ARRAY_PARTITION variable=addTreeS3 complete dim=3
 
-  chalf finalOut[OCFACT][16];
+  cpfp finalOut[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=finalOut complete dim=1
 #pragma HLS ARRAY_PARTITION variable=finalOut complete dim=2
 
-  chalf addTreeS4[OCFACT][4];
+  cpfp addTreeS4[OCFACT][4];
 #pragma HLS ARRAY_PARTITION variable=addTreeS4 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=addTreeS4 complete dim=2
 
-  chalf addres_f[OCFACT][16];
+  cpfp addres_f[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=addres_f complete dim=1
 #pragma HLS ARRAY_PARTITION variable=addres_f complete dim=2
 
-  chalf wUpdate[OCFACT][16];
+  cpfp wUpdate[OCFACT][16];
 #pragma HLS ARRAY_PARTITION variable=wUpdate complete dim=1
 #pragma HLS ARRAY_PARTITION variable=wUpdate complete dim=2
 
@@ -272,7 +272,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
           bool writeEnable = ((o * OCFACT + k) * burstoc < outChannels);
           if (writeEnable) {
             memcpy(biasBuf[k] + o * burstoc, bias + biasOffset,
-              sizeof(chalf) * biasSize);
+              sizeof(cpfp) * biasSize);
           }
         }
       }
@@ -332,7 +332,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                     for (int j = 0; j < 4; ++j) {
                       int f_inIdx = inIdx + j * burstFact * imgFact;
                       memcpy(inBuf[j] + inBufIdx, input + f_inIdx,
-                          sizeof(chalf16) * inSize);
+                          sizeof(cpfp16) * inSize);
                       if ((backward != 0) && relu)
                         memcpy(inBufRelu[j] + inBufIdx, tagVals + f_inIdx,
                             sizeof(short) * inSize);
@@ -356,14 +356,14 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
               for (int i = 0; i < burstoc * imgFact; ++i) {
 #pragma HLS pipeline
                 for (int k = 0; k < OCFACT; ++k) {
-                  outBuf[k][i] = chalf(0);
+                  outBuf[k][i] = cpfp(0);
                 }
               }
             } else if ((backward == 1) && (x == 0) && (y == 0)) {
               for (int i = 0; i < burstoc * ksize * ksize * wcFact; ++i) {
 #pragma HLS pipeline
                 for (int k = 0; k < OCFACT; ++k) {
-                  outBuf[k][i] = chalf(0);
+                  outBuf[k][i] = cpfp(0);
                 }
               }
             } else {
@@ -389,7 +389,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                   && (!mode);
 
                 if (readEnable)
-                  memcpy(outBuf[k], output + outIdx, sizeof(chalf16) *
+                  memcpy(outBuf[k], output + outIdx, sizeof(cpfp16) *
                       outSize);
               }
             }  
@@ -411,7 +411,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 bool readEnable = ((o * OCFACT + k) * burstoc + b <
                     outChannels);
                 if (readEnable)
-                  memcpy(wBuf[k], weights + wIdx, sizeof(chalf16) * wSize);
+                  memcpy(wBuf[k], weights + wIdx, sizeof(cpfp16) * wSize);
               }
 
               ap_uint<8> w_off = 0;
@@ -536,7 +536,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                   for (int off = 0; off < 2; ++off) {
                     for (int m = 0; m < 2; ++m) {
                       for (int j = 0; j < 8; ++j) {
-                        chalf temp1, temp2;
+                        cpfp temp1, temp2;
                         if (mode) {
                           temp1 = multRes[k][off * 2 + m][j * 2];
                           temp2 = multRes[k][off * 2 + m][j * 2 + 1];
@@ -551,7 +551,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                   for (int off = 0; off < 2; ++off) {
                     for (int m = 0; m < 2; ++m) {
                       for (int j = 0; j < 4; ++j) {
-                        chalf temp1, temp2;
+                        cpfp temp1, temp2;
                         if (mode) {
                           temp1 = addTreeS1[k][(off * 2 + m) * 8 + j * 2];
                           temp2 = addTreeS1[k][(off * 2 + m) * 8 + j * 2 + 1];
@@ -618,7 +618,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
               }
 
               if (writeEnable)
-                memcpy(output + outIdx, outBuf[k], sizeof(chalf16) * outSize);
+                memcpy(output + outIdx, outBuf[k], sizeof(cpfp16) * outSize);
             }
           }
         }
@@ -646,11 +646,11 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 if ((hstart + h < ydim) && (wstart + w < xdim) &&
                     (h < pksize) && (w < pksize))
                   memcpy(poolInBuf[h * 3 + w], input + inIdx,
-                      sizeof(chalf16) * imgFact * burstChannels);
+                      sizeof(cpfp16) * imgFact * burstChannels);
                 else
                   for (int n = 0; n < imgFact * burstChannels; ++n)
 #pragma HLS pipeline
-                    poolInBuf[h * 3 + w][n] = chalf(CHALF_MIN_VAL);
+                    poolInBuf[h * 3 + w][n] = cpfp(CPFP_MIN_VAL);
               }
             }
             POOL_LOOP: for (int n = 0; n < (imgFact * burstChannels) >> 1;
@@ -679,7 +679,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
             }
             int outIdx = ((ph * pooled_width + pw) * inChannels +
                 c * burstChannels) * imgFact;
-            memcpy(output + outIdx, poolOutBuf, sizeof(chalf16) *
+            memcpy(output + outIdx, poolOutBuf, sizeof(cpfp16) *
                 imgFact * burstChannels);
             memcpy(tagVals + outIdx * 16, outMask,
                 sizeof(short) * numImages * burstChannels);
@@ -694,7 +694,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
             int wstart = pw * 2;
             int inIdx = ((ph * pooled_width + pw) * inChannels + c *
                 burstChannels) * imgFact;
-            memcpy(poolInBufBW, input + inIdx, sizeof(chalf16) * imgFact
+            memcpy(poolInBufBW, input + inIdx, sizeof(cpfp16) * imgFact
                 * burstChannels);
             memcpy(inMask, tagVals + inIdx * 16,
                 sizeof(short) * numImages * burstChannels);
@@ -706,11 +706,11 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                     (h < pksize) && (w < pksize) && ((h == 0) || (w == 0)) &&
                     (pksize == 3)) {
                   memcpy(poolOutBufBW[h * 3 + w], output + outIdx,
-                      sizeof(chalf16) * imgFact * burstChannels);
+                      sizeof(cpfp16) * imgFact * burstChannels);
                 } else {
                   for (int n = 0; n < imgFact * burstChannels; ++n) {
 #pragma HLS pipeline
-                    poolOutBufBW[h * 3 + w][n] = chalf(0);
+                    poolOutBufBW[h * 3 + w][n] = cpfp(0);
                   }
                 }
               }
@@ -742,7 +742,7 @@ void cr_layer_hwcn_half(chalf16 *input, chalf16 *weights, chalf *bias,
                 if ((hstart + h < ydim) && (wstart + w < xdim) &&
                     (h < pksize) && (w < pksize))
                   memcpy(output + outIdx, poolOutBufBW[h * 3 + w],
-                      sizeof(chalf16) * imgFact * burstChannels);
+                      sizeof(cpfp16) * imgFact * burstChannels);
 
               }
             } 

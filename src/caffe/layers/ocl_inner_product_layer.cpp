@@ -190,29 +190,29 @@ void OCLInnerProductLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
 }
 
 template <typename Dtype>
-void OCLInnerProductLayer<Dtype>::copyPad(const chalf *input, chalf *output,
+void OCLInnerProductLayer<Dtype>::copyPad(const cpfp *input, cpfp *output,
     int size, int xdim, int xdim_pad) {
   for (int i = 0; i < size; ++i)
     for (int j = 0; j < xdim_pad; ++j)
       if (j < xdim)
         output[i * xdim_pad + j] = input[i * xdim + j];
       else
-        output[i * xdim_pad + j] = chalf(0);
+        output[i * xdim_pad + j] = cpfp(0);
 }
 
 template <typename Dtype>
-void OCLInnerProductLayer<Dtype>::copyToHalf(const Dtype *input, chalf *output,
+void OCLInnerProductLayer<Dtype>::copyToHalf(const Dtype *input, cpfp *output,
     int size, int xdim, int xdim_pad) {
   for (int i = 0; i < size; ++i)
     for (int j = 0; j < xdim_pad; ++j)
       if (j < xdim)
-        output[i * xdim_pad + j] = chalf((float)input[i * xdim + j]);
+        output[i * xdim_pad + j] = cpfp((float)input[i * xdim + j]);
       else
-        output[i * xdim_pad + j] = chalf(0);
+        output[i * xdim_pad + j] = cpfp(0);
 }
 
 template <typename Dtype>
-void OCLInnerProductLayer<Dtype>::copyToFloat(const chalf *input,
+void OCLInnerProductLayer<Dtype>::copyToFloat(const cpfp *input,
     Dtype *output, int size, int ksize, int ksize_pad) {
   return;
 }
@@ -227,10 +227,10 @@ void OCLInnerProductLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom
     copyToHalf(this->blobs_[1]->mutable_cpu_data(), bias_h.mutable_cpu_data(),
         params->outchannels, 1, 1);
   else
-    (bias_h.mutable_cpu_data())[0] = chalf(0);
+    (bias_h.mutable_cpu_data())[0] = cpfp(0);
 
-  const chalf *weight_data = weights_pad_h.ocl_data();
-  const chalf *bias_data = bias_h.ocl_data();
+  const cpfp *weight_data = weights_pad_h.ocl_data();
+  const cpfp *bias_data = bias_h.ocl_data();
 
   params->backward = 0;
   int numgroups_ = params->numgroups;
@@ -250,18 +250,18 @@ void OCLInnerProductLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom
   
   const int* k_params = param_vals->ocl_data();
 
-  size_t insize = sizeof(chalf) * bottom[0]->count();
+  size_t insize = sizeof(cpfp) * bottom[0]->count();
   std::vector<cl_event> events;
 
   int events_size = batch_ * numgroups_;
 
-  chalf *top_data;
-  chalf *top_data_t;
+  cpfp *top_data;
+  cpfp *top_data_t;
   char *relu_vals;
   for (int i = 0; i < bottom.size(); i++) {
     events.resize(events_size, 0);
-    const chalf *bottom_data =
-      reinterpret_cast<const chalf *>(bottom[i]->ocl_data(insize));
+    const cpfp *bottom_data =
+      reinterpret_cast<const cpfp *>(bottom[i]->ocl_data(insize));
     top_data = top_data_h.mutable_ocl_data(0);
     relu_vals = relu_indices.mutable_ocl_data(0);
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
@@ -289,7 +289,7 @@ void OCLInnerProductLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom
     }
     clWaitForEvents(events.size(), events.data());
     top_data = top_data_h.mutable_cpu_data();
-    top_data_t = reinterpret_cast<chalf *>(top[i]->mutable_cpu_data());
+    top_data_t = reinterpret_cast<cpfp *>(top[i]->mutable_cpu_data());
 
     for (int j = 0; j < this->M_; ++j)
       for (int k = 0; k < this->N_; ++k)
@@ -305,10 +305,10 @@ void OCLInnerProductLayer<Dtype>::backward_weights(
 
   Dtype* weight_diff_dtype = this->blobs_[0]->mutable_cpu_diff();
  
-  chalf *weight_diff = weights_pad_h.mutable_cpu_diff();
+  cpfp *weight_diff = weights_pad_h.mutable_cpu_diff();
 
   for (int i = 0; i < weights_pad_h.count(); ++i)
-    weight_diff[i] = chalf(0);
+    weight_diff[i] = cpfp(0);
 
   weight_diff = weights_pad_h.mutable_ocl_diff();
   vector<int> shape(4);
@@ -316,16 +316,16 @@ void OCLInnerProductLayer<Dtype>::backward_weights(
   shape[1] = 1;
   shape[2] = 1;
   shape[3] = this->blobs_[0]->shape(1);
-  Blob<chalf>* bias;
+  Blob<cpfp>* bias;
   if (swap_inputs_)
-    bias = new Blob<chalf>(shape);
+    bias = new Blob<cpfp>(shape);
   else
-    bias = new Blob<chalf>(this->blobs_[1]->shape());
+    bias = new Blob<cpfp>(this->blobs_[1]->shape());
 
   for (int i = 0; i < bias->count(); ++i)
-    (bias->mutable_cpu_data())[i] = chalf(0);
+    (bias->mutable_cpu_data())[i] = cpfp(0);
 
-  const chalf *bias_data = bias->ocl_data();
+  const cpfp *bias_data = bias->ocl_data();
 
   int numgroups_ = params->numgroups;
 
@@ -343,20 +343,20 @@ void OCLInnerProductLayer<Dtype>::backward_weights(
   
   const int* cr_params_b = param_vals->ocl_data();
 
-  size_t insize = sizeof(chalf) * bottom[0]->count();
-  size_t outsize = sizeof(chalf) * top[0]->count();
+  size_t insize = sizeof(cpfp) * bottom[0]->count();
+  size_t outsize = sizeof(cpfp) * top[0]->count();
   std::vector<cl_event> events;
 
   int events_size = batch_bw_ * numgroups_;
 
-  const chalf *top_diff;
+  const cpfp *top_diff;
   const char *relu_vals;
-  const chalf *bottom_data;
-  bottom_data = reinterpret_cast<const chalf *>(bottom[0]->cpu_data());
-  top_diff = reinterpret_cast<const chalf *>(top[0]->cpu_diff());
+  const cpfp *bottom_data;
+  bottom_data = reinterpret_cast<const cpfp *>(bottom[0]->cpu_data());
+  top_diff = reinterpret_cast<const cpfp *>(top[0]->cpu_diff());
 
-  chalf *bottom_data_t = bottom_data_h.mutable_cpu_data();
-  chalf *top_diff_t = top_data_h.mutable_cpu_diff();
+  cpfp *bottom_data_t = bottom_data_h.mutable_cpu_data();
+  cpfp *top_diff_t = top_data_h.mutable_cpu_diff();
 
   int num_images = bottom[0]->shape(0);
   int outchannels = this->blobs_[0]->shape(0);
@@ -435,24 +435,24 @@ void OCLInnerProductLayer<Dtype>::backward_bias(
   shape[2] = params->inchannels;
   shape[3] = 16;
 
-  Blob<chalf>* weights = new Blob<chalf>(shape);
+  Blob<cpfp>* weights = new Blob<cpfp>(shape);
 
   for (int i = 0; i < weights->count(); ++i)
-    (weights->mutable_cpu_data())[i] = chalf((float)1.0);
+    (weights->mutable_cpu_data())[i] = cpfp((float)1.0);
 
-  const chalf *weights_data = weights->ocl_data();
+  const cpfp *weights_data = weights->ocl_data();
 
   shape[0] = 1;
   shape[1] = 1;
   shape[2] = 1;
   shape[3] = pad_oc_;
 
-  Blob<chalf>* bias = new Blob<chalf>(shape);
+  Blob<cpfp>* bias = new Blob<cpfp>(shape);
 
   for (int i = 0; i < bias->count(); ++i)
-    (bias->mutable_cpu_data())[i] = chalf(0);
+    (bias->mutable_cpu_data())[i] = cpfp(0);
 
-  chalf *bias_diff = bias->mutable_ocl_data();
+  cpfp *bias_diff = bias->mutable_ocl_data();
 
   int numgroups_ = params->numgroups;
 
@@ -470,12 +470,12 @@ void OCLInnerProductLayer<Dtype>::backward_bias(
   
   const int* cr_params_b = param_vals->ocl_data();
 
-  size_t outsize = sizeof(chalf) * top[0]->count();
+  size_t outsize = sizeof(cpfp) * top[0]->count();
   std::vector<cl_event> events;
 
   int events_size = batch_bb_ * numgroups_;
 
-  const chalf *top_diff;
+  const cpfp *top_diff;
   const char *relu_vals;
   for (int i = 0; i < bottom.size(); i++) {
     events.resize(events_size, 0);
@@ -523,15 +523,15 @@ void OCLInnerProductLayer<Dtype>::backward_data(
   int inchannels = this->blobs_[0]->shape(1);
 
   const Dtype *weight_data = this->blobs_[0]->cpu_data();
-  chalf *weight_data_h_t = weights_pad_h_t.mutable_cpu_data();
+  cpfp *weight_data_h_t = weights_pad_h_t.mutable_cpu_data();
 
   for (int i = 0; i < pad_oc_; ++i)
     for (int j = 0; j < inchannels; ++j)
       if (i < outchannels)
         weight_data_h_t[j * pad_oc_ + i] =
-          chalf((float)weight_data[i * inchannels + j]);
+          cpfp((float)weight_data[i * inchannels + j]);
 
-  const chalf *weight_data_t = weights_pad_h_t.ocl_data();
+  const cpfp *weight_data_t = weights_pad_h_t.ocl_data();
 
   vector<int> shape(4);
   shape[0] = 1;
@@ -539,12 +539,12 @@ void OCLInnerProductLayer<Dtype>::backward_data(
   shape[2] = 1;
   shape[3] = bottom[0]->shape(1);
 
-  Blob<chalf>* bias = new Blob<chalf>(shape);
+  Blob<cpfp>* bias = new Blob<cpfp>(shape);
 
   for (int i = 0; i < bias->count(); ++i)
-    (bias->mutable_cpu_data())[i] = chalf(0);
+    (bias->mutable_cpu_data())[i] = cpfp(0);
 
-  const chalf *bias_data = bias->ocl_data();
+  const cpfp *bias_data = bias->ocl_data();
 
   int numgroups_ = params->numgroups;
 
@@ -562,19 +562,19 @@ void OCLInnerProductLayer<Dtype>::backward_data(
   
   const int* cr_params_b = param_vals->ocl_data();
 
-  size_t insize = sizeof(chalf) * bottom[0]->count();
-  size_t outsize = sizeof(chalf) * top[0]->count();
+  size_t insize = sizeof(cpfp) * bottom[0]->count();
+  size_t outsize = sizeof(cpfp) * top[0]->count();
   std::vector<cl_event> events;
 
   int events_size = batch_bi_ * numgroups_;
 
-  const chalf *top_diff;
+  const cpfp *top_diff;
   const char *relu_vals;
-  chalf *bottom_diff;
+  cpfp *bottom_diff;
 
 
   for (int i = 0; i < bottom.size(); i++) {
-    top_diff = reinterpret_cast<const chalf *>(top[i]->cpu_diff());
+    top_diff = reinterpret_cast<const cpfp *>(top[i]->cpu_diff());
     copyPad(top_diff, top_data_h.mutable_cpu_diff(), top_data_h.shape(0),
         top[i]->shape(1), top_data_h.shape(1));
 
@@ -606,11 +606,11 @@ void OCLInnerProductLayer<Dtype>::backward_data(
       }
     }
     clWaitForEvents(events.size(), events.data());
-    bottom_diff = reinterpret_cast<chalf *>(bottom[i]->mutable_cpu_diff());
+    bottom_diff = reinterpret_cast<cpfp *>(bottom[i]->mutable_cpu_diff());
 
-    chalf *bottom_diff_h = bottom_data_h.mutable_cpu_diff();
-    chalf *bottom_diff_t =
-      reinterpret_cast<chalf *>(bottom[i]->mutable_cpu_diff());
+    cpfp *bottom_diff_h = bottom_data_h.mutable_cpu_diff();
+    cpfp *bottom_diff_t =
+      reinterpret_cast<cpfp *>(bottom[i]->mutable_cpu_diff());
 
     for (int j = 0; j < this->M_; ++j)
       for (int k = 0; k < this->K_; ++k) 

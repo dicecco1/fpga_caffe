@@ -5,43 +5,43 @@
 #include "fpga_caffe/test/test_fpga_caffe_main.hpp"
 
 template <typename TypeParam>
-class CRLayerFBHalfTest : public OCLDeviceTest<TypeParam> {
+class CRLayerFBCPFPTest : public OCLDeviceTest<TypeParam> {
   typedef typename TypeParam::Dtype Dtype;
 
  protected:
-  CRLayerFBHalfTest()
-    : ocl("cr_layer_fb_half.xclbin", "cr_layer_fb_half") 
+  CRLayerFBCPFPTest()
+    : ocl("cr_layer_fb_cpfp.xclbin", "cr_layer_fb_cpfp") 
   {}
   virtual void SetUp() {
     params.resize(1);
     batch_size.resize(1);
     params[0].numgroups = 1;
     params[0].inchannels = 16;
-    params[0].outchannels = 16;
+    params[0].outchannels = 1;
     params[0].burstchannels = 16;
     params[0].rpo = 1;
     params[0].rpofm = 1;
-    params[0].burstydim = 16;
-    params[0].ydim = 16;
-    params[0].xdim = 16;
-    params[0].xtile_pad = 8;
+    params[0].burstydim = 8;
+    params[0].ydim = 8;
+    params[0].xdim = 8;
+    params[0].xtile_pad = 16;
     params[0].numimages = 1;
     batch_size[0] = 1;
   }
 
-  virtual ~CRLayerFBHalfTest() {}
+  virtual ~CRLayerFBCPFPTest() {}
   
   OCLUtil ocl;
   std::vector<Dtype> input;
   std::vector<Dtype> input_pad;
-  std::vector<chalf> input_pad_half;
+  std::vector<cpfp> input_pad_cpfp;
   std::vector<Dtype> weights;
   std::vector<Dtype> weights_pad;
-  std::vector<chalf> weights_pad_half;
+  std::vector<cpfp> weights_pad_cpfp;
   std::vector<Dtype> bias;
-  std::vector<chalf> bias_half;
+  std::vector<cpfp> bias_cpfp;
   std::vector<Dtype> hw_results;
-  std::vector<chalf> hw_results_half;
+  std::vector<cpfp> hw_results_cpfp;
   std::vector<Dtype> sw_results;
   std::vector<kernel_params> params;
   std::vector<char> relu_vals;
@@ -54,13 +54,13 @@ class CRLayerFBHalfTest : public OCLDeviceTest<TypeParam> {
   cl_mem ocl_params;
 };
 
-TYPED_TEST_CASE(CRLayerFBHalfTest, TestOCLDtypesAndDevices);
+TYPED_TEST_CASE(CRLayerFBCPFPTest, TestOCLDtypesAndDevices);
 
-TYPED_TEST(CRLayerFBHalfTest, TestCR1x1F_HALF) {
+TYPED_TEST(CRLayerFBCPFPTest, TestCR1x1F_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 1;
-  int ksize_pad = 16;
+  int ksize_pad = 1;
   std::vector<kernel_params> params = this->params;
   std::vector<cl_event> events;
 
@@ -68,13 +68,19 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR1x1F_HALF) {
     // Set sizes
     params[i].ksize = ksize;
     params[i].backward = 0;
-    params[i].relu = 1;
+    params[i].relu = 0;
     int insize = params[i].numimages * params[i].inchannels * params[i].ydim *
       params[i].xdim * params[i].numgroups;
     int insize_pad = (insize / params[i].xdim) * params[i].xtile_pad * 2;
     int wsize = params[i].outchannels * params[i].numgroups *
-      params[i].inchannels * ksize * ksize; 
-    int wsize_pad = wsize / (ksize * ksize) * ksize_pad;
+      params[i].inchannels * ksize * ksize;
+
+    int bc_mod = (params[i].burstchannels % 16 == 0) ? params[i].burstchannels
+      : (params[i].burstchannels / 16 + 1) * 16;
+
+    int wsize_pad = params[i].outchannels * params[i].numgroups *
+      params[i].rpo * bc_mod;
+
     int outsize = params[i].numimages * params[i].outchannels * params[i].ydim
       * params[i].xdim * params[i].numgroups;
     int outsize_pad = (outsize / params[i].xdim) * params[i].xtile_pad * 2;
@@ -84,69 +90,68 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR1x1F_HALF) {
     // Clear input vectors
     this->input.clear();
     this->input_pad.clear();
-    this->input_pad_half.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
     this->weights_pad.clear();
-    this->weights_pad_half.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
-    this->bias_half.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
-    this->hw_results_half.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     this->relu_vals.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
     this->input_pad.resize(insize_pad, 0);
-    this->input_pad_half.resize(insize_pad, chalf(0));
+    this->input_pad_cpfp.resize(insize_pad, cpfp(0));
     this->weights.resize(wsize, 0);
     this->weights_pad.resize(wsize_pad, 0);
-    this->weights_pad_half.resize(wsize_pad, chalf(0));
+    this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
     this->bias.resize(bsize, 0);
-    this->bias_half.resize(bsize, chalf(0));
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize_pad, 0);
-    this->hw_results_half.resize(outsize_pad, chalf(0));
+    this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
     this->relu_vals.resize(outsize_pad, 0);
     events.resize(events_size);
     // Populate vectors
-    fillVectorHalf(this->input, 0.0, 1.0);
-    fillVectorHalf(this->weights, -1.0, 1.0);
-    fillVectorHalf(this->bias, -1.0, 1.0);
+    fillVectorCPFP(this->input, 0.0, 1.0);
+    fillVectorCPFP(this->weights, -1.0, 1.0);
+    fillVectorCPFP(this->bias, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
-    copyWeights(this->weights, this->weights_pad, ksize, ksize_pad,
-        params[i].numgroups * params[i].inchannels * params[i].outchannels);
+    copyWeights(this->weights, this->weights_pad, ksize, ksize_pad, params[i]);
    
-    toHalf(this->input_pad, this->input_pad_half);
-    toHalf(this->weights_pad, this->weights_pad_half);
-    toHalf(this->bias, this->bias_half);
+    toCPFP(this->input_pad, this->input_pad_cpfp);
+    toCPFP(this->weights_pad, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * insize_pad, NULL, NULL);
+        sizeof(cpfp) * insize_pad, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * wsize_pad, NULL, NULL);
+        sizeof(cpfp) * wsize_pad, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(chalf) * outsize_pad, NULL, NULL);
+        sizeof(cpfp) * outsize_pad, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
         CL_MEM_READ_WRITE, sizeof(char) * outsize_pad, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(chalf) * insize_pad, this->input_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(chalf) * wsize_pad, this->weights_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(char) * outsize_pad, this->relu_vals.data(), 0,
@@ -178,22 +183,23 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR1x1F_HALF) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(char) * outsize_pad, this->relu_vals.data(), 0,
         NULL, NULL);
 
-    toFloat(this->hw_results_half, this->hw_results);
+    toFloat(this->hw_results_cpfp, this->hw_results);
 
     ref_conv_layer(this->input, this->weights, this->bias, this->sw_results,
         params[i]);
-    ref_relu_layer(this->sw_results);
+    //ref_relu_layer(this->sw_results);
     int size = params[i].numimages * params[i].outchannels *
       params[i].numgroups * params[i].ydim;
     for (int j = 0; j < size; ++j) {
       for (int x = 0; x < params[i].xtile_pad * 2; ++x) {
         if (x < params[i].xdim) {
+          std::cout<<this->sw_results[j * params[i].xdim + x]<<" "<<this->hw_results[j * params[i].xtile_pad * 2 + x]<<std::endl;
           EXPECT_TRUE(checkEQ(this->sw_results[j * params[i].xdim + x],
               this->hw_results[j * params[i].xtile_pad * 2 + x], 1e-1, 1e-1));
         }
@@ -208,7 +214,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR1x1F_HALF) {
   }
 }
 
-TYPED_TEST(CRLayerFBHalfTest, TestCR3x3F_HALF) {
+TYPED_TEST(CRLayerFBCPFPTest, TestCR3x3F_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 3;
@@ -236,69 +242,69 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3F_HALF) {
     // Clear input vectors
     this->input.clear();
     this->input_pad.clear();
-    this->input_pad_half.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
     this->weights_pad.clear();
-    this->weights_pad_half.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
-    this->bias_half.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
-    this->hw_results_half.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     this->relu_vals.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
     this->input_pad.resize(insize_pad, 0);
-    this->input_pad_half.resize(insize_pad, chalf(0));
-    this->weights.resize(wsize, 1);
+    this->input_pad_cpfp.resize(insize_pad, cpfp(0));
+    this->weights.resize(wsize, 0);
     this->weights_pad.resize(wsize_pad, 0);
-    this->weights_pad_half.resize(wsize_pad, chalf(0));
+    this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
     this->bias.resize(bsize, 0);
-    this->bias_half.resize(bsize, chalf(0));
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize_pad, 0);
-    this->hw_results_half.resize(outsize_pad, chalf(0));
+    this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
     this->relu_vals.resize(outsize_pad, 0);
     events.resize(events_size);
     // Populate vectors
-    fillVectorHalf(this->input, -1e-7, 1e-7);
-    fillVectorHalf(this->weights, -1.0, 1.0);
-    fillVectorHalf(this->bias, -1.0, 1.0);
+    fillVectorCPFP(this->input, -1.0, 1.0);
+    fillVectorCPFP(this->weights, -1.0, 1.0);
+    fillVectorCPFP(this->bias, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyWeights(this->weights, this->weights_pad, ksize, ksize_pad,
-        params[i].numgroups * params[i].inchannels * params[i].outchannels);
+        params[i]);
    
-    toHalf(this->input_pad, this->input_pad_half);
-    toHalf(this->weights_pad, this->weights_pad_half);
-    toHalf(this->bias, this->bias_half);
+    toCPFP(this->input_pad, this->input_pad_cpfp);
+    toCPFP(this->weights_pad, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * insize_pad, NULL, NULL);
+        sizeof(cpfp) * insize_pad, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * wsize_pad, NULL, NULL);
+        sizeof(cpfp) * wsize_pad, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(chalf) * outsize_pad, NULL, NULL);
+        sizeof(cpfp) * outsize_pad, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
         CL_MEM_READ_WRITE, sizeof(char) * outsize_pad, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(chalf) * insize_pad, this->input_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(chalf) * wsize_pad, this->weights_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(char) * outsize_pad, this->relu_vals.data(), 0,
@@ -330,13 +336,13 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3F_HALF) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(char) * outsize_pad, this->relu_vals.data(), 0,
         NULL, NULL);
 
-    toFloat(this->hw_results_half, this->hw_results);
+    toFloat(this->hw_results_cpfp, this->hw_results);
 
     ref_conv_layer(this->input, this->weights, this->bias, this->sw_results,
         params[i]);
@@ -360,7 +366,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3F_HALF) {
   }
 }
 
-TYPED_TEST(CRLayerFBHalfTest, TestCR5x5F_HALF) {
+TYPED_TEST(CRLayerFBCPFPTest, TestCR5x5F_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 5;
@@ -388,69 +394,69 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR5x5F_HALF) {
     // Clear input vectors
     this->input.clear();
     this->input_pad.clear();
-    this->input_pad_half.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
     this->weights_pad.clear();
-    this->weights_pad_half.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
-    this->bias_half.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
-    this->hw_results_half.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     this->relu_vals.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
     this->input_pad.resize(insize_pad, 0);
-    this->input_pad_half.resize(insize_pad, chalf(0));
+    this->input_pad_cpfp.resize(insize_pad, cpfp(0));
     this->weights.resize(wsize, 0);
     this->weights_pad.resize(wsize_pad, 0);
-    this->weights_pad_half.resize(wsize_pad, chalf(0));
+    this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
     this->bias.resize(bsize, 0);
-    this->bias_half.resize(bsize, chalf(0));
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize_pad, 0);
-    this->hw_results_half.resize(outsize_pad, chalf(0));
+    this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
     this->relu_vals.resize(outsize_pad, 0);
     events.resize(events_size);
     // Populate vectors
-    fillVectorHalf(this->input, 0.0, 1.0);
-    fillVectorHalf(this->weights, -1.0, 1.0);
-    fillVectorHalf(this->bias, -1.0, 1.0);
+    fillVectorCPFP(this->input, -1.0, 1.0);
+    fillVectorCPFP(this->weights, -1.0, 1.0);
+    fillVectorCPFP(this->bias, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyWeights(this->weights, this->weights_pad, ksize, ksize_pad,
-        params[i].numgroups * params[i].inchannels * params[i].outchannels);
+        params[i]);
    
-    toHalf(this->input_pad, this->input_pad_half);
-    toHalf(this->weights_pad, this->weights_pad_half);
-    toHalf(this->bias, this->bias_half);
+    toCPFP(this->input_pad, this->input_pad_cpfp);
+    toCPFP(this->weights_pad, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * insize_pad, NULL, NULL);
+        sizeof(cpfp) * insize_pad, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * wsize_pad, NULL, NULL);
+        sizeof(cpfp) * wsize_pad, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(chalf) * outsize_pad, NULL, NULL);
+        sizeof(cpfp) * outsize_pad, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
         CL_MEM_READ_WRITE, sizeof(char) * outsize_pad, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(chalf) * insize_pad, this->input_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(chalf) * wsize_pad, this->weights_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(char) * outsize_pad, this->relu_vals.data(), 0,
@@ -482,13 +488,13 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR5x5F_HALF) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(char) * outsize_pad, this->relu_vals.data(), 0,
         NULL, NULL);
 
-    toFloat(this->hw_results_half, this->hw_results);
+    toFloat(this->hw_results_cpfp, this->hw_results);
 
     ref_conv_layer(this->input, this->weights, this->bias, this->sw_results,
         params[i]);
@@ -498,6 +504,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR5x5F_HALF) {
     for (int j = 0; j < size; ++j) {
       for (int x = 0; x < params[i].xtile_pad * 2; ++x) {
         if (x < params[i].xdim) {
+          std::cout<<this->sw_results[j * params[i].xdim + x]<<" "<<this->hw_results[j * params[i].xtile_pad * 2 + x]<<std::endl;
           EXPECT_TRUE(checkEQ(this->sw_results[j * params[i].xdim + x],
               this->hw_results[j * params[i].xtile_pad * 2 + x], 1e-1, 1e-1));
         }
@@ -512,7 +519,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR5x5F_HALF) {
   }
 }
 
-TYPED_TEST(CRLayerFBHalfTest, TestCR1x1B_HALF) {
+TYPED_TEST(CRLayerFBCPFPTest, TestCR1x1B_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 1;
@@ -540,69 +547,69 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR1x1B_HALF) {
     // Clear input vectors
     this->input.clear();
     this->input_pad.clear();
-    this->input_pad_half.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
     this->weights_pad.clear();
-    this->weights_pad_half.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
-    this->bias_half.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
-    this->hw_results_half.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     this->relu_vals.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
     this->input_pad.resize(insize_pad, 0);
-    this->input_pad_half.resize(insize_pad, chalf(0));
+    this->input_pad_cpfp.resize(insize_pad, cpfp(0));
     this->weights.resize(wsize, 0);
     this->weights_pad.resize(wsize_pad, 0);
-    this->weights_pad_half.resize(wsize_pad, chalf(0));
+    this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
     this->bias.resize(bsize, 0);
-    this->bias_half.resize(bsize, chalf(0));
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize_pad, 0);
-    this->hw_results_half.resize(outsize_pad, chalf(0));
+    this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
     this->relu_vals.resize(insize_pad, 1);
     events.resize(events_size);
     // Populate vectors
-    fillVectorHalf(this->input, -1.0, 1.0);
-    fillVectorHalf(this->weights, 0.0, 1.0);
-    fillVectorHalf(this->bias, -1.0, 1.0);
+    fillVectorCPFP(this->input, -1.0, 1.0);
+    fillVectorCPFP(this->weights, 0.0, 1.0);
+    fillVectorCPFP(this->bias, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyVector(this->weights, this->weights_pad, params[i].xdim,
         params[i].xtile_pad * 2);
   
-    toHalf(this->input_pad, this->input_pad_half);
-    toHalf(this->weights_pad, this->weights_pad_half);
-    toHalf(this->bias, this->bias_half);
+    toCPFP(this->input_pad, this->input_pad_cpfp);
+    toCPFP(this->weights_pad, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * insize_pad, NULL, NULL);
+        sizeof(cpfp) * insize_pad, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * wsize_pad, NULL, NULL);
+        sizeof(cpfp) * wsize_pad, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(chalf) * outsize_pad, NULL, NULL);
+        sizeof(cpfp) * outsize_pad, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
         CL_MEM_READ_WRITE, sizeof(char) * insize_pad, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(chalf) * insize_pad, this->input_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(chalf) * wsize_pad, this->weights_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(char) * insize_pad, this->relu_vals.data(), 0,
@@ -634,18 +641,23 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR1x1B_HALF) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
 
-    toFloat(this->hw_results_half, this->hw_results);
+    toFloat(this->hw_results_cpfp, this->hw_results);
 
     ref_backward_conv_layer(this->input, this->weights,
         this->sw_results, params[i]);
     int size = params[i].outchannels * params[i].numgroups *
       params[i].inchannels;
-    for (int j = 0; j < size; ++j) {
-      EXPECT_TRUE(checkEQ(this->sw_results[j], 
+    for (int j = 0; j < size / 2; ++j) {
+      std::cout<<this->sw_results[j * 2]<<" "<<this->hw_results[j * ksize_pad]<<std::endl;
+      EXPECT_TRUE(checkEQ(this->sw_results[j * 2], 
+            this->hw_results[j * ksize_pad], 1e-1, 1e-1));
+      std::cout<<this->sw_results[j * 2 + 1]<<" "<<this->hw_results[j * ksize_pad + 1]<<std::endl;
+      EXPECT_TRUE(checkEQ(this->sw_results[j * 2 + 1], 
             this->hw_results[j * ksize_pad + 1], 1e-1, 1e-1));
+
     }
     clReleaseMemObject(this->ocl_input);
     clReleaseMemObject(this->ocl_weights);
@@ -656,7 +668,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR1x1B_HALF) {
   }
 }
 
-TYPED_TEST(CRLayerFBHalfTest, TestCR3x3B_HALF) {
+TYPED_TEST(CRLayerFBCPFPTest, TestCR3x3B_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 3;
@@ -684,69 +696,69 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3B_HALF) {
     // Clear input vectors
     this->input.clear();
     this->input_pad.clear();
-    this->input_pad_half.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
     this->weights_pad.clear();
-    this->weights_pad_half.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
-    this->bias_half.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
-    this->hw_results_half.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     this->relu_vals.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
     this->input_pad.resize(insize_pad, 0);
-    this->input_pad_half.resize(insize_pad, chalf(0));
+    this->input_pad_cpfp.resize(insize_pad, cpfp(0));
     this->weights.resize(wsize, 0);
     this->weights_pad.resize(wsize_pad, 0);
-    this->weights_pad_half.resize(wsize_pad, chalf(0));
+    this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
     this->bias.resize(bsize, 0);
-    this->bias_half.resize(bsize, chalf(0));
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize_pad, 0);
-    this->hw_results_half.resize(outsize_pad, chalf(0));
+    this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
     this->relu_vals.resize(insize_pad, 1);
     events.resize(events_size);
     // Populate vectors
-    //fillVectorHalf(this->input, 0, 0);
-    fillVectorHalf(this->weights, 0.0, 1.0);
-    //fillVectorHalf(this->bias, -1.0, 1.0);
+    fillVectorCPFP(this->input, -1.0, 1.0);
+    fillVectorCPFP(this->weights, -1.0, 1.0);
+    fillVectorCPFP(this->bias, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyVector(this->weights, this->weights_pad, params[i].xdim,
         params[i].xtile_pad * 2);
   
-    toHalf(this->input_pad, this->input_pad_half);
-    toHalf(this->weights_pad, this->weights_pad_half);
-    toHalf(this->bias, this->bias_half);
+    toCPFP(this->input_pad, this->input_pad_cpfp);
+    toCPFP(this->weights_pad, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * insize_pad, NULL, NULL);
+        sizeof(cpfp) * insize_pad, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * wsize_pad, NULL, NULL);
+        sizeof(cpfp) * wsize_pad, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(chalf) * outsize_pad, NULL, NULL);
+        sizeof(cpfp) * outsize_pad, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
         CL_MEM_READ_WRITE, sizeof(char) * insize_pad, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(chalf) * insize_pad, this->input_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(chalf) * wsize_pad, this->weights_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(char) * insize_pad, this->relu_vals.data(), 0,
@@ -778,10 +790,10 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3B_HALF) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
 
-    toFloat(this->hw_results_half, this->hw_results);
+    toFloat(this->hw_results_cpfp, this->hw_results);
 
     ref_backward_conv_layer(this->input, this->weights,
         this->sw_results, params[i]);
@@ -802,8 +814,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR3x3B_HALF) {
   }
 }
 
-
-TYPED_TEST(CRLayerFBHalfTest, TestCR5x5B_HALF) {
+TYPED_TEST(CRLayerFBCPFPTest, TestCR5x5B_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 5;
@@ -831,69 +842,69 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR5x5B_HALF) {
     // Clear input vectors
     this->input.clear();
     this->input_pad.clear();
-    this->input_pad_half.clear();
+    this->input_pad_cpfp.clear();
     this->weights.clear();
     this->weights_pad.clear();
-    this->weights_pad_half.clear();
+    this->weights_pad_cpfp.clear();
     this->bias.clear();
-    this->bias_half.clear();
+    this->bias_cpfp.clear();
     this->hw_results.clear();
-    this->hw_results_half.clear();
+    this->hw_results_cpfp.clear();
     this->sw_results.clear();
     this->relu_vals.clear();
     events.clear();
     // Resize vectors
     this->input.resize(insize, 0);
     this->input_pad.resize(insize_pad, 0);
-    this->input_pad_half.resize(insize_pad, chalf(0));
+    this->input_pad_cpfp.resize(insize_pad, cpfp(0));
     this->weights.resize(wsize, 0);
     this->weights_pad.resize(wsize_pad, 0);
-    this->weights_pad_half.resize(wsize_pad, chalf(0));
+    this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
     this->bias.resize(bsize, 0);
-    this->bias_half.resize(bsize, chalf(0));
+    this->bias_cpfp.resize(bsize, cpfp(0));
     this->sw_results.resize(outsize, 0);
     this->hw_results.resize(outsize_pad, 0);
-    this->hw_results_half.resize(outsize_pad, chalf(0));
+    this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
     this->relu_vals.resize(insize_pad, 0);
     events.resize(events_size);
     // Populate vectors
-    fillVectorHalf(this->input, -1.0, 1.0);
-    fillVectorHalf(this->weights, 1e-7, 1e-5);
-    //fillVectorHalf(this->bias, -1.0, 1.0);
+    fillVectorCPFP(this->input, -1.0, 1.0);
+    fillVectorCPFP(this->weights, -1.0, 1.0);
+    //fillVectorCPFP(this->bias, -1.0, 1.0);
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyVector(this->weights, this->weights_pad, params[i].xdim,
         params[i].xtile_pad * 2);
   
-    toHalf(this->input_pad, this->input_pad_half);
-    toHalf(this->weights_pad, this->weights_pad_half);
-    toHalf(this->bias, this->bias_half);
+    toCPFP(this->input_pad, this->input_pad_cpfp);
+    toCPFP(this->weights_pad, this->weights_pad_cpfp);
+    toCPFP(this->bias, this->bias_cpfp);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * insize_pad, NULL, NULL);
+        sizeof(cpfp) * insize_pad, NULL, NULL);
     this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * wsize_pad, NULL, NULL);
+        sizeof(cpfp) * wsize_pad, NULL, NULL);
     this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-        sizeof(chalf) * outsize_pad, NULL, NULL);
+        sizeof(cpfp) * outsize_pad, NULL, NULL);
     this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-        sizeof(chalf) * bsize, NULL, NULL);
+        sizeof(cpfp) * bsize, NULL, NULL);
     this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
         CL_MEM_READ_WRITE, sizeof(char) * insize_pad, NULL, NULL);
     this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
         sizeof(kernel_params), NULL, NULL);
 
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-        0, sizeof(chalf) * insize_pad, this->input_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-        0, sizeof(chalf) * wsize_pad, this->weights_pad_half.data(), 0, NULL,
+        0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-        sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, 
+        sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL, 
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
         NULL);
     clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
         CL_TRUE, 0, sizeof(char) * insize_pad, this->relu_vals.data(), 0, NULL,
@@ -925,10 +936,10 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR5x5B_HALF) {
     clWaitForEvents(events_size, events.data());
 
     clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-        0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL,
+        0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
         NULL);
 
-    toFloat(this->hw_results_half, this->hw_results);
+    toFloat(this->hw_results_cpfp, this->hw_results);
 
     ref_backward_conv_layer(this->input, this->weights,
         this->sw_results, params[i]);
@@ -956,8 +967,8 @@ TYPED_TEST(CRLayerFBHalfTest, TestCR5x5B_HALF) {
     clReleaseMemObject(this->ocl_params);
   }
 }
-
-TYPED_TEST(CRLayerFBHalfTest, TestFCF_HALF) {
+/*
+TYPED_TEST(CRLayerFBCPFPTest, TestFCF_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 1;
@@ -992,18 +1003,18 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCF_HALF) {
   int outsize_pad = outsize;
   int bsize = params[i].outchannels;
   int events_size = batch / params[i].numimages;
-  std::vector<chalf> temp;
+  std::vector<cpfp> temp;
   // Clear input vectors
   this->input.clear();
   this->input_pad.clear();
-  this->input_pad_half.clear();
+  this->input_pad_cpfp.clear();
   this->weights.clear();
   this->weights_pad.clear();
-  this->weights_pad_half.clear();
+  this->weights_pad_cpfp.clear();
   this->bias.clear();
-  this->bias_half.clear();
+  this->bias_cpfp.clear();
   this->hw_results.clear();
-  this->hw_results_half.clear();
+  this->hw_results_cpfp.clear();
   temp.clear();
   this->sw_results.clear();
   this->relu_vals.clear();
@@ -1011,53 +1022,53 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCF_HALF) {
   // Resize vectors
   this->input.resize(insize, 1.25);
   this->input_pad.resize(insize_pad, 0);
-  this->input_pad_half.resize(insize_pad, chalf(0));
+  this->input_pad_cpfp.resize(insize_pad, cpfp(0));
   this->weights.resize(wsize, 0.25);
   this->weights_pad.resize(wsize_pad, 0);
-  this->weights_pad_half.resize(wsize_pad, chalf(0));
+  this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
   this->bias.resize(bsize, 0.5);
-  this->bias_half.resize(bsize, chalf(0));
+  this->bias_cpfp.resize(bsize, cpfp(0));
   this->sw_results.resize(outsize, 0);
   this->hw_results.resize(outsize_pad, 0);
   temp.resize(outsize_pad, 0);
-  this->hw_results_half.resize(outsize_pad, chalf(0));
+  this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
   this->relu_vals.resize(outsize_pad, 0);
   events.resize(events_size);
   // Populate vectors
-  //fillVectorHalf(this->input, 0.0, 1.0);
-  //fillVectorHalf(this->weights, -1.0, 1.0);
-  //fillVectorHalf(this->bias, 0.0, 1.0);
+  //fillVectorCPFP(this->input, 0.0, 1.0);
+  //fillVectorCPFP(this->weights, -1.0, 1.0);
+  //fillVectorCPFP(this->bias, 0.0, 1.0);
   copyVector(this->input, this->input_pad, 1, 1);
   copyVector(this->weights, this->weights_pad, 1, 1);
 
-  toHalf(this->input_pad, this->input_pad_half);
-  toHalf(this->weights_pad, this->weights_pad_half);
-  toHalf(this->bias, this->bias_half);
+  toCPFP(this->input_pad, this->input_pad_cpfp);
+  toCPFP(this->weights_pad, this->weights_pad_cpfp);
+  toCPFP(this->bias, this->bias_cpfp);
 
   // Create buffers
   this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-      sizeof(chalf) * insize_pad, NULL, NULL);
+      sizeof(cpfp) * insize_pad, NULL, NULL);
   this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-      sizeof(chalf) * wsize_pad, NULL, NULL);
+      sizeof(cpfp) * wsize_pad, NULL, NULL);
   this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-      sizeof(chalf) * outsize_pad, NULL, NULL);
+      sizeof(cpfp) * outsize_pad, NULL, NULL);
   this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-      sizeof(chalf) * bsize, NULL, NULL);
+      sizeof(cpfp) * bsize, NULL, NULL);
   this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
       CL_MEM_READ_WRITE, sizeof(char) * outsize_pad, NULL, NULL);
   this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
       sizeof(kernel_params), NULL, NULL);
 
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-      0, sizeof(chalf) * insize_pad, this->input_pad_half.data(), 0, NULL,
+      0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
       NULL);
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-      0, sizeof(chalf) * wsize_pad, this->weights_pad_half.data(), 0, NULL,
+      0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
       NULL);
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-      sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, NULL);
+      sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, NULL);
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-      0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL, 
+      0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
       NULL);
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
       CL_TRUE, 0, sizeof(char) * outsize_pad, this->relu_vals.data(), 0,
@@ -1089,7 +1100,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCF_HALF) {
   clWaitForEvents(events_size, events.data());
 
   clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-      0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL,
+      0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
       NULL);
   clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
       CL_TRUE, 0, sizeof(char) * outsize_pad, this->relu_vals.data(), 0,
@@ -1098,7 +1109,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCF_HALF) {
   for (int j = 0; j < params[i].numimages; ++j)
     for (int k = 0; k < params[i].outchannels; ++k) 
       temp[j * params[i].outchannels + k] =
-        this->hw_results_half[k * params[i].numimages + j];
+        this->hw_results_cpfp[k * params[i].numimages + j];
   toFloat(temp, this->hw_results);
 
   ref_fc_layer(this->input, this->weights, this->bias, this->sw_results,
@@ -1119,7 +1130,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCF_HALF) {
   clReleaseMemObject(this->ocl_params);
 }
 
-TYPED_TEST(CRLayerFBHalfTest, TestFCBias_Update_HALF) {
+TYPED_TEST(CRLayerFBCPFPTest, TestFCBias_Update_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 1;
@@ -1158,64 +1169,64 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCBias_Update_HALF) {
   // Clear input vectors
   this->input.clear();
   this->input_pad.clear();
-  this->input_pad_half.clear();
+  this->input_pad_cpfp.clear();
   this->weights.clear();
   this->weights_pad.clear();
-  this->weights_pad_half.clear();
+  this->weights_pad_cpfp.clear();
   this->bias.clear();
-  this->bias_half.clear();
+  this->bias_cpfp.clear();
   this->hw_results.clear();
-  this->hw_results_half.clear();
+  this->hw_results_cpfp.clear();
   this->sw_results.clear();
   this->relu_vals.clear();
   events.clear();
   // Resize vectors
   this->input.resize(insize, 0);
   this->input_pad.resize(insize_pad, 0);
-  this->input_pad_half.resize(insize_pad, chalf(0));
+  this->input_pad_cpfp.resize(insize_pad, cpfp(0));
   this->weights.resize(wsize, 1);
   this->weights_pad.resize(wsize_pad, 1);
-  this->weights_pad_half.resize(wsize_pad, chalf(0));
+  this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
   this->bias.resize(bsize, 0);
-  this->bias_half.resize(bsize, chalf(0));
+  this->bias_cpfp.resize(bsize, cpfp(0));
   this->sw_results.resize(outsize, 0);
   this->hw_results.resize(outsize_pad, 0);
-  this->hw_results_half.resize(outsize_pad, chalf(0));
+  this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
   this->relu_vals.resize(outsize_pad, 0);
   events.resize(events_size);
   // Populate vectors
-  fillVectorHalf(this->input, 0.0, 1.0);
+  fillVectorCPFP(this->input, 0.0, 1.0);
   copyVector(this->input, this->input_pad, 1, 1);
   copyVector(this->weights, this->weights_pad, 1, 1);
 
-  toHalf(this->input_pad, this->input_pad_half);
-  toHalf(this->weights_pad, this->weights_pad_half);
-  toHalf(this->bias, this->bias_half);
+  toCPFP(this->input_pad, this->input_pad_cpfp);
+  toCPFP(this->weights_pad, this->weights_pad_cpfp);
+  toCPFP(this->bias, this->bias_cpfp);
 
   // Create buffers
   this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-      sizeof(chalf) * insize_pad, NULL, NULL);
+      sizeof(cpfp) * insize_pad, NULL, NULL);
   this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-      sizeof(chalf) * wsize_pad, NULL, NULL);
+      sizeof(cpfp) * wsize_pad, NULL, NULL);
   this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-      sizeof(chalf) * outsize_pad, NULL, NULL);
+      sizeof(cpfp) * outsize_pad, NULL, NULL);
   this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-      sizeof(chalf) * bsize, NULL, NULL);
+      sizeof(cpfp) * bsize, NULL, NULL);
   this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
       CL_MEM_READ_WRITE, sizeof(char) * outsize_pad, NULL, NULL);
   this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
       sizeof(kernel_params), NULL, NULL);
 
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-      0, sizeof(chalf) * insize_pad, this->input_pad_half.data(), 0, NULL,
+      0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
       NULL);
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-      0, sizeof(chalf) * wsize_pad, this->weights_pad_half.data(), 0, NULL,
+      0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
       NULL);
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-      sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, NULL);
+      sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, NULL);
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-      0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL, 
+      0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
       NULL);
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
       CL_TRUE, 0, sizeof(char) * outsize_pad, this->relu_vals.data(), 0,
@@ -1247,13 +1258,13 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCBias_Update_HALF) {
   clWaitForEvents(events_size, events.data());
 
   clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-      0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL,
+      0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
       NULL);
   clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
       CL_TRUE, 0, sizeof(char) * outsize_pad, this->relu_vals.data(), 0,
       NULL, NULL);
 
-  toFloat(this->hw_results_half, this->hw_results);
+  toFloat(this->hw_results_cpfp, this->hw_results);
 
   for (int j = 0; j < params[i].inchannels; ++j) 
     for (int k = 0; k < params[i].ydim * params[i].xdim; ++k)
@@ -1273,7 +1284,7 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCBias_Update_HALF) {
   clReleaseMemObject(this->ocl_params);
 }
 
-TYPED_TEST(CRLayerFBHalfTest, TestFCB_HALF) {
+TYPED_TEST(CRLayerFBCPFPTest, TestFCB_HALF) {
   typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup();
   int ksize = 1;
@@ -1308,69 +1319,69 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCB_HALF) {
   int outsize_pad = outsize;
   int bsize = params[i].outchannels;
   int events_size = batch / params[i].numimages;
-  std::vector<chalf> temp;
+  std::vector<cpfp> temp;
   // Clear input vectors
   this->input.clear();
   this->input_pad.clear();
-  this->input_pad_half.clear();
+  this->input_pad_cpfp.clear();
   this->weights.clear();
   this->weights_pad.clear();
-  this->weights_pad_half.clear();
+  this->weights_pad_cpfp.clear();
   this->bias.clear();
-  this->bias_half.clear();
+  this->bias_cpfp.clear();
   this->hw_results.clear();
-  this->hw_results_half.clear();
+  this->hw_results_cpfp.clear();
   this->sw_results.clear();
   this->relu_vals.clear();
   events.clear();
   // Resize vectors
   this->input.resize(insize, 0);
   this->input_pad.resize(insize_pad, 0);
-  this->input_pad_half.resize(insize_pad, chalf(0));
+  this->input_pad_cpfp.resize(insize_pad, cpfp(0));
   this->weights.resize(wsize, 0);
   this->weights_pad.resize(wsize_pad, 0);
-  this->weights_pad_half.resize(wsize_pad, chalf(0));
+  this->weights_pad_cpfp.resize(wsize_pad, cpfp(0));
   this->bias.resize(bsize, 0);
-  this->bias_half.resize(bsize, chalf(0));
+  this->bias_cpfp.resize(bsize, cpfp(0));
   this->sw_results.resize(outsize, 0);
   this->hw_results.resize(outsize_pad, 0);
-  this->hw_results_half.resize(outsize_pad, chalf(0));
+  this->hw_results_cpfp.resize(outsize_pad, cpfp(0));
   this->relu_vals.resize(outsize_pad, 0);
   events.resize(events_size);
   // Populate vectors
-  fillVectorHalf(this->input, 0.0, 1.0);
-  fillVectorHalf(this->weights, -1.0, 1.0);
-  fillVectorHalf(this->bias, 0.0, 1.0);
+  fillVectorCPFP(this->input, 0.0, 1.0);
+  fillVectorCPFP(this->weights, -1.0, 1.0);
+  fillVectorCPFP(this->bias, 0.0, 1.0);
   copyVector(this->input, this->input_pad, 1, 1);
   copyVector(this->weights, this->weights_pad, 1, 1);
 
-  toHalf(this->input_pad, this->input_pad_half);
-  toHalf(this->weights_pad, this->weights_pad_half);
+  toCPFP(this->input_pad, this->input_pad_cpfp);
+  toCPFP(this->weights_pad, this->weights_pad_cpfp);
 
   // Create buffers
   this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-      sizeof(chalf) * insize_pad, NULL, NULL);
+      sizeof(cpfp) * insize_pad, NULL, NULL);
   this->ocl_weights = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-      sizeof(chalf) * wsize_pad, NULL, NULL);
+      sizeof(cpfp) * wsize_pad, NULL, NULL);
   this->ocl_output = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_WRITE,
-      sizeof(chalf) * outsize_pad, NULL, NULL);
+      sizeof(cpfp) * outsize_pad, NULL, NULL);
   this->ocl_bias = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
-      sizeof(chalf) * bsize, NULL, NULL);
+      sizeof(cpfp) * bsize, NULL, NULL);
   this->ocl_relu_vals = clCreateBuffer(this->ocl.oclContext,
       CL_MEM_READ_WRITE, sizeof(char) * outsize_pad, NULL, NULL);
   this->ocl_params = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
       sizeof(kernel_params), NULL, NULL);
 
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_input, CL_TRUE,
-      0, sizeof(chalf) * insize_pad, this->input_pad_half.data(), 0, NULL,
+      0, sizeof(cpfp) * insize_pad, this->input_pad_cpfp.data(), 0, NULL,
       NULL);
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_weights, CL_TRUE,
-      0, sizeof(chalf) * wsize_pad, this->weights_pad_half.data(), 0, NULL,
+      0, sizeof(cpfp) * wsize_pad, this->weights_pad_cpfp.data(), 0, NULL,
       NULL);
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_bias, CL_TRUE, 0,
-      sizeof(chalf) * bsize, this->bias_half.data(), 0, NULL, NULL);
+      sizeof(cpfp) * bsize, this->bias_cpfp.data(), 0, NULL, NULL);
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-      0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL, 
+      0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL, 
       NULL);
   clEnqueueWriteBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
       CL_TRUE, 0, sizeof(char) * outsize_pad, this->relu_vals.data(), 0,
@@ -1402,13 +1413,13 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCB_HALF) {
   clWaitForEvents(events_size, events.data());
 
   clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_output, CL_TRUE,
-      0, sizeof(chalf) * outsize_pad, this->hw_results_half.data(), 0, NULL,
+      0, sizeof(cpfp) * outsize_pad, this->hw_results_cpfp.data(), 0, NULL,
       NULL);
   clEnqueueReadBuffer(this->ocl.oclCommandQueue, this->ocl_relu_vals,
       CL_TRUE, 0, sizeof(char) * outsize_pad, this->relu_vals.data(), 0,
       NULL, NULL);
 
-  toFloat(this->hw_results_half, this->hw_results);
+  toFloat(this->hw_results_cpfp, this->hw_results);
 
   ref_backward_fc_layer(this->input, this->weights, this->sw_results,
     params[i]);
@@ -1423,4 +1434,4 @@ TYPED_TEST(CRLayerFBHalfTest, TestFCB_HALF) {
   clReleaseMemObject(this->ocl_bias);
   clReleaseMemObject(this->ocl_relu_vals);
   clReleaseMemObject(this->ocl_params);
-}
+}*/

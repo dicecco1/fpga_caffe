@@ -161,21 +161,21 @@ void OCLPoolingHWCNLayer<Dtype>::Forward_ocl(
   
   const int* p_params = param_vals.ocl_data();
 
-  size_t insize = sizeof(chalf) * bottom[0]->count();
-  size_t outsize = sizeof(chalf) * top[0]->count();
+  size_t insize = sizeof(cpfp) * bottom[0]->count();
+  size_t outsize = sizeof(cpfp) * top[0]->count();
   std::vector<cl_event> events;
   int events_size = 1;
 
-  const chalf *bias_data = bias_placeholder.ocl_data();
-  const chalf *weight_data = weights_placeholder.ocl_data();
-  chalf *top_data;
+  const cpfp *bias_data = bias_placeholder.ocl_data();
+  const cpfp *weight_data = weights_placeholder.ocl_data();
+  cpfp *top_data;
   int *relu_vals;
 
   for (int i = 0; i < bottom.size(); i++) {
     events.resize(events_size, 0);
-    const chalf* bottom_data =
-      reinterpret_cast<const chalf *>(bottom[i]->ocl_data(insize));
-    top_data = reinterpret_cast<chalf *>(top[i]->mutable_ocl_data(0, outsize));
+    const cpfp* bottom_data =
+      reinterpret_cast<const cpfp *>(bottom[i]->ocl_data(insize));
+    top_data = reinterpret_cast<cpfp *>(top[i]->mutable_ocl_data(0, outsize));
     relu_vals = relu_indices.mutable_ocl_data(0);
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
       (const void *)&bottom_data);
@@ -213,26 +213,26 @@ void OCLPoolingHWCNLayer<Dtype>::Backward_ocl(const vector<Blob<Dtype>*>& top,
   
   const int* p_params_b = param_vals.ocl_data();
 
-  size_t insize = sizeof(chalf) * bottom[0]->count();
-  size_t outsize = sizeof(chalf) * top[0]->count();
+  size_t insize = sizeof(cpfp) * bottom[0]->count();
+  size_t outsize = sizeof(cpfp) * top[0]->count();
   std::vector<cl_event> events;
 
   int events_size = 1;
 
-  const chalf *bias_data = bias_placeholder.ocl_data();
-  const chalf *weight_data = weights_placeholder.ocl_data();
-  const chalf *top_diff;
+  const cpfp *bias_data = bias_placeholder.ocl_data();
+  const cpfp *weight_data = weights_placeholder.ocl_data();
+  const cpfp *top_diff;
   const int *relu_vals;
 
-  chalf *bottom_diff =
-    reinterpret_cast<chalf *>(bottom[0]->mutable_cpu_diff());
+  cpfp *bottom_diff =
+    reinterpret_cast<cpfp *>(bottom[0]->mutable_cpu_diff());
   for (int i = 0; i < bottom[0]->count(); ++i)
-    bottom_diff[i] = chalf(0);
+    bottom_diff[i] = cpfp(0);
   for (int i = 0; i < bottom.size(); i++) {
     events.resize(events_size, 0);
-    chalf *bottom_diff =
-      reinterpret_cast<chalf *>(bottom[i]->mutable_ocl_diff(1, insize));
-    top_diff = reinterpret_cast<const chalf *>(top[i]->ocl_diff(outsize));
+    cpfp *bottom_diff =
+      reinterpret_cast<cpfp *>(bottom[i]->mutable_ocl_diff(1, insize));
+    top_diff = reinterpret_cast<const cpfp *>(top[i]->ocl_diff(outsize));
     relu_vals = relu_indices.ocl_data();
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
       (const void *)&top_diff);

@@ -115,7 +115,7 @@ TYPED_TEST(ConvLayerWinogradTest, TestWinogradConv1x1) {
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyWeights(this->weights, this->weights_pad, ksize, ksize_pad,
-        params[i].numgroups * params[i].inchannels * params[i].outchannels);
+        params[i]);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
@@ -231,7 +231,7 @@ TYPED_TEST(ConvLayerWinogradTest, TestWinogradConv3x3) {
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyWeights(this->weights, this->weights_pad, ksize, ksize_pad,
-        params[i].numgroups * params[i].inchannels * params[i].outchannels);
+        params[i]);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,
@@ -347,7 +347,7 @@ TYPED_TEST(ConvLayerWinogradTest, TestWinogradConv5x5) {
     copyVector(this->input, this->input_pad, params[i].xdim, 
         params[i].xtile_pad * 2);
     copyWeights(this->weights, this->weights_pad, ksize, ksize_pad,
-        params[i].numgroups * params[i].inchannels * params[i].outchannels);
+        params[i]);
 
     // Create buffers
     this->ocl_input = clCreateBuffer(this->ocl.oclContext, CL_MEM_READ_ONLY,

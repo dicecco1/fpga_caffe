@@ -81,13 +81,13 @@ class OCLConvolutionLayer : public ConvolutionLayer<Dtype> {
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   void backward_weights(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
-  void copyToHalf(const Dtype *input, chalf *output, int size, int xdim,
+  void copyToHalf(const Dtype *input, cpfp *output, int size, int xdim,
       int xdim_pad);
-  void copyToHalfWeights(const Dtype *input, chalf *output, int size,
+  void copyToHalfWeights(const Dtype *input, cpfp *output, int size,
       int ksize, int ksize_pad);
-  void copyToFloatWeights(chalf *input, Dtype *output, const vector<int>,
+  void copyToFloatWeights(cpfp *input, Dtype *output, const vector<int>,
       int ksize_pad);
-  void RotateWeightsHalf(const Dtype *input, chalf *output, vector<int> shape,
+  void RotateWeightsHalf(const Dtype *input, cpfp *output, vector<int> shape,
       int ksize_pad);
  private:
   kernel_params ocl_params_;
@@ -99,9 +99,9 @@ class OCLConvolutionLayer : public ConvolutionLayer<Dtype> {
   int batch_bw_;
   int batch_bb_;
   Blob<char> relu_indices; 
-  Blob<chalf> weights_pad_h;
-  Blob<chalf> weights_pad_h_r;
-  Blob<chalf> bias_h, bias_null;
+  Blob<cpfp> weights_pad_h;
+  Blob<cpfp> weights_pad_h_r;
+  Blob<cpfp> bias_h, bias_null;
 
 };
 #endif

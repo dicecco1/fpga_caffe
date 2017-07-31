@@ -5,7 +5,7 @@
 #include "caffe/blob.hpp"
 #include "caffe/common.hpp"
 #include "caffe/filler.hpp"
-#include "caffe/layers/half_conversion_layer.hpp"
+#include "caffe/layers/cpfp_conversion_layer.hpp"
 #include "caffe/layers/ocl_inner_product_layer.hpp"
 #include "caffe/layers/XCL_program_layer.hpp"
 
@@ -61,26 +61,26 @@ class OCLInnerProductLayerTest : public OCLDeviceTest<TypeParam> {
  protected:
   OCLInnerProductLayerTest()
       : blob_bottom_(new Blob<Dtype>(16, 3, 4, 4)),
-        blob_top_half_out(new Blob<Dtype>()),
+        blob_top_cpfp_out(new Blob<Dtype>()),
         blob_top_ip_out(new Blob<Dtype>()),
-        blob_top_half_out_2(new Blob<Dtype>()) {
+        blob_top_cpfp_out_2(new Blob<Dtype>()) {
     // fill the values
     FillerParameter filler_param;
     UniformFiller<Dtype> filler(filler_param);
     filler.Fill(this->blob_bottom_);
-    blob_bottom_vec_half.push_back(blob_bottom_);
-    blob_top_vec_half.push_back(blob_top_half_out);
-    blob_bottom_vec_ip.push_back(blob_top_half_out);
+    blob_bottom_vec_cpfp.push_back(blob_bottom_);
+    blob_top_vec_cpfp.push_back(blob_top_cpfp_out);
+    blob_bottom_vec_ip.push_back(blob_top_cpfp_out);
     blob_top_vec_ip.push_back(blob_top_ip_out);
-    blob_bottom_vec_half_2.push_back(blob_top_ip_out);
-    blob_top_vec_half_2.push_back(blob_top_half_out_2);
+    blob_bottom_vec_cpfp_2.push_back(blob_top_ip_out);
+    blob_top_vec_cpfp_2.push_back(blob_top_cpfp_out_2);
   }
 
   virtual ~OCLInnerProductLayerTest() {
     delete blob_bottom_;
-    delete blob_top_half_out;
+    delete blob_top_cpfp_out;
     delete blob_top_ip_out;
-    delete blob_top_half_out_2;
+    delete blob_top_cpfp_out_2;
   }
 
   virtual Blob<Dtype>* MakeReferenceTop(Blob<Dtype>* top) {
@@ -90,16 +90,16 @@ class OCLInnerProductLayerTest : public OCLDeviceTest<TypeParam> {
   }
 
   Blob<Dtype>* const blob_bottom_;
-  Blob<Dtype>* const blob_top_half_out;
+  Blob<Dtype>* const blob_top_cpfp_out;
   Blob<Dtype>* const blob_top_ip_out;
-  Blob<Dtype>* const blob_top_half_out_2;
+  Blob<Dtype>* const blob_top_cpfp_out_2;
   shared_ptr<Blob<Dtype> > ref_blob_top_;
-  vector<Blob<Dtype>*> blob_bottom_vec_half;
-  vector<Blob<Dtype>*> blob_top_vec_half;
+  vector<Blob<Dtype>*> blob_bottom_vec_cpfp;
+  vector<Blob<Dtype>*> blob_top_vec_cpfp;
   vector<Blob<Dtype>*> blob_bottom_vec_ip;
   vector<Blob<Dtype>*> blob_top_vec_ip;
-  vector<Blob<Dtype>*> blob_bottom_vec_half_2;
-  vector<Blob<Dtype>*> blob_top_vec_half_2;
+  vector<Blob<Dtype>*> blob_bottom_vec_cpfp_2;
+  vector<Blob<Dtype>*> blob_top_vec_cpfp_2;
   vector<Blob<Dtype>*> prog_bot_;
   vector<Blob<Dtype>*> prog_top_;
 };
@@ -114,11 +114,11 @@ TYPED_TEST(OCLInnerProductLayerTest, TestSetUp) {
   inner_product_param->set_num_output(10);
   shared_ptr<OCLInnerProductLayer<Dtype> > layer(
       new OCLInnerProductLayer<Dtype>(layer_param));
-  layer->SetUp(this->blob_bottom_vec_half, this->blob_top_vec_half);
-  EXPECT_EQ(this->blob_top_half_out->num(), 16);
-  EXPECT_EQ(this->blob_top_half_out->height(), 1);
-  EXPECT_EQ(this->blob_top_half_out->width(), 1);
-  EXPECT_EQ(this->blob_top_half_out->channels(), 10);
+  layer->SetUp(this->blob_bottom_vec_cpfp, this->blob_top_vec_cpfp);
+  EXPECT_EQ(this->blob_top_cpfp_out->num(), 16);
+  EXPECT_EQ(this->blob_top_cpfp_out->height(), 1);
+  EXPECT_EQ(this->blob_top_cpfp_out->width(), 1);
+  EXPECT_EQ(this->blob_top_cpfp_out->channels(), 10);
 }
 
 TYPED_TEST(OCLInnerProductLayerTest, TestForward) {
@@ -133,45 +133,45 @@ TYPED_TEST(OCLInnerProductLayerTest, TestForward) {
   inner_product_param->mutable_bias_filler()->set_max(2);
   XCLParameter* xcl_param = layer_param.mutable_xcl_param();
 
-  xcl_param->set_xcl_name("cr_layer_fb_half.xclbin");
-  xcl_param->set_kernel_name("cr_layer_fb_half");
+  xcl_param->set_xcl_name("cr_layer_fb_cpfp.xclbin");
+  xcl_param->set_kernel_name("cr_layer_fb_cpfp");
 
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
   programLayer->Forward(this->prog_bot_, this->prog_top_);
 
-  HalfConversionParameter* half_param =
-      layer_param.mutable_half_conversion_param();
-  half_param->set_convert_to(true);
+  CPFPConversionParameter* cpfp_param =
+      layer_param.mutable_cpfp_conversion_param();
+  cpfp_param->set_convert_to(true);
 
-  shared_ptr<Layer<Dtype> > half_layer(
-      new HalfConversionLayer<Dtype>(layer_param));
-  half_layer->SetUp(this->blob_bottom_vec_half, this->blob_top_vec_half);
-  half_layer->Forward(this->blob_bottom_vec_half, this->blob_top_vec_half);
+  shared_ptr<Layer<Dtype> > cpfp_layer(
+      new CPFPConversionLayer<Dtype>(layer_param));
+  cpfp_layer->SetUp(this->blob_bottom_vec_cpfp, this->blob_top_vec_cpfp);
+  cpfp_layer->Forward(this->blob_bottom_vec_cpfp, this->blob_top_vec_cpfp);
   
   shared_ptr<OCLInnerProductLayer<Dtype> > layer(
       new OCLInnerProductLayer<Dtype>(layer_param));
   layer->SetUp(this->blob_bottom_vec_ip, this->blob_top_vec_ip);
   layer->Forward(this->blob_bottom_vec_ip, this->blob_top_vec_ip);
 
-  half_param->set_convert_to(false);
+  cpfp_param->set_convert_to(false);
 
-  shared_ptr<Layer<Dtype> > half_layer2(
-      new HalfConversionLayer<Dtype>(layer_param));
-  half_layer2->SetUp(this->blob_bottom_vec_half_2, this->blob_top_vec_half_2);
-  half_layer2->Forward(this->blob_bottom_vec_half_2,
-      this->blob_top_vec_half_2);
+  shared_ptr<Layer<Dtype> > cpfp_layer2(
+      new CPFPConversionLayer<Dtype>(layer_param));
+  cpfp_layer2->SetUp(this->blob_bottom_vec_cpfp_2, this->blob_top_vec_cpfp_2);
+  cpfp_layer2->Forward(this->blob_bottom_vec_cpfp_2,
+      this->blob_top_vec_cpfp_2);
 
   const Dtype *top_data;
   const Dtype *ref_top_data;
 
   caffe_inner_product(this->blob_bottom_, inner_product_param, layer->blobs(),
-      this->MakeReferenceTop(this->blob_top_half_out_2));
+      this->MakeReferenceTop(this->blob_top_cpfp_out_2));
 
-  top_data = this->blob_top_half_out_2->cpu_data();
+  top_data = this->blob_top_cpfp_out_2->cpu_data();
   ref_top_data = this->ref_blob_top_->cpu_data();
-  const int count = this->blob_top_half_out_2->count();
+  const int count = this->blob_top_cpfp_out_2->count();
   for (int i = 0; i < count; ++i) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-1);
   }

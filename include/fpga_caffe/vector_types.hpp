@@ -1,7 +1,7 @@
 #ifndef VECTOR_TYPES_HPP_
 #define VECTOR_TYPES_HPP_
 
-#include "half.hpp"
+#include "cpfp.hpp"
 
 struct char16{
   char s0;
@@ -61,25 +61,25 @@ struct short16 {
   }
 };
 
-struct chalf16 {
-  chalf s0;
-  chalf s1;
-  chalf s2;
-  chalf s3;
-  chalf s4;
-  chalf s5;
-  chalf s6;
-  chalf s7;
-  chalf s8;
-  chalf s9;
-  chalf sa;
-  chalf sb;
-  chalf sc;
-  chalf sd;
-  chalf se;
-  chalf sf;
+struct cpfp16 {
+  cpfp s0;
+  cpfp s1;
+  cpfp s2;
+  cpfp s3;
+  cpfp s4;
+  cpfp s5;
+  cpfp s6;
+  cpfp s7;
+  cpfp s8;
+  cpfp s9;
+  cpfp sa;
+  cpfp sb;
+  cpfp sc;
+  cpfp sd;
+  cpfp se;
+  cpfp sf;
   
-  chalf16& operator=(const chalf& rhs) {
+  cpfp16& operator=(const cpfp& rhs) {
     s0 = rhs;
     s1 = rhs;
     s2 = rhs;
@@ -99,7 +99,7 @@ struct chalf16 {
     return *this;
   }
 
-  chalf16& operator+=(const chalf rhs[16]) { 
+  cpfp16& operator+=(const cpfp rhs[16]) { 
 #pragma HLS INLINE
     s0 += rhs[0];
     s1 += rhs[1];
@@ -121,9 +121,9 @@ struct chalf16 {
   }
 };
 
-chalf16 max(const chalf16 rhs) {
+cpfp16 max(const cpfp16 rhs) {
 #pragma HLS INLINE
-  chalf16 val;
+  cpfp16 val;
   val.s0 = max(rhs.s0);
   val.s1 = max(rhs.s1);
   val.s2 = max(rhs.s2);
@@ -143,9 +143,9 @@ chalf16 max(const chalf16 rhs) {
   return val;
 }
 
-chalf16 max(const chalf16 T, const chalf16 U) {
+cpfp16 max(const cpfp16 T, const cpfp16 U) {
 #pragma HLS INLINE
-  chalf16 val;
+  cpfp16 val;
   val.s0 = max(T.s0, U.s0);
   val.s1 = max(T.s1, U.s1);
   val.s2 = max(T.s2, U.s2);
@@ -165,10 +165,10 @@ chalf16 max(const chalf16 T, const chalf16 U) {
   return val;
 }
 
-chalf16 max(const chalf16 T, const chalf16 U, const short16 Tmask,
+cpfp16 max(const cpfp16 T, const cpfp16 U, const short16 Tmask,
     const short16 Umask, short16 *out_mask) {
 #pragma HLS INLINE
-  chalf16 val;
+  cpfp16 val;
   short16 res_mask;
   val.s0 = max(T.s0, U.s0, Tmask.s0, Umask.s0, &(res_mask.s0));
   val.s1 = max(T.s1, U.s1, Tmask.s1, Umask.s1, &(res_mask.s1));
@@ -191,8 +191,8 @@ chalf16 max(const chalf16 T, const chalf16 U, const short16 Tmask,
 }
 
 
-struct chalf32 {
-  chalf16 l, u;
+struct cpfp32 {
+  cpfp16 l, u;
 };
 
 #endif // HVECTOR_TYPES_HPP

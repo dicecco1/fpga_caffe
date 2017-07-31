@@ -34,9 +34,9 @@ void DropoutLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   const Dtype* bottom_data = bottom[0]->cpu_data();
   Dtype* top_data = top[0]->mutable_cpu_data();
 #else
-  const chalf* bottom_data =
-    reinterpret_cast<const chalf*>(bottom[0]->cpu_data());
-  chalf* top_data = reinterpret_cast<chalf*>(top[0]->mutable_cpu_data());
+  const cpfp* bottom_data =
+    reinterpret_cast<const cpfp*>(bottom[0]->cpu_data());
+  cpfp* top_data = reinterpret_cast<cpfp*>(top[0]->mutable_cpu_data());
 #endif
   unsigned int* mask = rand_vec_.mutable_cpu_data();
   const int count = bottom[0]->count();
@@ -65,9 +65,9 @@ void DropoutLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     const Dtype* top_diff = top[0]->cpu_diff();
     Dtype* bottom_diff = bottom[0]->mutable_cpu_diff();
 #else
-    const chalf* top_diff = reinterpret_cast<const chalf*>(top[0]->cpu_diff());
-    chalf* bottom_diff =
-      reinterpret_cast<chalf*>(bottom[0]->mutable_cpu_diff());
+    const cpfp* top_diff = reinterpret_cast<const cpfp*>(top[0]->cpu_diff());
+    cpfp* bottom_diff =
+      reinterpret_cast<cpfp*>(bottom[0]->mutable_cpu_diff());
 #endif
     if (this->phase_ == TRAIN) {
       const unsigned int* mask = rand_vec_.cpu_data();

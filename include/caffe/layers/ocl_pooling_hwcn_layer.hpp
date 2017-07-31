@@ -34,8 +34,8 @@ class OCLPoolingHWCNLayer : public PoolingLayer<Dtype> {
   kernel_params ocl_params_;
   kernel_params ocl_params_bi_;
   Blob<int> relu_indices; 
-  Blob<chalf> weights_placeholder;
-  Blob<chalf> bias_placeholder;
+  Blob<cpfp> weights_placeholder;
+  Blob<cpfp> bias_placeholder;
   Blob<int> param_vals;
   int num_;
 };

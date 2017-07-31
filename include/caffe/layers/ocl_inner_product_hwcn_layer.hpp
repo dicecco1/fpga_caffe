@@ -43,11 +43,11 @@ class OCLHWCNInnerProductLayer : public InnerProductLayer<Dtype> {
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   virtual void backward_weights(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
-  void copyToHalf(const Dtype *input, chalf *output, int size, int xdim,
+  void copyToHalf(const Dtype *input, cpfp *output, int size, int xdim,
       int xdim_pad);
-  void copyPad(const chalf *input, chalf *output, int size, int xdim,
+  void copyPad(const cpfp *input, cpfp *output, int size, int xdim,
       int xdim_pad);
-  void copyToFloat(const chalf *input, Dtype *output, int size, int xdim,
+  void copyToFloat(const cpfp *input, Dtype *output, int size, int xdim,
       int xdim_pad);
 
  private:
@@ -59,10 +59,10 @@ class OCLHWCNInnerProductLayer : public InnerProductLayer<Dtype> {
   bool use_aux_;
   int num_cu_;
   Blob<int> relu_indices;
-  Blob<chalf> weights_h;
-  Blob<chalf> weights_h_t;
-  Blob<chalf> bias_h, bias_placeholder, weights_placeholder;
-  Blob<chalf> top_aux;
+  Blob<cpfp> weights_h;
+  Blob<cpfp> weights_h_t;
+  Blob<cpfp> bias_h, bias_placeholder, weights_placeholder;
+  Blob<cpfp> top_aux;
   Blob<int> param_vals;
 };
 #endif

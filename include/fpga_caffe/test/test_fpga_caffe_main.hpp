@@ -16,7 +16,7 @@
 #include <string>
 #include "time.h"
 #include "fpga_caffe/layer.hpp"
-#include "fpga_caffe/half.hpp"
+#include "fpga_caffe/cpfp.hpp"
 
 using std::cout;
 using std::endl;
@@ -73,7 +73,7 @@ void ref_backward_conv_layer(std::vector<float> input,
 
 void fillVector(std::vector<float>& input, float beg, float end);
 
-void fillVectorHalf(std::vector<float>& input, float beg, float end);
+void fillVectorCPFP(std::vector<float>& input, float beg, float end);
 
 void copyVector(std::vector<float> input, std::vector<float>& output, int xsize,
     int xsize_pad);
@@ -81,9 +81,9 @@ void copyVector(std::vector<float> input, std::vector<float>& output, int xsize,
 void copyWeights(std::vector<float> w_input, std::vector<float>& w_output,
     int ksize, int padsize, kernel_params params);
 
-void toHalf(std::vector<float> input, std::vector<chalf>& output);
+void toCPFP(std::vector<float> input, std::vector<cpfp>& output);
 
-void toFloat(std::vector<chalf> input, std::vector<float>& output);
+void toFloat(std::vector<cpfp> input, std::vector<float>& output);
 
 bool checkEQ(float expected, float result, float epsilon, float absError);
 

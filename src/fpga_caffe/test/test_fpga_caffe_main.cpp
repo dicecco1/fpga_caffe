@@ -52,12 +52,12 @@ void fillVector(std::vector<float>& input, float beg, float end) {
   }
 }
 
-void fillVectorHalf(std::vector<float>& input, float beg, float end) {
+void fillVectorCPFP(std::vector<float>& input, float beg, float end) {
   static boost::random::mt19937 engine(time(0));
   boost::random::uniform_real_distribution<float> dis(beg, end);
   std::vector<float>::iterator it;
   for (it = input.begin(); it < input.end(); ++it) {
-    *it = float(chalf(dis(engine)));
+    *it = float(cpfp(dis(engine)));
   }
 }
 
@@ -109,13 +109,13 @@ void copyWeights(std::vector<float> w_input, std::vector<float>& w_output,
   }
 }
 
-void toHalf(std::vector<float> input, std::vector<chalf>& output) {
+void toCPFP(std::vector<float> input, std::vector<cpfp>& output) {
   for (int i = 0; i < input.size(); ++i) {
-    output[i] = chalf(input[i]);
+    output[i] = cpfp(input[i]);
   } 
 }
 
-void toFloat(std::vector<chalf> input, std::vector<float>& output) {
+void toFloat(std::vector<cpfp> input, std::vector<float>& output) {
   for (int i = 0; i < input.size(); ++i) {
     output[i] = float(input[i]);
   }
