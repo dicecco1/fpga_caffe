@@ -175,7 +175,7 @@ void OCLPoolingHWCNLayer<Dtype>::Forward_ocl(
     events.resize(events_size, 0);
     const chalf* bottom_data =
       reinterpret_cast<const chalf *>(bottom[i]->ocl_data(insize));
-    top_data = reinterpret_cast<chalf *>(top[i]->mutable_ocl_data(0));
+    top_data = reinterpret_cast<chalf *>(top[i]->mutable_ocl_data(0, outsize));
     relu_vals = relu_indices.mutable_ocl_data(0);
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
       (const void *)&bottom_data);

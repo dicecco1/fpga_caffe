@@ -369,12 +369,7 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_weights(
   params->backward = 1;
   Dtype* weight_diff_dtype = this->blobs_[0]->mutable_cpu_diff();
  
-  chalf *weight_diff = weights_h_t.mutable_cpu_diff();
-
-  for (int i = 0; i < weights_h_t.count(); ++i)
-    weight_diff[i] = chalf(0);
-
-  weight_diff = weights_h_t.mutable_ocl_diff();
+  chalf* weight_diff = weights_h_t.mutable_ocl_diff(0);
   vector<int> shape(1);
   shape[0] = this->blobs_[0]->shape(1);
 
@@ -458,10 +453,7 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_bias(
 
   shape[0] = weights_h_t.shape(1);
 
-  for (int i = 0; i < bias_h.count(); ++i)
-    (bias_h.mutable_cpu_diff())[i] = chalf(0);
-
-  chalf *bias_diff = bias_h.mutable_ocl_diff();
+  chalf *bias_diff = bias_h.mutable_ocl_diff(0);
 
   shape[0] = sizeof(kernel_params) / sizeof(int);
   param_vals.Reshape(shape);
@@ -579,7 +571,7 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_data(
     }
     events.resize(events_size, 0);
     bottom_diff =
-      reinterpret_cast<chalf *>(bottom[i]->mutable_ocl_diff(1, insize));
+      reinterpret_cast<chalf *>(bottom[i]->mutable_ocl_diff(0, insize));
     relu_vals = relu_indices.ocl_data();
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
       (const void *)&top_diff);
@@ -621,9 +613,6 @@ void OCLHWCNInnerProductLayer<Dtype>::Backward_ocl(
 
   if (this->param_propagate_down_[0])
     backward_weights(top, propagate_down, bottom);
-
-  for (int i = 0; i < bottom[0]->count(); ++i)
-    (bottom[0]->mutable_cpu_diff())[i] = 0;
 
   if (propagate_down[0])
     backward_data(top, propagate_down, bottom);
