@@ -146,7 +146,7 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 #pragma HLS ARRAY_PARTITION variable=outBuf complete dim=1
 
   // Weight buffer
-  cpfp16 wBuf[OCFACT][256];
+  cpfp16 wBuf[OCFACT][8 * 256];
 #pragma HLS ARRAY_PARTITION variable=wBuf complete dim=1
 
   // Bias buffer
@@ -407,13 +407,19 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 
                 wIdx = mode_select_idx(wIdxFW, wIdxBW, mode);
                 wSize = mode_select_size(wSizeFW, wSizeBW, mode);
+                int wOffFW = b * ksize * ksize * wcFact;
+                int wOffBW = b * imgFact;
+                int wOff = mode_select_idx(wOffFW, wOffBW, mode);
 
                 bool readEnable = ((o * OCFACT + k) * burstoc + b <
                     outChannels);
                 if (readEnable)
-                  memcpy(wBuf[k], weights + wIdx, sizeof(cpfp16) * wSize);
+                  memcpy(wBuf[k] + wOff, weights + wIdx, sizeof(cpfp16)
+                      * wSize);
               }
+            }
 
+            for (int b = 0; b < burstoc; ++b) {
               ap_uint<8> w_off = 0;
               ap_uint<5> img_off = 0;
               ap_uint<8> iter = 0;
@@ -465,9 +471,11 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                   w_off = iter;
                 }
 
-                short filt_off = (yk_off + ydim_off) * ksize + xk_off + xdim_off;
-                short wIdxFW = filt_off * wcFact + (w_off >> 2);
-                short wIdxBW = img_off;
+                short filt_off = (yk_off + ydim_off) * ksize + xk_off +
+                  xdim_off;
+                short wIdxFW = (b * ksize * ksize + filt_off) * wcFact +
+                  (w_off >> 2);
+                short wIdxBW = b * imgFact + img_off;
                 short wIdx = (mode) ? wIdxBW : wIdxFW;
                 short foutIdx = counter_bw * 4;
                 short inIdx = (filt_off * burstFact + w_off) * imgFact
