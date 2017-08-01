@@ -15,7 +15,7 @@
 #endif
 
 #define EXP_SIZE 6
-#define MANT_SIZE 8 
+#define MANT_SIZE 5 
 #define EXP_OFFSET ((1 << (EXP_SIZE - 1)) - 1)
 #define MAX_EXP ((1 << EXP_SIZE) - 1)
 #define MAX_MANT ((1 << MANT_SIZE) - 1)
