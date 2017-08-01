@@ -412,14 +412,12 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                 int wOff = mode_select_idx(wOffFW, wOffBW, mode);
 
                 bool readEnable = ((o * OCFACT + k) * burstoc + b <
-                    outChannels);
+                    outChannels) && ((mode) || ((x == 0) && (y == 0)));
                 if (readEnable)
                   memcpy(wBuf[k] + wOff, weights + wIdx, sizeof(cpfp16)
                       * wSize);
               }
-            }
 
-            for (int b = 0; b < burstoc; ++b) {
               ap_uint<8> w_off = 0;
               ap_uint<5> img_off = 0;
               ap_uint<8> iter = 0;
