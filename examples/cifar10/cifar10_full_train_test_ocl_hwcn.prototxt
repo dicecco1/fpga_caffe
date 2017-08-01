@@ -37,8 +37,8 @@ layer {
   name: "PROGRAM3"
   type: "XCLProgram"
   xcl_param {
-    xcl_name: "cr_layer_hwcn_half.xclbin"
-    kernel_name: "cr_layer_hwcn_half"
+    xcl_name: "cr_layer_hwcn_cpfp.xclbin"
+    kernel_name: "cr_layer_hwcn_cpfp"
     once: true
   }
 }
@@ -63,18 +63,18 @@ layer {
   }
 }
 layer {
-  name: "HALF1"
-  type: "HalfConversion"
+  name: "CPFP1"
+  type: "CPFPConversion"
   bottom: "pad1"
-  top: "half1"
-  half_conversion_param {
+  top: "cpfp1"
+  cpfp_conversion_param {
     convert_to: true
   }
 }
 layer {
   name: "conv1"
   type: "OCLCRHWCN"
-  bottom: "half1"
+  bottom: "cpfp1"
   top: "conv1"
   param {
     lr_mult: 1
@@ -219,18 +219,18 @@ layer {
   }
 }
 layer {
-  name: "HALF2"
-  type: "HalfConversion"
+  name: "CPFP2"
+  type: "CPFPConversion"
   bottom: "ip1"
-  top: "half2"
-  half_conversion_param {
+  top: "cpfp2"
+  cpfp_conversion_param {
     convert_to: false
   }
 }
 layer {
   name: "HWCN2"
   type: "HWCN"
-  bottom: "half2"
+  bottom: "cpfp2"
   top: "hwcn2"
   hwcn_param {
     convert_to: false

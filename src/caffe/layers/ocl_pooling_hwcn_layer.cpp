@@ -231,7 +231,7 @@ void OCLPoolingHWCNLayer<Dtype>::Backward_ocl(const vector<Blob<Dtype>*>& top,
   for (int i = 0; i < bottom.size(); i++) {
     events.resize(events_size, 0);
     cpfp *bottom_diff =
-      reinterpret_cast<cpfp *>(bottom[i]->mutable_ocl_diff(1, insize));
+      reinterpret_cast<cpfp *>(bottom[i]->mutable_ocl_diff(0, insize));
     top_diff = reinterpret_cast<const cpfp *>(top[i]->ocl_diff(outsize));
     relu_vals = relu_indices.ocl_data();
     clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
