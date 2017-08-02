@@ -79,7 +79,7 @@ cpfp relu_bw(cpfp input, bool enable) {
   return res;
 }
 
-void relu_fw(cpfp16 outBuf[OCFACT][256], short outBufRelu[OCFACT][256],
+void relu_fw(cpfp16 outBuf[OCFACT][8 * 256], short outBufRelu[OCFACT][8 * 256],
     int num_iter) {
   RELU_FW: for (int i = 0; i < num_iter; ++i) {
   #pragma HLS pipeline
@@ -138,11 +138,11 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
   short inBufRelu[4][2 * 256 * 16];
 #pragma HLS ARRAY_PARTITION variable=inBufRelu complete dim=1
 
-  short outBufRelu[OCFACT][256];
+  short outBufRelu[OCFACT][8 * 256];
 #pragma HLS ARRAY_PARTITION variable=outBufRelu complete dim=1
 
   // Output buffer used for writing
-  cpfp16 outBuf[OCFACT][256];
+  cpfp16 outBuf[OCFACT][8 * 256];
 #pragma HLS ARRAY_PARTITION variable=outBuf complete dim=1
 
   // Weight buffer
@@ -243,7 +243,6 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
   assert(ksize >= 1);
   assert(burstChannels <= 2048);
   assert(burstChannels >= 4);
-  assert(numImages >= 192);
   assert(numImages <= 256);
 
   ap_uint<10> xdim_out = ((xdim - ksize + 2 * pad) / stride) + 1;
@@ -371,8 +370,8 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                 int outIdx, outIdxFW, outIdxBW;
                 short outSize, outSizeFW, outSizeBW;
                 outIdxBW = ((o * OCFACT + k) * burstoc + outChannels *
-                    group_idx) * ksize * ksize * icFact + n * ksize * ksize *
-                    wcFact;
+                    group_idx) * ksize * ksize * icFact + n * burstoc * ksize
+                    * ksize * wcFact;
                 outIdxFW = (((y * xdim_out + x) * numgroups + group_idx) *
                   outChannels + (o * OCFACT + k) * burstoc) * imgFact; 
                 outSizeBW = burstoc * ksize * ksize * wcFact;
@@ -393,48 +392,53 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                       outSize);
               }
             }  
-            for (int b = 0; b < burstoc; ++b) {
-              for (int k = 0; k < OCFACT; ++k) {
-                int wIdxFW, wIdxBW, wIdx;
-                short wSizeFW, wSizeBW, wSize;
-                wIdxBW = (((y * xdim_out + x) * numgroups + group_idx) *
-                    outChannels + (o * OCFACT + k) * burstoc + b) * imgFact;
-                wSizeBW = imgFact;
-                wIdxFW = ((o * OCFACT + k) * burstoc + b + outChannels *
-                  group_idx) * ksize * ksize * icFact + n * ksize * ksize *
-                  wcFact;
-                wSizeFW = ksize * ksize * wcFact;
-
-                wIdx = mode_select_idx(wIdxFW, wIdxBW, mode);
-                wSize = mode_select_size(wSizeFW, wSizeBW, mode);
-                int wOffFW = b * ksize * ksize * wcFact;
-                int wOffBW = b * imgFact;
-                int wOff = mode_select_idx(wOffFW, wOffBW, mode);
-
-                bool readEnable = ((o * OCFACT + k) * burstoc + b <
-                    outChannels) && ((mode) || ((x == 0) && (y == 0)));
-                if (readEnable)
-                  memcpy(wBuf[k] + wOff, weights + wIdx, sizeof(cpfp16)
-                      * wSize);
+            for (int k = 0; k < OCFACT; ++k) {
+              int wIdxFW, wIdxBW, wIdx;
+              short wSizeFW, wSizeBW, wSize;
+              wIdxBW = (((y * xdim_out + x) * numgroups + group_idx) *
+                  outChannels + (o * OCFACT + k) * burstoc) * imgFact;
+              wSizeBW = burstoc * imgFact;
+              wIdxFW = ((o * OCFACT + k) * burstoc + outChannels *
+                group_idx) * ksize * ksize * icFact + n * burstoc * ksize *
+                ksize * wcFact;
+              wSizeFW = burstoc * ksize * ksize * wcFact;
+              
+              if ((o * OCFACT + k) * burstoc + burstoc > outChannels) {
+                short newBurst = outChannels - (o * OCFACT + k) * burstoc;
+                wSizeFW = newBurst * ksize * ksize * wcFact;
+                wSizeBW =  newBurst * imgFact;
               }
 
-              ap_uint<8> w_off = 0;
-              ap_uint<5> img_off = 0;
-              ap_uint<8> iter = 0;
-              ap_uint<8> xdim_off = 0;
-              ap_uint<8> ydim_off = 0;
-              ap_uint<2> counter_bw = 0;
-              ap_uint<2> counter_fw = 0;
-              short mac_iterations = yksize * xksize * imgFact * burstFact;
-              MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter,
-                ++counter_bw) {
+              wIdx = mode_select_idx(wIdxFW, wIdxBW, mode);
+              wSize = mode_select_size(wSizeFW, wSizeBW, mode);
+
+              bool readEnable = ((o * OCFACT + k) * burstoc <
+                  outChannels) && ((mode) || ((x == 0) && (y == 0)));
+              if (readEnable)
+                memcpy(wBuf[k], weights + wIdx, sizeof(cpfp16) * wSize);
+            }
+
+            ap_uint<8> w_off = 0;
+            ap_uint<5> img_off = 0;
+            ap_uint<8> iter = 0;
+            ap_uint<8> xdim_off = 0;
+            ap_uint<8> ydim_off = 0;
+            ap_uint<2> counter_bw = 0;
+            ap_uint<2> counter_fw = 0;
+            ap_uint<5> b_off = 0;
+            short mac_iterations = burstoc * yksize * xksize * imgFact
+              * burstFact;
+            MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter,
+              ++counter_bw) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable outBuf inter false
 #pragma HLS DEPENDENCE variable outBufRelu inter false
 #pragma HLS DEPENDENCE variable finalOut inter false
 #pragma HLS DEPENDENCE variable wUpdate inter false
-                if (!mode) {
-                  if (iter == imgFact) {
+              if (!mode) {
+                if (iter == imgFact) {
+                  if (b_off == burstoc - 1) {
+                    b_off = 0;
                     if (w_off == burstFact - 1) {
                       counter_fw = 0;
                       w_off = 0;
@@ -448,11 +452,16 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                       counter_fw++;
                       w_off++;
                     }
-                    iter = 0;
+                  } else {
+                    b_off++;
                   }
-                  img_off = iter;
-                } else {
-                  if (iter == burstFact) {
+                  iter = 0;
+                }
+                img_off = iter;
+              } else {
+                if (iter == burstFact) {
+                  if (b_off == burstoc - 1) {
+                    b_off = 0;
                     if (xdim_off == xksize - 1) {
                       xdim_off = 0;
                       if (ydim_off == yksize - 1) {
@@ -464,134 +473,137 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                     } else {
                       xdim_off++;
                     }
-                    iter = 0;
+                  } else {
+                    b_off++;
                   }
-                  w_off = iter;
+                  iter = 0;
                 }
+                w_off = iter;
+              }
 
-                short filt_off = (yk_off + ydim_off) * ksize + xk_off +
-                  xdim_off;
-                short wIdxFW = (b * ksize * ksize + filt_off) * wcFact +
-                  (w_off >> 2);
-                short wIdxBW = b * imgFact + img_off;
-                short wIdx = (mode) ? wIdxBW : wIdxFW;
-                short foutIdx = counter_bw * 4;
-                short inIdx = (filt_off * burstFact + w_off) * imgFact
-                  + img_off;
-                short outIdxFW = b * imgFact + img_off;
-                short outIdxBW = b * ksize * ksize * wcFact +
-                  filt_off * wcFact + (w_off >> 2);
-                short outIdx = (mode) ? outIdxBW : outIdxFW;
-                bool accEnable = (mode) ? (counter_bw == 3) : true;
-                bool reluOn = (relu && ((backward == 1) ||
-                    (backward == 2) || (backward == 3)));
+              short filt_off = (yk_off + ydim_off) * ksize + xk_off +
+                xdim_off;
+              short wIdxFW = (b_off * ksize * ksize + filt_off) * wcFact +
+                (w_off >> 2);
+              short wIdxBW = b_off * imgFact + img_off;
+              short wIdx = (mode) ? wIdxBW : wIdxFW;
+              short foutIdx = counter_bw * 4;
+              short inIdx = (filt_off * burstFact + w_off) * imgFact
+                + img_off;
+              short outIdxFW = b_off * imgFact + img_off;
+              short outIdxBW = b_off * ksize * ksize * wcFact +
+                filt_off * wcFact + (w_off >> 2);
+              short outIdx = (mode) ? outIdxBW : outIdxFW;
+              bool accEnable = (mode) ? (counter_bw == 3) : true;
+              bool reluOn = (relu && ((backward == 1) ||
+                  (backward == 2) || (backward == 3)));
 
-                for (int k = 0; k < OCFACT; ++k) {
-                  weightFW[0] = wBuf[k][wIdx].s0;
-                  weightFW[1] = wBuf[k][wIdx].s1;
-                  weightFW[2] = wBuf[k][wIdx].s2;
-                  weightFW[3] = wBuf[k][wIdx].s3;   
-                  weightFW[4] = wBuf[k][wIdx].s4;
-                  weightFW[5] = wBuf[k][wIdx].s5;
-                  weightFW[6] = wBuf[k][wIdx].s6;
-                  weightFW[7] = wBuf[k][wIdx].s7;
-                  weightFW[8] = wBuf[k][wIdx].s8;
-                  weightFW[9] = wBuf[k][wIdx].s9;
-                  weightFW[10] = wBuf[k][wIdx].sa;
-                  weightFW[11] = wBuf[k][wIdx].sb;
-                  weightFW[12] = wBuf[k][wIdx].sc;
-                  weightFW[13] = wBuf[k][wIdx].sd;
-                  weightFW[14] = wBuf[k][wIdx].se;
-                  weightFW[15] = wBuf[k][wIdx].sf;
-                  for (int m = 0; m < 4; ++m) {
-                    for (int j = 0; j < 16; ++j) {
-                      if (mode)
-                        weightVal[m][j] = weightFW[j];
-                      else
-                        weightVal[m][j] = weightFW[counter_fw * 4 + m];
-                    }
-
-                    short reluVal = inBufRelu[m][inIdx];
-                    bool fwMode = (backward == 0);
-
-                    for (int j = 0; j < 16; ++j)
-                      reluEn[k][j] = (reluOn && ((reluVal >> j) & 0x1)) ||
-                        fwMode || (relu == 0);
-
-                    inVal[m][0] = relu_bw(inBuf[m][inIdx].s0, reluEn[k][0]);
-                    inVal[m][1] = relu_bw(inBuf[m][inIdx].s1, reluEn[k][1]);
-                    inVal[m][2] = relu_bw(inBuf[m][inIdx].s2, reluEn[k][2]);
-                    inVal[m][3] = relu_bw(inBuf[m][inIdx].s3, reluEn[k][3]);
-                    inVal[m][4] = relu_bw(inBuf[m][inIdx].s4, reluEn[k][4]);
-                    inVal[m][5] = relu_bw(inBuf[m][inIdx].s5, reluEn[k][5]);
-                    inVal[m][6] = relu_bw(inBuf[m][inIdx].s6, reluEn[k][6]);
-                    inVal[m][7] = relu_bw(inBuf[m][inIdx].s7, reluEn[k][7]);
-                    inVal[m][8] = relu_bw(inBuf[m][inIdx].s8, reluEn[k][8]);
-                    inVal[m][9] = relu_bw(inBuf[m][inIdx].s9, reluEn[k][9]);
-                    inVal[m][10] = relu_bw(inBuf[m][inIdx].sa, reluEn[k][10]);
-                    inVal[m][11] = relu_bw(inBuf[m][inIdx].sb, reluEn[k][11]);
-                    inVal[m][12] = relu_bw(inBuf[m][inIdx].sc, reluEn[k][12]);
-                    inVal[m][13] = relu_bw(inBuf[m][inIdx].sd, reluEn[k][13]);
-                    inVal[m][14] = relu_bw(inBuf[m][inIdx].se, reluEn[k][14]);
-                    inVal[m][15] = relu_bw(inBuf[m][inIdx].sf, reluEn[k][15]);
-
-                    for (int j = 0; j < 16; ++j) 
-                      multRes[k][m][j] = inVal[m][j] * weightVal[m][j];
-                  }
-
-                  for (int off = 0; off < 2; ++off) {
-                    for (int m = 0; m < 2; ++m) {
-                      for (int j = 0; j < 8; ++j) {
-                        cpfp temp1, temp2;
-                        if (mode) {
-                          temp1 = multRes[k][off * 2 + m][j * 2];
-                          temp2 = multRes[k][off * 2 + m][j * 2 + 1];
-                        } else {
-                          temp1 = multRes[k][off * 2 + 0][m * 8 + j];
-                          temp2 = multRes[k][off * 2 + 1][m * 8 + j];
-                        }
-                        addTreeS1[k][(off * 2 + m) * 8 + j] = temp1 + temp2;
-                      }
-                    }
-                  }
-                  for (int off = 0; off < 2; ++off) {
-                    for (int m = 0; m < 2; ++m) {
-                      for (int j = 0; j < 4; ++j) {
-                        cpfp temp1, temp2;
-                        if (mode) {
-                          temp1 = addTreeS1[k][(off * 2 + m) * 8 + j * 2];
-                          temp2 = addTreeS1[k][(off * 2 + m) * 8 + j * 2 + 1];
-                        } else {
-                          temp1 = addTreeS1[k][(off * 2 + m) * 4 + j];
-                          temp2 = addTreeS1[k][(off * 2 + m) * 4 + j + 16];
-                        }
-                        addTreeS2[k][(off * 2 + m) * 4 + j] = temp1 + temp2;
-                      }
-                    }
-                  }
-
-                  for (int m = 0; m < 4; ++m) {
-                    for (int j = 0; j < 2; ++j)
-                      addTreeS3[k][m][j] = addTreeS2[k][m * 4 + j * 2] +
-                        addTreeS2[k][m * 4 + j * 2 + 1];
-                    addTreeS4[k][m] = addTreeS3[k][m][0] + addTreeS3[k][m][1];
-                  }
-
-                  for (int m = 0; m < 4; ++m)
-                    wUpdate[k][foutIdx + m] = addTreeS4[k][m];
-
+              for (int k = 0; k < OCFACT; ++k) {
+                weightFW[0] = wBuf[k][wIdx].s0;
+                weightFW[1] = wBuf[k][wIdx].s1;
+                weightFW[2] = wBuf[k][wIdx].s2;
+                weightFW[3] = wBuf[k][wIdx].s3;   
+                weightFW[4] = wBuf[k][wIdx].s4;
+                weightFW[5] = wBuf[k][wIdx].s5;
+                weightFW[6] = wBuf[k][wIdx].s6;
+                weightFW[7] = wBuf[k][wIdx].s7;
+                weightFW[8] = wBuf[k][wIdx].s8;
+                weightFW[9] = wBuf[k][wIdx].s9;
+                weightFW[10] = wBuf[k][wIdx].sa;
+                weightFW[11] = wBuf[k][wIdx].sb;
+                weightFW[12] = wBuf[k][wIdx].sc;
+                weightFW[13] = wBuf[k][wIdx].sd;
+                weightFW[14] = wBuf[k][wIdx].se;
+                weightFW[15] = wBuf[k][wIdx].sf;
+                for (int m = 0; m < 4; ++m) {
                   for (int j = 0; j < 16; ++j) {
                     if (mode)
-                      finalOut[k][j] = wUpdate[k][j];
+                      weightVal[m][j] = weightFW[j];
                     else
-                      finalOut[k][j] = addTreeS2[k][j];
+                      weightVal[m][j] = weightFW[counter_fw * 4 + m];
                   }
-                  if (accEnable) {
-                    outBuf[k][outIdx] += finalOut[k];
-                  }               
+
+                  short reluVal = inBufRelu[m][inIdx];
+                  bool fwMode = (backward == 0);
+
+                  for (int j = 0; j < 16; ++j)
+                    reluEn[k][j] = (reluOn && ((reluVal >> j) & 0x1)) ||
+                      fwMode || (relu == 0);
+
+                  inVal[m][0] = relu_bw(inBuf[m][inIdx].s0, reluEn[k][0]);
+                  inVal[m][1] = relu_bw(inBuf[m][inIdx].s1, reluEn[k][1]);
+                  inVal[m][2] = relu_bw(inBuf[m][inIdx].s2, reluEn[k][2]);
+                  inVal[m][3] = relu_bw(inBuf[m][inIdx].s3, reluEn[k][3]);
+                  inVal[m][4] = relu_bw(inBuf[m][inIdx].s4, reluEn[k][4]);
+                  inVal[m][5] = relu_bw(inBuf[m][inIdx].s5, reluEn[k][5]);
+                  inVal[m][6] = relu_bw(inBuf[m][inIdx].s6, reluEn[k][6]);
+                  inVal[m][7] = relu_bw(inBuf[m][inIdx].s7, reluEn[k][7]);
+                  inVal[m][8] = relu_bw(inBuf[m][inIdx].s8, reluEn[k][8]);
+                  inVal[m][9] = relu_bw(inBuf[m][inIdx].s9, reluEn[k][9]);
+                  inVal[m][10] = relu_bw(inBuf[m][inIdx].sa, reluEn[k][10]);
+                  inVal[m][11] = relu_bw(inBuf[m][inIdx].sb, reluEn[k][11]);
+                  inVal[m][12] = relu_bw(inBuf[m][inIdx].sc, reluEn[k][12]);
+                  inVal[m][13] = relu_bw(inBuf[m][inIdx].sd, reluEn[k][13]);
+                  inVal[m][14] = relu_bw(inBuf[m][inIdx].se, reluEn[k][14]);
+                  inVal[m][15] = relu_bw(inBuf[m][inIdx].sf, reluEn[k][15]);
+
+                  for (int j = 0; j < 16; ++j) 
+                    multRes[k][m][j] = inVal[m][j] * weightVal[m][j];
                 }
+
+                for (int off = 0; off < 2; ++off) {
+                  for (int m = 0; m < 2; ++m) {
+                    for (int j = 0; j < 8; ++j) {
+                      cpfp temp1, temp2;
+                      if (mode) {
+                        temp1 = multRes[k][off * 2 + m][j * 2];
+                        temp2 = multRes[k][off * 2 + m][j * 2 + 1];
+                      } else {
+                        temp1 = multRes[k][off * 2 + 0][m * 8 + j];
+                        temp2 = multRes[k][off * 2 + 1][m * 8 + j];
+                      }
+                      addTreeS1[k][(off * 2 + m) * 8 + j] = temp1 + temp2;
+                    }
+                  }
+                }
+                for (int off = 0; off < 2; ++off) {
+                  for (int m = 0; m < 2; ++m) {
+                    for (int j = 0; j < 4; ++j) {
+                      cpfp temp1, temp2;
+                      if (mode) {
+                        temp1 = addTreeS1[k][(off * 2 + m) * 8 + j * 2];
+                        temp2 = addTreeS1[k][(off * 2 + m) * 8 + j * 2 + 1];
+                      } else {
+                        temp1 = addTreeS1[k][(off * 2 + m) * 4 + j];
+                        temp2 = addTreeS1[k][(off * 2 + m) * 4 + j + 16];
+                      }
+                      addTreeS2[k][(off * 2 + m) * 4 + j] = temp1 + temp2;
+                    }
+                  }
+                }
+
+                for (int m = 0; m < 4; ++m) {
+                  for (int j = 0; j < 2; ++j)
+                    addTreeS3[k][m][j] = addTreeS2[k][m * 4 + j * 2] +
+                      addTreeS2[k][m * 4 + j * 2 + 1];
+                  addTreeS4[k][m] = addTreeS3[k][m][0] + addTreeS3[k][m][1];
+                }
+
+                for (int m = 0; m < 4; ++m)
+                  wUpdate[k][foutIdx + m] = addTreeS4[k][m];
+
+                for (int j = 0; j < 16; ++j) {
+                  if (mode)
+                    finalOut[k][j] = wUpdate[k][j];
+                  else
+                    finalOut[k][j] = addTreeS2[k][j];
+                }
+                if (accEnable) {
+                  outBuf[k][outIdx] += finalOut[k];
+                }               
               }
             }
+          
             if (relu && (backward == 0) && (n == rpo - 1)) {
               relu_fw(outBuf, outBufRelu, burstoc * imgFact);
             }
@@ -600,8 +612,8 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               int outIdx, outIdxFW, outIdxBW;
               short outSize, outSizeFW, outSizeBW;
               outIdxBW = ((o * OCFACT + k) * burstoc + outChannels *
-                  group_idx) * ksize * ksize * icFact + n * ksize * ksize *
-                  wcFact;
+                  group_idx) * ksize * ksize * icFact + n * burstoc * ksize *
+                  ksize * wcFact;
               outIdxFW = (((y * xdim_out + x) * numgroups + group_idx) *
                 outChannels + (o * OCFACT + k) * burstoc) * imgFact;
               outSizeBW = burstoc * ksize * ksize * wcFact;
