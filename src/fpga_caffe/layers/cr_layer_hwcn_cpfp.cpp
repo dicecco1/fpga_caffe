@@ -426,7 +426,7 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
             ap_uint<2> counter_bw = 0;
             ap_uint<2> counter_fw = 0;
             ap_uint<5> b_off = 0;
-            short mac_iterations = burstoc * yksize * xksize * imgFact
+            int mac_iterations = burstoc * yksize * xksize * imgFact
               * burstFact;
             MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter,
               ++counter_bw) {
