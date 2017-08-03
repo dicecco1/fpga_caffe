@@ -190,6 +190,26 @@ cpfp16 max(const cpfp16 T, const cpfp16 U, const short16 Tmask,
   return val;
 }
 
+cpfp16 operator+(cpfp16 T, cpfp U[16]) {
+  cpfp16 retval;
+  retval.s0 = T.s0 + U[0];
+  retval.s1 = T.s1 + U[1];
+  retval.s2 = T.s2 + U[2];
+  retval.s3 = T.s3 + U[3];
+  retval.s4 = T.s4 + U[4];
+  retval.s5 = T.s5 + U[5];
+  retval.s6 = T.s6 + U[6];
+  retval.s7 = T.s7 + U[7];
+  retval.s8 = T.s8 + U[8];
+  retval.s9 = T.s9 + U[9];
+  retval.sa = T.sa + U[10];
+  retval.sb = T.sb + U[11];
+  retval.sc = T.sc + U[12];
+  retval.sd = T.sd + U[13];
+  retval.se = T.se + U[14];
+  retval.sf = T.sf + U[15];
+  return retval;
+}
 
 struct cpfp32 {
   cpfp16 l, u;

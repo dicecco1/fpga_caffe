@@ -79,32 +79,32 @@ cpfp relu_bw(cpfp input, bool enable) {
   return res;
 }
 
-void relu_fw(cpfp16 outBuf[OCFACT][8 * 256], short outBufRelu[OCFACT][8 * 256],
-    int num_iter) {
-  RELU_FW: for (int i = 0; i < num_iter; ++i) {
-  #pragma HLS pipeline
-    for (int k = 0; k < OCFACT; ++k) {
-      cpfp16 val = max(outBuf[k][i]);
-      outBuf[k][i] = val;
-      short reluOut = 0;
-      reluOut |= (val.s0 != cpfp(0)) ? 1 << 0 : 0;
-      reluOut |= (val.s1 != cpfp(0)) ? 1 << 1 : 0;
-      reluOut |= (val.s2 != cpfp(0)) ? 1 << 2 : 0;
-      reluOut |= (val.s3 != cpfp(0)) ? 1 << 3 : 0;
-      reluOut |= (val.s4 != cpfp(0)) ? 1 << 4 : 0;
-      reluOut |= (val.s5 != cpfp(0)) ? 1 << 5 : 0;
-      reluOut |= (val.s6 != cpfp(0)) ? 1 << 6 : 0;
-      reluOut |= (val.s7 != cpfp(0)) ? 1 << 7 : 0;
-      reluOut |= (val.s8 != cpfp(0)) ? 1 << 8 : 0;
-      reluOut |= (val.s9 != cpfp(0)) ? 1 << 9 : 0;
-      reluOut |= (val.sa != cpfp(0)) ? 1 << 10 : 0;
-      reluOut |= (val.sb != cpfp(0)) ? 1 << 11 : 0;
-      reluOut |= (val.sc != cpfp(0)) ? 1 << 12 : 0;
-      reluOut |= (val.sd != cpfp(0)) ? 1 << 13 : 0;
-      reluOut |= (val.se != cpfp(0)) ? 1 << 14 : 0;
-      reluOut |= (val.sf != cpfp(0)) ? 1 << 15 : 0;
-      outBufRelu[k][i] = reluOut;
-    }
+cpfp16 relu_fw(cpfp16 outVal, short *outBufRelu, bool enable) {
+  cpfp16 val = max(outVal);
+  short reluOut = 0;
+  reluOut |= (val.s0 != cpfp(0)) ? 1 << 0 : 0;
+  reluOut |= (val.s1 != cpfp(0)) ? 1 << 1 : 0;
+  reluOut |= (val.s2 != cpfp(0)) ? 1 << 2 : 0;
+  reluOut |= (val.s3 != cpfp(0)) ? 1 << 3 : 0;
+  reluOut |= (val.s4 != cpfp(0)) ? 1 << 4 : 0;
+  reluOut |= (val.s5 != cpfp(0)) ? 1 << 5 : 0;
+  reluOut |= (val.s6 != cpfp(0)) ? 1 << 6 : 0;
+  reluOut |= (val.s7 != cpfp(0)) ? 1 << 7 : 0;
+  reluOut |= (val.s8 != cpfp(0)) ? 1 << 8 : 0;
+  reluOut |= (val.s9 != cpfp(0)) ? 1 << 9 : 0;
+  reluOut |= (val.sa != cpfp(0)) ? 1 << 10 : 0;
+  reluOut |= (val.sb != cpfp(0)) ? 1 << 11 : 0;
+  reluOut |= (val.sc != cpfp(0)) ? 1 << 12 : 0;
+  reluOut |= (val.sd != cpfp(0)) ? 1 << 13 : 0;
+  reluOut |= (val.se != cpfp(0)) ? 1 << 14 : 0;
+  reluOut |= (val.sf != cpfp(0)) ? 1 << 15 : 0;
+
+  if (enable) {
+    *outBufRelu = reluOut;
+    return val;
+  } else {
+    *outBufRelu = reluOut;
+    return outVal;
   }
 }
 
@@ -598,14 +598,14 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                   else
                     finalOut[k][j] = addTreeS2[k][j];
                 }
+                bool reluFWEnable = relu && (backward == 0) && (n == rpo - 1)
+                  && (w_off == burstFact - 1) && (xdim_off == xksize - 1) &&
+                  (ydim_off == yksize - 1);
                 if (accEnable) {
-                  outBuf[k][outIdx] += finalOut[k];
+                  outBuf[k][outIdx] = relu_fw(outBuf[k][outIdx] + finalOut[k],
+                      &(outBufRelu[k][outIdx]), reluFWEnable);
                 }               
               }
-            }
-          
-            if (relu && (backward == 0) && (n == rpo - 1)) {
-              relu_fw(outBuf, outBufRelu, burstoc * imgFact);
             }
 
             for (int k = 0; k < OCFACT; ++k) {
