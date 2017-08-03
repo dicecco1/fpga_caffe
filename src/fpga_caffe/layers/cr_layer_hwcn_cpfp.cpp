@@ -218,6 +218,10 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 #pragma HLS ARRAY_PARTITION variable=reluEn complete dim=1
 #pragma HLS ARRAY_PARTITION variable=reluEn complete dim=2
 
+  bool reluEnW[OCFACT][16];
+#pragma HLS ARRAY_PARTITION variable=reluEnW complete dim=1
+#pragma HLS ARRAY_PARTITION variable=reluEnW complete dim=2
+
   short inChannels = params[0];
   short outChannels = params[1];
   short burstChannels = params[2];
@@ -229,7 +233,7 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
   ap_uint<5> ksize = params[9];
   short numgroups = params[10];
   ap_uint<10> numImages = params[11];
-  short fc = params[12];
+  short reluWeights = params[12];
   short relu = params[13];
   short backward = params[14];
   ap_uint<4> stride = params[15];
@@ -322,7 +326,7 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                       for (int j = 0; j < 4; ++j) {
                         inBuf[j][i + inBufIdx] = inBuf[j][i + inBufIdx
                           + q_off];
-                        if ((backward != 0) && relu)
+                        if ((backward != 0) && relu && (reluWeights == 0))
                           inBufRelu[j][i + inBufIdx] =
                             inBufRelu[j][i + inBufIdx + q_off];
                       }
@@ -332,7 +336,7 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                       int f_inIdx = inIdx + j * burstFact * imgFact;
                       memcpy(inBuf[j] + inBufIdx, input + f_inIdx,
                           sizeof(cpfp16) * inSize);
-                      if ((backward != 0) && relu)
+                      if ((backward != 0) && relu && (reluWeights == 0))
                         memcpy(inBufRelu[j] + inBufIdx, tagVals + f_inIdx,
                             sizeof(short) * inSize);
                     }
@@ -414,8 +418,11 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 
               bool readEnable = ((o * OCFACT + k) * burstoc <
                   outChannels) && ((mode) || ((x == 0) && (y == 0)));
-              if (readEnable)
+              if (readEnable) {
                 memcpy(wBuf[k], weights + wIdx, sizeof(cpfp16) * wSize);
+                if (relu && (reluWeights == 1) && (mode))
+                  memcpy(outBufRelu[k], tagVals + wIdx, sizeof(short) * wSize);
+              }
             }
 
             ap_uint<8> w_off = 0;
@@ -499,22 +506,29 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                   (backward == 2) || (backward == 3)));
 
               for (int k = 0; k < OCFACT; ++k) {
-                weightFW[0] = wBuf[k][wIdx].s0;
-                weightFW[1] = wBuf[k][wIdx].s1;
-                weightFW[2] = wBuf[k][wIdx].s2;
-                weightFW[3] = wBuf[k][wIdx].s3;   
-                weightFW[4] = wBuf[k][wIdx].s4;
-                weightFW[5] = wBuf[k][wIdx].s5;
-                weightFW[6] = wBuf[k][wIdx].s6;
-                weightFW[7] = wBuf[k][wIdx].s7;
-                weightFW[8] = wBuf[k][wIdx].s8;
-                weightFW[9] = wBuf[k][wIdx].s9;
-                weightFW[10] = wBuf[k][wIdx].sa;
-                weightFW[11] = wBuf[k][wIdx].sb;
-                weightFW[12] = wBuf[k][wIdx].sc;
-                weightFW[13] = wBuf[k][wIdx].sd;
-                weightFW[14] = wBuf[k][wIdx].se;
-                weightFW[15] = wBuf[k][wIdx].sf;
+                short reluValW = outBufRelu[k][wIdx];
+                bool fwMode = (backward == 0);
+
+                for (int j = 0; j < 16; ++j)
+                  reluEnW[k][j] = (reluOn && ((reluValW >> j) & 0x1)) ||
+                    fwMode || (relu == 0) || (reluWeights == 0);
+
+                weightFW[0] = relu_bw(wBuf[k][wIdx].s0, reluEnW[k][0]);
+                weightFW[1] = relu_bw(wBuf[k][wIdx].s1, reluEnW[k][1]);
+                weightFW[2] = relu_bw(wBuf[k][wIdx].s2, reluEnW[k][2]);
+                weightFW[3] = relu_bw(wBuf[k][wIdx].s3, reluEnW[k][3]);   
+                weightFW[4] = relu_bw(wBuf[k][wIdx].s4, reluEnW[k][4]);
+                weightFW[5] = relu_bw(wBuf[k][wIdx].s5, reluEnW[k][5]);
+                weightFW[6] = relu_bw(wBuf[k][wIdx].s6, reluEnW[k][0]);
+                weightFW[7] = relu_bw(wBuf[k][wIdx].s7, reluEnW[k][0]);
+                weightFW[8] = relu_bw(wBuf[k][wIdx].s8, reluEnW[k][0]);
+                weightFW[9] = relu_bw(wBuf[k][wIdx].s9, reluEnW[k][0]);
+                weightFW[10] = relu_bw(wBuf[k][wIdx].sa, reluEnW[k][10]);
+                weightFW[11] = relu_bw(wBuf[k][wIdx].sb, reluEnW[k][11]);
+                weightFW[12] = relu_bw(wBuf[k][wIdx].sc, reluEnW[k][12]);
+                weightFW[13] = relu_bw(wBuf[k][wIdx].sd, reluEnW[k][13]);
+                weightFW[14] = relu_bw(wBuf[k][wIdx].se, reluEnW[k][14]);
+                weightFW[15] = relu_bw(wBuf[k][wIdx].sf, reluEnW[k][15]);
                 for (int m = 0; m < 4; ++m) {
                   for (int j = 0; j < 16; ++j) {
                     if (mode)
@@ -524,11 +538,10 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                   }
 
                   short reluVal = inBufRelu[m][inIdx];
-                  bool fwMode = (backward == 0);
 
                   for (int j = 0; j < 16; ++j)
                     reluEn[k][j] = (reluOn && ((reluVal >> j) & 0x1)) ||
-                      fwMode || (relu == 0);
+                      fwMode || (relu == 0) || (reluWeights == 1);
 
                   inVal[m][0] = relu_bw(inBuf[m][inIdx].s0, reluEn[k][0]);
                   inVal[m][1] = relu_bw(inBuf[m][inIdx].s1, reluEn[k][1]);
