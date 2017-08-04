@@ -519,10 +519,10 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                 weightFW[3] = relu_bw(wBuf[k][wIdx].s3, reluEnW[k][3]);   
                 weightFW[4] = relu_bw(wBuf[k][wIdx].s4, reluEnW[k][4]);
                 weightFW[5] = relu_bw(wBuf[k][wIdx].s5, reluEnW[k][5]);
-                weightFW[6] = relu_bw(wBuf[k][wIdx].s6, reluEnW[k][0]);
-                weightFW[7] = relu_bw(wBuf[k][wIdx].s7, reluEnW[k][0]);
-                weightFW[8] = relu_bw(wBuf[k][wIdx].s8, reluEnW[k][0]);
-                weightFW[9] = relu_bw(wBuf[k][wIdx].s9, reluEnW[k][0]);
+                weightFW[6] = relu_bw(wBuf[k][wIdx].s6, reluEnW[k][6]);
+                weightFW[7] = relu_bw(wBuf[k][wIdx].s7, reluEnW[k][7]);
+                weightFW[8] = relu_bw(wBuf[k][wIdx].s8, reluEnW[k][8]);
+                weightFW[9] = relu_bw(wBuf[k][wIdx].s9, reluEnW[k][9]);
                 weightFW[10] = relu_bw(wBuf[k][wIdx].sa, reluEnW[k][10]);
                 weightFW[11] = relu_bw(wBuf[k][wIdx].sb, reluEnW[k][11]);
                 weightFW[12] = relu_bw(wBuf[k][wIdx].sc, reluEnW[k][12]);
