@@ -141,6 +141,9 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
   short outBufRelu[OCFACT][8 * 256];
 #pragma HLS ARRAY_PARTITION variable=outBufRelu complete dim=1
 
+  short wBufRelu[OCFACT][8 * 256];
+#pragma HLS ARRAY_PARTITION variable=wBufRelu complete dim=1
+
   // Output buffer used for writing
   cpfp16 outBuf[OCFACT][8 * 256];
 #pragma HLS ARRAY_PARTITION variable=outBuf complete dim=1
@@ -421,7 +424,7 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               if (readEnable) {
                 memcpy(wBuf[k], weights + wIdx, sizeof(cpfp16) * wSize);
                 if (relu && (reluWeights == 1) && (mode))
-                  memcpy(outBufRelu[k], tagVals + wIdx, sizeof(short) * wSize);
+                  memcpy(wBufRelu[k], tagVals + wIdx, sizeof(short) * wSize);
               }
             }
 
@@ -506,7 +509,7 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                   (backward == 2) || (backward == 3)));
 
               for (int k = 0; k < OCFACT; ++k) {
-                short reluValW = outBufRelu[k][wIdx];
+                short reluValW = wBufRelu[k][wIdx];
                 bool fwMode = (backward == 0);
 
                 for (int j = 0; j < 16; ++j)
