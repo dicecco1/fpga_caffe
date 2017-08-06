@@ -332,7 +332,7 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                       for (int j = 0; j < 4; ++j) {
                         inBuf[j][i + inBufIdx] = inBuf[j][i + inBufIdx
                           + q_off];
-                        if ((backward != 0) && relu)
+                        if ((backward == 2) && relu)
                           inBufRelu[j][i + inBufIdx] =
                             inBufRelu[j][i + inBufIdx + q_off];
                       }
@@ -342,7 +342,7 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                       int f_inIdx = inIdx + j * burstFact * imgFact;
                       memcpy(inBuf[j] + inBufIdx, input + f_inIdx,
                           sizeof(cpfp16) * inSize);
-                      if ((backward != 0) && relu)
+                      if ((backward == 2) && relu)
                         memcpy(inBufRelu[j] + inBufIdx, tagVals + f_inIdx,
                             sizeof(short) * inSize);
                     }
