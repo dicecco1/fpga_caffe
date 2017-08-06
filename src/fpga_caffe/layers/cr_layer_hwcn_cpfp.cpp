@@ -74,7 +74,7 @@ short mode_select_size(short size_fw, short size_bw, bool mode) {
 }
 
 cpfp relu_bw(cpfp input, bool enable) {
-#pragma HLS INLINE off
+#pragma HLS INLINE
   cpfp res = (enable) ? input : cpfp(0);
   return res;
 }
@@ -140,6 +140,9 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 
   short outBufRelu[OCFACT][8 * 256];
 #pragma HLS ARRAY_PARTITION variable=outBufRelu complete dim=1
+
+  short wBufRelu[OCFACT][8 * 256];
+#pragma HLS ARRAY_PARTITION variable=wBufRelu complete dim=1
 
   // Output buffer used for writing
   cpfp16 outBuf[OCFACT][8 * 256];
@@ -214,9 +217,16 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 #pragma HLS ARRAY_PARTITION variable=wUpdate complete dim=1
 #pragma HLS ARRAY_PARTITION variable=wUpdate complete dim=2
 
-  bool reluEn[OCFACT][16];
+  bool reluEn[4][16];
 #pragma HLS ARRAY_PARTITION variable=reluEn complete dim=1
 #pragma HLS ARRAY_PARTITION variable=reluEn complete dim=2
+
+  bool reluEnW[OCFACT][16];
+#pragma HLS ARRAY_PARTITION variable=reluEnW complete dim=1
+#pragma HLS ARRAY_PARTITION variable=reluEnW complete dim=2
+
+  short reluValW[OCFACT];
+#pragma HLS ARRAY_PARTITION variable=reluValW complete dim=1
 
   short inChannels = params[0];
   short outChannels = params[1];
@@ -416,6 +426,8 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                   outChannels) && ((mode) || ((x == 0) && (y == 0)));
               if (readEnable)
                 memcpy(wBuf[k], weights + wIdx, sizeof(cpfp16) * wSize);
+                if (relu && mode)
+                  memcpy(wBufRelu[k], tagVals + wIdx, sizeof(short) * wSize);
             }
 
             ap_uint<8> w_off = 0;
@@ -495,26 +507,30 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                 filt_off * wcFact + (w_off >> 2);
               short outIdx = (mode) ? outIdxBW : outIdxFW;
               bool accEnable = (mode) ? (counter_bw == 3) : true;
-              bool reluOn = (relu && ((backward == 1) ||
-                  (backward == 2) || (backward == 3)));
 
               for (int k = 0; k < OCFACT; ++k) {
-                weightFW[0] = wBuf[k][wIdx].s0;
-                weightFW[1] = wBuf[k][wIdx].s1;
-                weightFW[2] = wBuf[k][wIdx].s2;
-                weightFW[3] = wBuf[k][wIdx].s3;   
-                weightFW[4] = wBuf[k][wIdx].s4;
-                weightFW[5] = wBuf[k][wIdx].s5;
-                weightFW[6] = wBuf[k][wIdx].s6;
-                weightFW[7] = wBuf[k][wIdx].s7;
-                weightFW[8] = wBuf[k][wIdx].s8;
-                weightFW[9] = wBuf[k][wIdx].s9;
-                weightFW[10] = wBuf[k][wIdx].sa;
-                weightFW[11] = wBuf[k][wIdx].sb;
-                weightFW[12] = wBuf[k][wIdx].sc;
-                weightFW[13] = wBuf[k][wIdx].sd;
-                weightFW[14] = wBuf[k][wIdx].se;
-                weightFW[15] = wBuf[k][wIdx].sf;
+                reluValW[k] = wBufRelu[k][wIdx];
+
+                for (int j = 0; j < 16; ++j)
+                  reluEnW[k][j] = ((reluValW[k] >> j) & 0x1) || (relu == 0)
+                    || (!mode);
+
+                weightFW[0] = relu_bw(wBuf[k][wIdx].s0, reluEnW[k][0]);
+                weightFW[1] = relu_bw(wBuf[k][wIdx].s1, reluEnW[k][1]);
+                weightFW[2] = relu_bw(wBuf[k][wIdx].s2, reluEnW[k][2]);
+                weightFW[3] = relu_bw(wBuf[k][wIdx].s3, reluEnW[k][3]);   
+                weightFW[4] = relu_bw(wBuf[k][wIdx].s4, reluEnW[k][4]);
+                weightFW[5] = relu_bw(wBuf[k][wIdx].s5, reluEnW[k][5]);
+                weightFW[6] = relu_bw(wBuf[k][wIdx].s6, reluEnW[k][6]);
+                weightFW[7] = relu_bw(wBuf[k][wIdx].s7, reluEnW[k][7]);
+                weightFW[8] = relu_bw(wBuf[k][wIdx].s8, reluEnW[k][8]);
+                weightFW[9] = relu_bw(wBuf[k][wIdx].s9, reluEnW[k][9]);
+                weightFW[10] = relu_bw(wBuf[k][wIdx].sa, reluEnW[k][10]);
+                weightFW[11] = relu_bw(wBuf[k][wIdx].sb, reluEnW[k][11]);
+                weightFW[12] = relu_bw(wBuf[k][wIdx].sc, reluEnW[k][12]);
+                weightFW[13] = relu_bw(wBuf[k][wIdx].sd, reluEnW[k][13]);
+                weightFW[14] = relu_bw(wBuf[k][wIdx].se, reluEnW[k][14]);
+                weightFW[15] = relu_bw(wBuf[k][wIdx].sf, reluEnW[k][15]);
                 for (int m = 0; m < 4; ++m) {
                   for (int j = 0; j < 16; ++j) {
                     if (mode)
@@ -524,28 +540,27 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                   }
 
                   short reluVal = inBufRelu[m][inIdx];
-                  bool fwMode = (backward == 0);
 
                   for (int j = 0; j < 16; ++j)
-                    reluEn[k][j] = (reluOn && ((reluVal >> j) & 0x1)) ||
-                      fwMode || (relu == 0);
+                    reluEn[m][j] = ((reluVal >> j) & 0x1) ||
+                      (backward != 2) || (relu == 0);
 
-                  inVal[m][0] = relu_bw(inBuf[m][inIdx].s0, reluEn[k][0]);
-                  inVal[m][1] = relu_bw(inBuf[m][inIdx].s1, reluEn[k][1]);
-                  inVal[m][2] = relu_bw(inBuf[m][inIdx].s2, reluEn[k][2]);
-                  inVal[m][3] = relu_bw(inBuf[m][inIdx].s3, reluEn[k][3]);
-                  inVal[m][4] = relu_bw(inBuf[m][inIdx].s4, reluEn[k][4]);
-                  inVal[m][5] = relu_bw(inBuf[m][inIdx].s5, reluEn[k][5]);
-                  inVal[m][6] = relu_bw(inBuf[m][inIdx].s6, reluEn[k][6]);
-                  inVal[m][7] = relu_bw(inBuf[m][inIdx].s7, reluEn[k][7]);
-                  inVal[m][8] = relu_bw(inBuf[m][inIdx].s8, reluEn[k][8]);
-                  inVal[m][9] = relu_bw(inBuf[m][inIdx].s9, reluEn[k][9]);
-                  inVal[m][10] = relu_bw(inBuf[m][inIdx].sa, reluEn[k][10]);
-                  inVal[m][11] = relu_bw(inBuf[m][inIdx].sb, reluEn[k][11]);
-                  inVal[m][12] = relu_bw(inBuf[m][inIdx].sc, reluEn[k][12]);
-                  inVal[m][13] = relu_bw(inBuf[m][inIdx].sd, reluEn[k][13]);
-                  inVal[m][14] = relu_bw(inBuf[m][inIdx].se, reluEn[k][14]);
-                  inVal[m][15] = relu_bw(inBuf[m][inIdx].sf, reluEn[k][15]);
+                  inVal[m][0] = relu_bw(inBuf[m][inIdx].s0, reluEn[m][0]);
+                  inVal[m][1] = relu_bw(inBuf[m][inIdx].s1, reluEn[m][1]);
+                  inVal[m][2] = relu_bw(inBuf[m][inIdx].s2, reluEn[m][2]);
+                  inVal[m][3] = relu_bw(inBuf[m][inIdx].s3, reluEn[m][3]);
+                  inVal[m][4] = relu_bw(inBuf[m][inIdx].s4, reluEn[m][4]);
+                  inVal[m][5] = relu_bw(inBuf[m][inIdx].s5, reluEn[m][5]);
+                  inVal[m][6] = relu_bw(inBuf[m][inIdx].s6, reluEn[m][6]);
+                  inVal[m][7] = relu_bw(inBuf[m][inIdx].s7, reluEn[m][7]);
+                  inVal[m][8] = relu_bw(inBuf[m][inIdx].s8, reluEn[m][8]);
+                  inVal[m][9] = relu_bw(inBuf[m][inIdx].s9, reluEn[m][9]);
+                  inVal[m][10] = relu_bw(inBuf[m][inIdx].sa, reluEn[m][10]);
+                  inVal[m][11] = relu_bw(inBuf[m][inIdx].sb, reluEn[m][11]);
+                  inVal[m][12] = relu_bw(inBuf[m][inIdx].sc, reluEn[m][12]);
+                  inVal[m][13] = relu_bw(inBuf[m][inIdx].sd, reluEn[m][13]);
+                  inVal[m][14] = relu_bw(inBuf[m][inIdx].se, reluEn[m][14]);
+                  inVal[m][15] = relu_bw(inBuf[m][inIdx].sf, reluEn[m][15]);
 
                   for (int j = 0; j < 16; ++j) 
                     multRes[k][m][j] = inVal[m][j] * weightVal[m][j];
