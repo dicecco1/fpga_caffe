@@ -509,7 +509,7 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               bool accEnable = (mode) ? (counter_bw == 3) : true;
 
               for (int k = 0; k < OCFACT; ++k) {
-                reluValW[k] = wBufRelu[k][wIdx];
+                reluValW[k] = (mode) ? wBufRelu[k][wIdx] : -1;
 
                 for (int j = 0; j < 16; ++j)
                   reluEnW[k][j] = ((reluValW[k] >> j) & 0x1) || (relu == 0)
@@ -539,7 +539,7 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                       weightVal[m][j] = weightFW[counter_fw * 4 + m];
                   }
 
-                  short reluVal = inBufRelu[m][inIdx];
+                  short reluVal = (backward == 2) ? inBufRelu[m][inIdx] : -1;
 
                   for (int j = 0; j < 16; ++j)
                     reluEn[m][j] = ((reluVal >> j) & 0x1) ||
