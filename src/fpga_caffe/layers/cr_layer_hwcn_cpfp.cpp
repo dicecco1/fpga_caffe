@@ -540,7 +540,7 @@ void cr_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                       weightVal[m][j] = weightFW[counter_fw * 4 + m];
                   }
 
-                  short reluVal = inBufRelu[m][inIdx];
+                  short reluVal = (backward == 2) ? inBufRelu[m][inIdx] : -1;
 
                   for (int j = 0; j < 16; ++j)
                     reluEn[m][j] = (reluOn && ((reluVal >> j) & 0x1)) ||
