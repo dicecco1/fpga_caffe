@@ -7,6 +7,8 @@
 #define PRAGMA_SUB(x) _Pragma (#x)
 #define DO_PRAGMA(x) PRAGMA_SUB(x)
 
+// Layer parameters
+
 typedef struct {
   int inchannels;
   int outchannels;

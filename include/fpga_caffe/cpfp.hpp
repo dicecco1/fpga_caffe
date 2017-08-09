@@ -15,7 +15,7 @@
 #endif
 
 #define EXP_SIZE 6
-#define MANT_SIZE 5 
+#define MANT_SIZE 5
 #define EXP_OFFSET ((1 << (EXP_SIZE - 1)) - 1)
 #define MAX_EXP ((1 << EXP_SIZE) - 1)
 #define MAX_MANT ((1 << MANT_SIZE) - 1)
@@ -62,12 +62,8 @@ cpfp max(cpfp T, cpfp U);
 cpfp max(cpfp T);
 
 /// Convert IEEE single-precision to cpfp-precision.
-inline uint32 float2cpfp_impl(float value)
+inline uint32 float2cpfp(float value)
 {
-#if CPFP_ENABLE_CPP11_STATIC_ASSERT
-  static_assert(std::numeric_limits<float>::is_iec559, "float to cpfp conversion needs IEEE 754 conformant 'float' type");
-  static_assert(sizeof(uint32)==sizeof(float), "float to cpfp conversion needs unsigned integer type of exactly the size of a 'float'");
-#endif
   uint32 bits;		//violating strict aliasing!
   float *temp = &value;
   bits = *((uint32 *)temp);
@@ -78,29 +74,24 @@ inline uint32 float2cpfp_impl(float value)
   uint32 round = (mant >> (21 - MANT_SIZE)) & 0x1;
   uint32 mant_noround = mant >> (23 - MANT_SIZE);
   uint32 last = mant_noround & 0x1;
-  uint32 sticky = (mant & (~(MAX_MANT << (23 - MANT_SIZE))) & (~(MAX_MANT << (21 - MANT_SIZE)))) > 0;
+  uint32 sticky = (mant & (~(MAX_MANT << (23 - MANT_SIZE))) &
+      (~(MAX_MANT << (21 - MANT_SIZE)))) > 0;
   uint32 rnd_val = guard & (round | sticky | last);
-  uint32 mant_round = (mant_noround != MAX_MANT) ? mant_noround + rnd_val : ((exp < EXP_OFFSET) && rnd_val) ? 0 : mant_noround;
-  uint32 exp_add = (mant_noround != MAX_MANT) ? 0 : ((exp < EXP_OFFSET) && rnd_val) ? 1 : 0;
-  uint32 eresf = (exp < (-1 * EXP_OFFSET + 1)) ? 0 : (exp <= EXP_OFFSET) ? ((exp + EXP_OFFSET) + exp_add) << MANT_SIZE : (MAX_EXP - 1) << MANT_SIZE;
-  uint32 mantf = (exp < (-1 * EXP_OFFSET + 1)) ? 0 : (exp <= EXP_OFFSET) ? mant_round : MAX_MANT;
+  uint32 mant_round = (mant_noround != MAX_MANT) ? mant_noround + rnd_val :
+    ((exp < EXP_OFFSET) && rnd_val) ? 0 : mant_noround;
+  uint32 exp_add = (mant_noround != MAX_MANT) ? 0 :
+    ((exp < EXP_OFFSET) && rnd_val) ? 1 : 0;
+  uint32 eresf = (exp < (-1 * EXP_OFFSET + 1)) ? 0 : (exp <= EXP_OFFSET) ?
+    ((exp + EXP_OFFSET) + exp_add) << MANT_SIZE : (MAX_EXP - 1) << MANT_SIZE;
+  uint32 mantf = (exp < (-1 * EXP_OFFSET + 1)) ? 0 : (exp <= EXP_OFFSET) ?
+    mant_round : MAX_MANT;
   uint32 hbits = (sign | eresf | mantf);
   return hbits;
 }
 
-/// Convert single-precision to cpfp-precision.
-inline uint32 float2cpfp(float value)
+// Convert cpfp-precision to IEEE single-precision.
+inline float cpfp2float(uint32 value)
 {
-  return float2cpfp_impl(value);
-}
-
-/// Convert cpfp-precision to IEEE single-precision.
-inline float cpfp2float_impl(uint32 value)
-{
-#if CPFP_ENABLE_CPP11_STATIC_ASSERT
-  static_assert(std::numeric_limits<float>::is_iec559, "cpfp to float conversion needs IEEE 754 conformant 'float' type");
-  static_assert(sizeof(uint32)==sizeof(float), "cpfp to float conversion needs unsigned integer type of exactly the size of a 'float'");
-#endif
   float out;
   uint32 sign = (value & SIGN_MASK) << (31 - SIGN_SHIFT);
   uint32 mant = value & MANT_MASK;
@@ -114,13 +105,8 @@ inline float cpfp2float_impl(uint32 value)
   return out;
 }
 
-/// Convert cpfp-precision to single-precision.
-inline float cpfp2float(uint32 value)
-{
-  return cpfp2float_impl(value);
-}
-
 class cpfp {
+  // Operators
   friend cpfp operator*(cpfp T, float U);
   friend cpfp operator*(cpfp T, int U);
   friend cpfp operator*(cpfp T, cpfp U);
@@ -209,8 +195,8 @@ cpfp operator*(cpfp T, cpfp U) {
   ap_uint<FP_WIDTH> Udata_ = U.data_;
   ap_uint<EXP_SIZE> e1 = (Tdata_) >> EXP_SHIFT;
   ap_uint<EXP_SIZE> e2 = (Udata_) >> EXP_SHIFT;
-  ap_uint<MANT_SIZE + 1> mant1 = Tdata_ | MANT_NORM;// 11 bits
-  ap_uint<MANT_SIZE + 1> mant2 = Udata_ | MANT_NORM;// 11 bits
+  ap_uint<MANT_SIZE + 1> mant1 = Tdata_ | MANT_NORM;// M + 1 Bits
+  ap_uint<MANT_SIZE + 1> mant2 = Udata_ | MANT_NORM;// M + 1 Bits
   ap_uint<1> sign1 = (Tdata_) >> SIGN_SHIFT;
   ap_uint<1> sign2 = (Udata_) >> SIGN_SHIFT;
   ap_uint<1> sign_res = sign1 ^ sign2;
@@ -219,15 +205,19 @@ cpfp operator*(cpfp T, cpfp U) {
   ap_uint<MANT_SIZE + 2> mantres;
   ap_uint<MANT_SIZE> mantresf;
   ap_uint<FP_WIDTH> eresf;
-  ap_uint<PRODUCT_SIZE> product = mant1 * mant2; // 22 bits
-  mantres = product >> MANT_SIZE; // 11 bits
+  // (M + 1) * (M + 1) multiplier
+  ap_uint<PRODUCT_SIZE> product = mant1 * mant2;
+  mantres = product >> MANT_SIZE;
+  // Compute resulting exponent
   ap_int<EXP_SIZE + 2> eres = e1 + e2 - EXP_OFFSET;
+
+  // Rounding bits
   ap_uint<1> last = (product >> MANT_SIZE) & 0x1;
   ap_uint<1> guard = (product >> (MANT_SIZE - 1)) & 0x1;
   ap_uint<1> sticky = ((product & (MAX_MANT >> 1)) > 0);
 
-
-  // normalize
+  // Shift the resulting mantissa by 1 and add 1 to the resulting exponent if
+  // there is a leading one in position MANT_SIZE + 1
   if ((mantres >> (MANT_SIZE + 1)) & 0x1) {
     last = (product >> (MANT_SIZE + 1)) & 0x1;
     sticky |= guard;
@@ -236,6 +226,7 @@ cpfp operator*(cpfp T, cpfp U) {
     eres++;
   }
 
+  // Rounding logic
 #if ROUND_NEAREST_MULT == 1
   if (guard & (sticky | last)) {
     if (mantres == (MAX_MANT | MANT_NORM))
@@ -249,11 +240,11 @@ cpfp operator*(cpfp T, cpfp U) {
   eres_t = eres;
   mantresf = mantres;
   if (eres >= MAX_EXP) {
-    // saturate results
+    // Saturate results
     eres_t = MAX_EXP - 1;
     mantresf = MAX_MANT;
   } else if ((e1 == 0) || (e2 == 0) || (eres <= 0)) {
-    // 0 * val, underflow
+    // Set result to 0 if 0 * val or if there's an underflow
     eres_t = 0;
     mantresf = 0;
   }
@@ -270,6 +261,8 @@ cpfp operator*(cpfp T, cpfp U) {
   return cpfp(float(T) * float(U));
 #endif
 }
+
+// Leading one detectors for mantissa sizes ranging from 1 to 14
 
 #ifdef SYNTHESIS
 #if MANT_SIZE == 1
@@ -730,6 +723,7 @@ cpfp operator+(cpfp T, cpfp U) {
   ap_uint<EXP_SIZE> eres = e1_s;
   ap_uint<EXP_SIZE> diff = e1_s - e2_s; 
 
+  // Flag for determining if we're in the far or close path
   ap_uint<1> fpath_flag = (diff > 1) || EOP;
 
   ap_uint<MANT_SIZE + 4> mant1_large = (e1_s != 0) ?
@@ -744,8 +738,10 @@ cpfp operator+(cpfp T, cpfp U) {
   mant1_cpath = mant1_large << 1;
 
   if (diff == 1)
+    // mant2 needs to be shifted by 1 wrt to mant1 to be on the same exponent
     mant2_cpath = mant2_large;
   else
+    // mant1 and mant2 are aligned, shift by same amount
     mant2_cpath = mant2_large << 1;
 
   ap_int<MANT_SIZE + 4> sum_cpath_t;
@@ -756,6 +752,8 @@ cpfp operator+(cpfp T, cpfp U) {
 
   ap_uint<MANT_SIZE + 2> sum_cpath;
 
+  // If the result is negative then mant1 < mant2, need to complement the 
+  // result and set the sign to sign2_s
   if (sum_cpath_t < 0) {
     sum_cpath = -1 * sum_cpath_t;
     sum_cpath_sign = sign2_s; 
@@ -765,13 +763,17 @@ cpfp operator+(cpfp T, cpfp U) {
   }
 
   ap_uint<1> zero_flag = 0;
+  // Determine amount to shift by with leading one detector
   Lshifter = LOD(sum_cpath, &zero_flag);
 
   ap_uint<MANT_SIZE> sum_cpath_f = ((sum_cpath) << Lshifter) >> 1;
 
   // Far path
 
-  // saturate difference at 11 bits
+  // saturate difference at MANT_SIZE + 4 bits
+  // bit -1: guard
+  // bit -2: round
+  // bit -3: position for sticky bit
 
   ap_uint<EXP_SIZE> diff_sat = (diff > (MANT_SIZE + 4)) ?
     (ap_uint<EXP_SIZE>)(MANT_SIZE + 4) : diff;
@@ -781,13 +783,16 @@ cpfp operator+(cpfp T, cpfp U) {
 
   ap_uint<1> sticky;
  
+  // Compute sticky bit for round-to-nearest
 #if ROUND_NEAREST_ADD == 1
   sticky = (mant2_a & ((1 << (MANT_SIZE + 1)) - 1)) > 0;
 #else
   sticky = 0;
 #endif
 
+  // Shift mant1 by 3 to match width of mant2
   ap_uint<MANT_SIZE + 4> mant1_fpath = (mant1_large) << 3;
+  // Shift mant2 back and or sticky to bit -3 position
   ap_uint<MANT_SIZE + 4> mant2_fpath = (mant2_a >> (MANT_SIZE + 1)) | sticky;
 
   if (EOP) 
@@ -796,17 +801,22 @@ cpfp operator+(cpfp T, cpfp U) {
     sum_fpath = mant1_fpath - mant2_fpath; 
 
   ap_uint<MANT_SIZE + 2> sum_t = (sum_fpath >> 3);
+  // Extract rounding bits
   guard = (sum_fpath >> 2) & 0x1;
   round = (sum_fpath >> 1) & 0x1;
   sticky = sum_fpath & 0x1;
 
   if ((sum_t >> (MANT_SIZE + 1)) & 0x1) {
+    // Carry generated, need to shift output to the right, and shift rounding
+    // bits
     Rshifter = 1;
     sticky |= round;
     round = guard;
     guard = sum_t & 0x1;
     sum_t = (sum_fpath >> 4);
   } else if (((sum_t >> (MANT_SIZE)) & 0x1) == 0) {
+    // Leading 0 at output, need to shift to the left by 1 bit, shift rounding
+    // bits accordingly
     Rshifter = -1;
     guard = round;
     round = 0;
@@ -816,6 +826,7 @@ cpfp operator+(cpfp T, cpfp U) {
   ap_uint<1> last = sum_t & 0x1;
   ap_uint<1> rnd_ovfl = 0;
 
+  // Rounding logic
 #if ROUND_NEAREST_ADD == 1
   if (guard & (last | round | sticky)) {
     if (sum_t == (MAX_MANT | MANT_NORM))
@@ -826,20 +837,24 @@ cpfp operator+(cpfp T, cpfp U) {
 
   ap_uint<MANT_SIZE> sum_fpath_f = sum_t;
 
+  // Select sign based off of close or far path in use
   ap_uint<FP_WIDTH> sign = (fpath_flag) ? sign1_s :
     sum_cpath_sign;
 
   ap_uint<EXP_SIZE> eres_t;
 
+  // Compute resulting exponent for far path/close path
   ap_uint<EXP_SIZE> eres_fpath_f = eres + Rshifter + rnd_ovfl;
   ap_uint<EXP_SIZE> eres_cpath_f = eres - Lshifter;
   if (fpath_flag) {
     eres_t = eres_fpath_f;
     mantresf = sum_fpath_f;
     if (eres + Rshifter + rnd_ovfl >= MAX_EXP) {
+      // Saturate result if the exponent overflows
       eres_t = MAX_EXP - 1;
       mantresf = MAX_MANT;
     } else if (eres + Rshifter + rnd_ovfl <= 0) {
+      // Set result to 0 if the resulting exponent underflows
       eres_t = 0;
       mantresf = 0;
     } else {
@@ -848,6 +863,8 @@ cpfp operator+(cpfp T, cpfp U) {
     }
   } else {
     if ((eres - Lshifter < 1) || (zero_flag == 1)) {
+      // Set result to 0 if the exponent underflows, or if the leading one
+      // detector does not detect a one
       eres_t = 0;
       mantresf = 0;
     } else {
@@ -896,6 +913,7 @@ bool operator!=(cpfp T, cpfp U) {
   return (Tdata_ != Udata_);
 }
 
+// Returns the max of T and U
 #ifndef SYNTHESIS
 inline
 #endif
@@ -919,6 +937,7 @@ cpfp max(cpfp T, cpfp U) {
   return res;
 }
 
+// Returns the max of T and U and stores the resulting mask in out_mask
 #ifndef SYNTHESIS
 inline
 #endif

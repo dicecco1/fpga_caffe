@@ -3,6 +3,8 @@
 
 #include "cpfp.hpp"
 
+/* Vector based types for input ports to imrpove bandwidth utilization */
+
 struct char16{
   char s0;
   char s1;
@@ -121,6 +123,8 @@ struct cpfp16 {
   }
 };
 
+/* Implements 16 parallel max(rhs, 0) functions */
+
 cpfp16 max(const cpfp16 rhs) {
 #pragma HLS INLINE
   cpfp16 val;
@@ -143,6 +147,8 @@ cpfp16 max(const cpfp16 rhs) {
   return val;
 }
 
+/* Implements 16 parallel max(a, b) functions */
+
 cpfp16 max(const cpfp16 T, const cpfp16 U) {
 #pragma HLS INLINE
   cpfp16 val;
@@ -164,6 +170,8 @@ cpfp16 max(const cpfp16 T, const cpfp16 U) {
   val.sf = max(T.sf, U.sf);
   return val;
 }
+
+/* Implements 16 parallel max(a, b) functions with tags computed */
 
 cpfp16 max(const cpfp16 T, const cpfp16 U, const short16 Tmask,
     const short16 Umask, short16 *out_mask) {
@@ -215,4 +223,4 @@ struct cpfp32 {
   cpfp16 l, u;
 };
 
-#endif // HVECTOR_TYPES_HPP
+#endif // VECTOR_TYPES_HPP
