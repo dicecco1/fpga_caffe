@@ -65,7 +65,7 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
   params->ydim = 1;
   params->ksize = 1;
   params->xtile_pad = 0;
-  params->fc = 1;
+  params->fc = 0;
   params->stride = 1;
   params->pad = 0;
   params->relu = cr_param.relu();
@@ -106,63 +106,28 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
   kernel_params *backward_params = &ocl_params_bw_;
   backward_params->ydim = 1;
   backward_params->xdim = 1;
-  backward_params->inchannels = this->N_;
-  backward_params->outchannels = this->K_;
+  backward_params->outchannels = params->outchannels;
+  backward_params->inchannels = params->inchannels;
   backward_params->ksize = 1;
-  backward_params->numimages = this->M_;
-  burstchannels_ = 8 * 256 * 256 / (backward_params->numimages);
-
-  if (burstchannels_ > backward_params->inchannels) {
-    burstchannels_ = backward_params->inchannels;
-  } else {
-    int tchannel = burstchannels_;
-    while (backward_params->inchannels % tchannel != 0)
-      tchannel--;
-    burstchannels_ = tchannel;
-  }
-
-  if (burstchannels_ < 64) {
-    backward_params->inchannels = 64;
-    burstchannels_ = 64;
-    use_aux_ = true;
-  }
-
-  if (burstchannels_ % 16 != 0) {
-    int rpo = backward_params->inchannels / burstchannels_;
-    burstchannels_ = (burstchannels_ / 16 + 1) * 16;
-    backward_params->inchannels = burstchannels_ * rpo;
-    use_aux_ = true;
-  }
-
+  backward_params->numimages = params->numimages;
   backward_params->xtile_pad = 0;
   backward_params->stride = 1;
   backward_params->pad = 0;
-  backward_params->burstchannels = burstchannels_;
-  backward_params->rpo = backward_params->inchannels / burstchannels_;
+  backward_params->burstchannels = params->burstchannels;
+  backward_params->rpo = params->rpo;
   backward_params->numgroups = 1;
   backward_params->fc = 1;
   backward_params->relu = cr_param.relu();
   backward_params->pool = 0;
   backward_params->pksize = 2;
-
-  // We don't support outputs larger than 256 * 16 so this shouldn't cause problems
-  burstoc = 256 * 16 / backward_params->burstchannels;
-  if (burstoc > backward_params->outchannels) {
-    burstoc = backward_params->outchannels;
-  } else {
-    int tburst = burstoc;
-    while (backward_params->outchannels % tburst != 0)
-      tburst--;
-    burstoc = tburst;
-  }
-  backward_params->burstydim = burstoc;
-  backward_params->rpofm = backward_params->outchannels / burstoc;
+  backward_params->burstydim = params->burstydim;
+  backward_params->rpofm = params->rpofm;
 
   // Backward params inputs
   kernel_params *backward_params_bi = &ocl_params_bi_;
   backward_params_bi->ydim = 1;
   backward_params_bi->xdim = 1;
-  backward_params_bi->inchannels = backward_params->inchannels;
+  backward_params_bi->inchannels = this->N_;
   backward_params_bi->outchannels = this->K_;
   backward_params_bi->ksize = 1;
   backward_params_bi->numimages = this->M_;
@@ -170,10 +135,8 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
   backward_params_bi->xtile_pad = 0;
   backward_params_bi->stride = 1;
   backward_params_bi->pad = 0;
-  backward_params_bi->burstchannels = burstchannels_;
-  backward_params_bi->rpo = backward_params->inchannels / burstchannels_;
   backward_params_bi->numgroups = 1;
-  backward_params_bi->fc = 1;
+  backward_params_bi->fc = 0;
   backward_params_bi->relu = cr_param.relu();
   backward_params_bi->pool = 0;
   backward_params_bi->pksize = 2;
@@ -194,6 +157,32 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
   backward_params_bi->burstydim = burstoc;
   backward_params_bi->rpofm = rpofm;
 
+  burstchannels_ = 8 * 256 * 256 / (backward_params_bi->numimages);
+
+  if (burstchannels_ > backward_params_bi->inchannels) {
+    burstchannels_ = backward_params_bi->inchannels;
+  } else {
+    int tchannel = burstchannels_;
+    while (backward_params_bi->inchannels % tchannel != 0)
+      tchannel--;
+    burstchannels_ = tchannel;
+  }
+
+  if (burstoc * burstchannels_ / 4 < 16) {
+    backward_params_bi->inchannels = 16;
+    burstchannels_ = 16;
+    use_aux_ = true;
+  }
+
+  if (burstchannels_ % 16 != 0) {
+    int rpo = backward_params_bi->inchannels / burstchannels_;
+    burstchannels_ = (burstchannels_ / 16 + 1) * 16;
+    backward_params_bi->inchannels = burstchannels_ * rpo;
+    use_aux_ = true;
+  }
+  backward_params_bi->burstchannels = burstchannels_;
+  backward_params_bi->rpo = backward_params_bi->inchannels / burstchannels_;
+
   // Set bias update parameters
   kernel_params *bias_params = &ocl_params_bb_;
   bias_params->burstydim = 1;
@@ -202,14 +191,38 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
   bias_params->pad = 0;
   bias_params->ydim = 1;
   bias_params->xdim = 1;
-  bias_params->inchannels = backward_params->inchannels;
+  bias_params->inchannels = this->N_;
   bias_params->outchannels = 1;
-  bias_params->burstchannels = burstchannels_;
   bias_params->numimages = this->M_;
+  burstchannels_ = 8 * 256 * 256 / (bias_params->numimages);
+
+  if (burstchannels_ > bias_params->inchannels) {
+    burstchannels_ = bias_params->inchannels;
+  } else {
+    int tchannel = burstchannels_;
+    while (bias_params->inchannels % tchannel != 0)
+      tchannel--;
+    burstchannels_ = tchannel;
+  }
+
+  if (burstchannels_ / 4 < 16) {
+    bias_params->inchannels = 16;
+    burstchannels_ = 16;
+    use_aux_ = true;
+  }
+
+  if (burstchannels_ % 16 != 0) {
+    int rpo = bias_params->inchannels / burstchannels_;
+    burstchannels_ = (burstchannels_ / 16 + 1) * 16;
+    bias_params->inchannels = burstchannels_ * rpo;
+    use_aux_ = true;
+  }
+
+  bias_params->burstchannels = burstchannels_;
   bias_params->ksize = 1;
   bias_params->rpo = bias_params->inchannels / burstchannels_;
   bias_params->numgroups = 1;
-  bias_params->fc = 1;
+  bias_params->fc = 0;
   bias_params->relu = cr_param.relu();
   bias_params->pool = 0;
   bias_params->pksize = 2;
@@ -224,14 +237,14 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
 template <typename Dtype>
 void OCLHWCNInnerProductLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
-  kernel_params *backward_params = &ocl_params_bw_;
+  kernel_params *bias_params = &ocl_params_bb_;
  
   std::vector<int> top_shape(2);
   top_shape[0] = this->N_;
   top_shape[1] = this->M_;
   top[0]->Reshape(top_shape);
 
-  top_shape[0] = backward_params->inchannels;
+  top_shape[0] = bias_params->inchannels;
   relu_indices.Reshape(top_shape);
 
   top_shape[0] = 1;
@@ -250,10 +263,10 @@ void OCLHWCNInnerProductLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom
   weights_h.Reshape(weight_shape);
 
   weight_shape[0] = this->K_;
-  weight_shape[1] = backward_params->inchannels;
-
+  weight_shape[1] = ocl_params_bi_.inchannels;
+  
   if (use_aux_) {
-    top_shape[0] = backward_params->inchannels;
+    top_shape[0] = bias_params->inchannels;
     top_shape[1] = this->M_;
     top_aux.Reshape(top_shape);
   }
@@ -279,9 +292,30 @@ void OCLHWCNInnerProductLayer<Dtype>::copyToHalf(const Dtype *input,
 }
 
 template <typename Dtype>
-void OCLHWCNInnerProductLayer<Dtype>::copyToFloat(const cpfp *input,
-    Dtype *output, int size, int ksize, int ksize_pad) {
-  return;
+void OCLHWCNInnerProductLayer<Dtype>::launchKernel(const cpfp *bottom,
+    const cpfp *weights, const cpfp *bias, cpfp *top, int *tags,
+    const int *params) {
+  std::vector<cl_event> events;
+  int g = 0;
+  int events_size = 1;
+  events.resize(events_size, 0);
+  
+  clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
+    (const void *)&bottom);
+  clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
+    (const void *)&weights);
+  clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
+    (const void *)&bias);
+  clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
+    (const void *)&top);
+  clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
+    (const void *)&tags);
+  clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
+    (const void *)&params);
+  clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
+      (const void *)&g);
+  clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0, NULL, &(events[g]));
+  clWaitForEvents(events.size(), events.data()); 
 }
 
 template <typename Dtype>
@@ -291,19 +325,10 @@ void OCLHWCNInnerProductLayer<Dtype>::Forward_ocl(
   const Dtype *weights_dtype = this->blobs_[0]->cpu_data();
   cpfp *weight_data_temp = weights_h.mutable_cpu_data();
 
-  int outchannels = this->blobs_[0]->shape(0);
-  int inchannels = this->blobs_[0]->shape(1);
-  int inchannels_pad = weights_h.shape(1);
+  int weight_size = weights_h.count();
 
-  for (int i = 0; i < outchannels; ++i)
-    for (int j = 0; j < inchannels_pad / 4; ++j)
-      for (int k = 0; k < 4; ++k)
-        if (k * inchannels_pad / 4 + j < inchannels)
-          weight_data_temp[i * inchannels_pad + j * 4 + k] =
-            cpfp((float)weights_dtype[i * inchannels + j +
-                k * inchannels_pad / 4]);
-        else
-          weight_data_temp[i * inchannels_pad + j * 4 + k] = cpfp(0);
+  for (int i = 0; i < weight_size; ++i)
+    weight_data_temp[i] = cpfp((float)weights_dtype[i]);
 
   if (this->bias_term_)
     copyToHalf(this->blobs_[1]->mutable_cpu_data(), bias_h.mutable_cpu_data(),
@@ -329,35 +354,15 @@ void OCLHWCNInnerProductLayer<Dtype>::Forward_ocl(
   const int* k_params = param_vals.ocl_data();
 
   size_t insize = sizeof(cpfp) * bottom[0]->count();
-  std::vector<cl_event> events;
-
-  int events_size = 1;
-  int g = 0;
   cpfp *top_data;
   int *relu_vals;
   for (int i = 0; i < bottom.size(); i++) {
-    events.resize(events_size, 0);
     const cpfp *bottom_data =
       reinterpret_cast<const cpfp *>(bottom[i]->ocl_data(insize));
     top_data = reinterpret_cast<cpfp *>(top[i]->mutable_ocl_data(0));
     relu_vals = relu_indices.mutable_ocl_data(0);
-    clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
-      (const void *)&bottom_data);
-    clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
-      (const void *)&weight_data);
-    clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
-      (const void *)&bias_data);
-    clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
-      (const void *)&top_data);
-    clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
-      (const void *)&relu_vals);
-    clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
-      (const void *)&k_params);
-    clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
-        (const void *)&g);
-    clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0,
-        NULL, &(events[g]));
-    clWaitForEvents(events.size(), events.data());
+    launchKernel(bottom_data, weight_data, bias_data, top_data, relu_vals,
+        k_params);
   }
 }
 
@@ -369,7 +374,7 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_weights(
   params->backward = 1;
   Dtype* weight_diff_dtype = this->blobs_[0]->mutable_cpu_diff();
  
-  cpfp* weight_diff = weights_h_t.mutable_ocl_diff(0);
+  cpfp* weight_diff = weights_h.mutable_ocl_diff(0);
   vector<int> shape(1);
   shape[0] = this->blobs_[0]->shape(1);
 
@@ -387,13 +392,9 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_weights(
 
   size_t insize = sizeof(cpfp) * bottom[0]->count();
   size_t outsize = sizeof(cpfp) * top[0]->count();
-  std::vector<cl_event> events;
-
-  int events_size = 1;
-  int g = 0;
 
   const cpfp *top_diff;
-  const int *relu_vals;
+  int *relu_vals;
   const cpfp *bottom_data;
 
   for (int i = 0; i < bottom.size(); i++) {
@@ -403,42 +404,17 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_weights(
     } else {
       top_diff = reinterpret_cast<const cpfp *>(top[i]->ocl_diff(outsize));
     }
-    events.resize(events_size, 0);
     bottom_data = reinterpret_cast<const cpfp *>(bottom[i]->ocl_data(insize));
-    relu_vals = relu_indices.ocl_data();
-
-    clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
-      (const void *)&top_diff);
-    clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
-      (const void *)&bottom_data);
-    clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
-      (const void *)&bias_data);
-    clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
-      (const void *)&weight_diff);
-    clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
-      (const void *)&relu_vals);
-    clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
-      (const void *)&cr_params_b);
-    clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
-        (const void *)&g);
-    clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0,
-        NULL, &(events[g]));
-    clWaitForEvents(events.size(), events.data());
+    relu_vals = relu_indices.mutable_ocl_data();
+    launchKernel(bottom_data, top_diff, bias_data, weight_diff, relu_vals,
+        cr_params_b);
   }
-  weight_diff = weights_h_t.mutable_cpu_diff();
-  
-  int outchannels = this->blobs_[0]->shape(0);
-  int inchannels = this->blobs_[0]->shape(1);
+  weight_diff = weights_h.mutable_cpu_diff();
 
-  int outchannels_pad = weights_h_t.shape(1);
-  for (int i = 0; i < outchannels_pad / 4; ++i)
-    for (int j = 0; j < inchannels; ++j)
-      for (int k = 0; k < 4; ++k)
-        if (i + k * outchannels_pad / 4 < outchannels)
-          weight_diff_dtype[(i + k * outchannels_pad / 4)
-            * inchannels + j] =
-            (Dtype)float(weight_diff[j * outchannels_pad + i * 4 + k]);
+  int weight_size = weights_h.count();
 
+  for (int i = 0; i < weight_size; ++i)
+    weight_diff_dtype[i] = (Dtype)float(weight_diff[i]);
 }
 
 template <typename Dtype>
@@ -467,13 +443,8 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_bias(
   const int* cr_params_b = param_vals.ocl_data();
 
   size_t outsize = sizeof(cpfp) * top[0]->count();
-  std::vector<cl_event> events;
-
-  int events_size = 1;
-  int g = 0;
-
   const cpfp *top_diff;
-  const int *relu_vals;
+  int *relu_vals;
   for (int i = 0; i < bottom.size(); i++) {
     if (use_aux_) {
       outsize = sizeof(cpfp) * top_aux.count();
@@ -481,25 +452,9 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_bias(
     } else {
       top_diff = reinterpret_cast<const cpfp *>(top[i]->ocl_diff(outsize));
     }
-    events.resize(events_size, 0);
-    relu_vals = relu_indices.ocl_data();
-    clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
-      (const void *)&top_diff);
-    clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
-      (const void *)&weights_data);
-    clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
-      (const void *)&bias_diff);
-    clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
-      (const void *)&bias_diff);
-    clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
-      (const void *)&relu_vals);
-    clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
-      (const void *)&cr_params_b);
-    clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
-        (const void *)&g);
-    clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0,
-        NULL, &(events[g]));
-    clWaitForEvents(events.size(), events.data());
+    relu_vals = relu_indices.mutable_ocl_data();
+    launchKernel(top_diff, weights_data, (const cpfp *)bias_diff, bias_diff,
+        relu_vals, cr_params_b);
   }
   bias_diff = bias_h.mutable_cpu_diff();
   Dtype *bias_diff_out = this->blobs_[1]->mutable_cpu_diff();
@@ -523,20 +478,30 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_data(
   const Dtype *weight_data = this->blobs_[0]->cpu_data();
   cpfp *weight_data_h_t = weights_h_t.mutable_cpu_data();
   int outchannels_pad = weights_h_t.shape(1);
-  for (int i = 0; i < outchannels_pad / 4; ++i)
-    for (int j = 0; j < inchannels; ++j)
-      for (int k = 0; k < 4; ++k)
-        if (i + k * outchannels_pad / 4 < outchannels)
-          weight_data_h_t[j * outchannels_pad + i * 4 + k] =
-            cpfp((float)weight_data[(i + k * outchannels_pad / 4) *
-                inchannels + j]);
-        else
-          weight_data_h_t[j * outchannels_pad + i * 4 + k] = 0;
+  for (int i = 0; i < outchannels_pad / 4; ++i) {
+    for (int k = 0; k < 4; ++k) {
+      int oc_idx_in = i + k * outchannels_pad / 4;
+      int oc_idx_out = i * 4 + k;
+      if (i + k * outchannels_pad / 4 < outchannels) {
+        for (int j = 0; j < inchannels / 4; ++j) {
+          for (int n = 0; n < 4; ++n) {
+            int ic_idx_in = j * 4 + n;
+            int ic_idx_out = j + n * inchannels / 4;
+            weight_data_h_t[ic_idx_out * outchannels_pad + oc_idx_out] =
+              cpfp((float)weight_data[oc_idx_in * inchannels + ic_idx_in]);
+          }
+        }
+      } else {
+        for (int j = 0; j < inchannels; ++j) {
+          weight_data_h_t[j * outchannels_pad + oc_idx_out] = 0;
+        }
+      }
+    }
+  }
 
   const cpfp *weight_data_t = weights_h_t.ocl_data();
 
   vector<int> shape(1);
-  shape[0] = this->K_;
 
   const cpfp *bias_data = bias_placeholder.ocl_data();
 
@@ -553,13 +518,8 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_data(
 
   size_t insize = sizeof(cpfp) * bottom[0]->count();
   size_t outsize = sizeof(cpfp) * top[0]->count();
-  std::vector<cl_event> events;
-
-  int events_size = 1;
-  int g = 0;
-
   const cpfp *top_diff;
-  const int *relu_vals;
+  int *relu_vals;
   cpfp *bottom_diff;
 
   for (int i = 0; i < bottom.size(); i++) {
@@ -569,27 +529,11 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_data(
     } else {
       top_diff = reinterpret_cast<const cpfp *>(top[i]->ocl_diff(outsize));
     }
-    events.resize(events_size, 0);
     bottom_diff =
       reinterpret_cast<cpfp *>(bottom[i]->mutable_ocl_diff(0, insize));
-    relu_vals = relu_indices.ocl_data();
-    clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
-      (const void *)&top_diff);
-    clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
-      (const void *)&weight_data_t);
-    clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
-      (const void *)&bias_data);
-    clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
-      (const void *)&bottom_diff);
-    clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
-      (const void *)&relu_vals);
-    clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
-      (const void *)&cr_params_b);
-    clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
-        (const void *)&g);
-    clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0,
-        NULL, &(events[g]));
-    clWaitForEvents(events.size(), events.data());
+    relu_vals = relu_indices.mutable_ocl_data();
+    launchKernel(top_diff, weight_data_t, bias_data, bottom_diff, relu_vals,
+        cr_params_b);
   }
 }
 

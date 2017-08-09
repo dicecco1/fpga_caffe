@@ -45,10 +45,8 @@ class OCLHWCNInnerProductLayer : public InnerProductLayer<Dtype> {
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
   void copyToHalf(const Dtype *input, cpfp *output, int size, int xdim,
       int xdim_pad);
-  void copyPad(const cpfp *input, cpfp *output, int size, int xdim,
-      int xdim_pad);
-  void copyToFloat(const cpfp *input, Dtype *output, int size, int xdim,
-      int xdim_pad);
+  void launchKernel(const cpfp *bottom, const cpfp *weights, const cpfp *bias,
+      cpfp *top, int *tags, const int *params);
 
  private:
   kernel_params ocl_params_;

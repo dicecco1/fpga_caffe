@@ -145,6 +145,33 @@ void OCLPoolingHWCNLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
 }
 
 template <typename Dtype>
+void OCLPoolingHWCNLayer<Dtype>::launchKernel(const cpfp *bottom,
+    const cpfp *weights, const cpfp *bias, cpfp *top, int *tags,
+    const int *params) {
+  std::vector<cl_event> events;
+  int g = 0;
+  int events_size = 1;
+  events.resize(events_size, 0);
+  
+  clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
+    (const void *)&bottom);
+  clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
+    (const void *)&weights);
+  clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
+    (const void *)&bias);
+  clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
+    (const void *)&top);
+  clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
+    (const void *)&tags);
+  clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
+    (const void *)&params);
+  clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
+      (const void *)&g);
+  clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0, NULL, &(events[g]));
+  clWaitForEvents(events.size(), events.data()); 
+}
+
+template <typename Dtype>
 void OCLPoolingHWCNLayer<Dtype>::Forward_ocl(
     const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
   kernel_params *params = &ocl_params_;
@@ -163,8 +190,6 @@ void OCLPoolingHWCNLayer<Dtype>::Forward_ocl(
 
   size_t insize = sizeof(cpfp) * bottom[0]->count();
   size_t outsize = sizeof(cpfp) * top[0]->count();
-  std::vector<cl_event> events;
-  int events_size = 1;
 
   const cpfp *bias_data = bias_placeholder.ocl_data();
   const cpfp *weight_data = weights_placeholder.ocl_data();
@@ -172,28 +197,12 @@ void OCLPoolingHWCNLayer<Dtype>::Forward_ocl(
   int *relu_vals;
 
   for (int i = 0; i < bottom.size(); i++) {
-    events.resize(events_size, 0);
     const cpfp* bottom_data =
       reinterpret_cast<const cpfp *>(bottom[i]->ocl_data(insize));
     top_data = reinterpret_cast<cpfp *>(top[i]->mutable_ocl_data(0, outsize));
     relu_vals = relu_indices.mutable_ocl_data(0);
-    clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
-      (const void *)&bottom_data);
-    clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
-      (const void *)&weight_data);
-    clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
-      (const void *)&bias_data);
-    clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
-      (const void *)&top_data);
-    clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
-      (const void *)&relu_vals);
-    clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
-      (const void *)&p_params);
-    int g = 0;
-    clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
-        (const void *)&g);
-    clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0, NULL, &(events[0]));
-    clWaitForEvents(events.size(), events.data());
+    launchKernel(bottom_data, weight_data, bias_data, top_data, relu_vals,
+        p_params);
   }
 }
 
@@ -215,42 +224,23 @@ void OCLPoolingHWCNLayer<Dtype>::Backward_ocl(const vector<Blob<Dtype>*>& top,
 
   size_t insize = sizeof(cpfp) * bottom[0]->count();
   size_t outsize = sizeof(cpfp) * top[0]->count();
-  std::vector<cl_event> events;
-
-  int events_size = 1;
-
+ 
   const cpfp *bias_data = bias_placeholder.ocl_data();
   const cpfp *weight_data = weights_placeholder.ocl_data();
   const cpfp *top_diff;
-  const int *relu_vals;
+  int *relu_vals;
 
   cpfp *bottom_diff =
     reinterpret_cast<cpfp *>(bottom[0]->mutable_cpu_diff());
   for (int i = 0; i < bottom[0]->count(); ++i)
     bottom_diff[i] = cpfp(0);
   for (int i = 0; i < bottom.size(); i++) {
-    events.resize(events_size, 0);
     cpfp *bottom_diff =
       reinterpret_cast<cpfp *>(bottom[i]->mutable_ocl_diff(0, insize));
     top_diff = reinterpret_cast<const cpfp *>(top[i]->ocl_diff(outsize));
-    relu_vals = relu_indices.ocl_data();
-    clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
-      (const void *)&top_diff);
-    clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
-      (const void *)&weight_data);
-    clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
-      (const void *)&bias_data);
-    clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
-      (const void *)&bottom_diff);
-    clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
-      (const void *)&relu_vals);
-    clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
-      (const void *)&p_params_b);
-    int g = 0;
-    clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
-        (const void *)&g);
-    clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0, NULL, &(events[0]));
-    clWaitForEvents(events.size(), events.data());
+    relu_vals = relu_indices.mutable_ocl_data();
+    launchKernel(top_diff, weight_data, bias_data, bottom_diff, relu_vals,
+        p_params_b);
   }
 }
 

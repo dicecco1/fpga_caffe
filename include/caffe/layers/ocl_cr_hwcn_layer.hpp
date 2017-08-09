@@ -35,17 +35,16 @@ class OCLCRHWCNLayer : public ConvolutionLayer<Dtype> {
    *  be the same. 
    *  - group (\b optional, default 1). The number of filter groups. Group
    *  convolution is a method for reducing parameterization by selectively
-   *  connecting input and output channels. The input and output channel dimensions must be divisible
-   *  by the number of groups. For group @f$ \geq 1 @f$, the
-   *  convolutional filters' input and output channels are separated s.t. each
-   *  group takes 1 / group of the input channels and makes 1 / group of the
-   *  output channels. Concretely 4 input channels, 8 output channels, and
-   *  2 groups separate input channels 1-2 and output channels 1-4 into the
-   *  first group and input channels 3-4 and output channels 5-8 into the second
-   *  group.
+   *  connecting input and output channels. The input and output channel 
+   *  dimensions must be divisible by the number of groups. For group @f$
+   *  \geq 1 @f$, the convolutional filters' input and output channels are
+   *  separated s.t. each group takes 1 / group of the input channels and makes
+   *  1 / group of the output channels. Concretely 4 input channels, 8 output
+   *  channels, and 2 groups separate input channels 1-2 and output channels
+   *  1-4 into the first group and input channels 3-4 and output channels 5-8
+   *  into the second group (only supported in forward pass currently).
    *  - bias_term (\b optional, default true). Whether to have a bias.
-   *  - engine: convolution has CAFFE (matrix multiplication) and CUDNN (library
-   *    kernels + stream parallelism) engines.
+   *  - subengine: DIRECT or WINOGRAD OCL engines.
    */
   explicit OCLCRHWCNLayer(const LayerParameter& param)
       : ConvolutionLayer<Dtype>(param) {}
@@ -76,6 +75,8 @@ class OCLCRHWCNLayer : public ConvolutionLayer<Dtype> {
       kernel_params params);
   void RotateWeightsHalf(const Dtype *input, cpfp *output,
       kernel_params params);
+  void launchKernel(const cpfp *bottom, const cpfp *weights, const cpfp *bias,
+      cpfp *top, int *tags, const int *params, int numgroups);
  private:
   kernel_params ocl_params_;
   kernel_params ocl_params_bw_;

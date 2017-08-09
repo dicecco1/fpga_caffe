@@ -211,37 +211,21 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   this->bottom_shape_ = &bottom[0]->shape();
   compute_output_shape();
   kernel_params *backward_params = &ocl_params_bw_;
-  backward_params->ydim = this->output_shape_[0];
-  backward_params->xdim = this->output_shape_[1];
-  backward_params->inchannels = this->num_output_ / this->group_;
-  backward_params->outchannels = bottom[0]->shape(2) / this->group_;
+  backward_params->ydim = bottom[0]->shape(0);
+  backward_params->xdim = bottom[0]->shape(1);
+  backward_params->outchannels = this->num_output_ / this->group_;
+  backward_params->inchannels = bottom[0]->shape(2) / this->group_;
   backward_params->ksize = (this->blobs_[0])->shape(3);
   backward_params->numimages = num_;
-  burstchannels_ = 8 * 256 * 256 / (backward_params->ksize *
-      backward_params->ksize * backward_params->numimages);
-
-  if (burstchannels_ > backward_params->inchannels) {
-    burstchannels_ = backward_params->inchannels;
-  } else {
-    int tchannel = burstchannels_;
-    while (backward_params->inchannels % tchannel != 0)
-      tchannel--;
-    burstchannels_ = tchannel;
-  }
-
-  backward_params->rpofm = backward_params->outchannels;
+  backward_params->rpofm = rpofm;
   backward_params->xtile_pad = 0;
-  backward_params->burstydim = 1;
+  backward_params->burstydim = burstoc;
   backward_params->stride = stride_data[0];
-  if ((pad_data[0] == 0) && (stride_data[0] == 1)) {
-    backward_params->pad = backward_params->ksize - 1;
-  } else {
-    backward_params->pad = pad_data[0];
-  }
+  backward_params->pad = pad_data[0];
   backward_params->burstchannels = burstchannels_;
   backward_params->rpo = backward_params->inchannels / burstchannels_;
   backward_params->numgroups = this->group_;
-  backward_params->fc = 0;
+  backward_params->fc = 1;
   backward_params->relu = cr_param.relu();
   backward_params->pool = 0;
   backward_params->pksize = 2;
@@ -261,13 +245,17 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   } else {
     backward_params_bi->pad = pad_data[0];
   }
-  backward_params_bi->burstchannels = burstchannels_;
-  backward_params_bi->rpo = backward_params_bi->inchannels / burstchannels_;
-  backward_params_bi->numgroups = this->group_;
-  backward_params_bi->fc = 0;
-  backward_params_bi->relu = cr_param.relu();
-  backward_params_bi->pool = 0;
-  backward_params_bi->pksize = 2;
+  burstchannels_ = 8 * 256 * 256 / (backward_params_bi->ksize *
+      backward_params_bi->ksize * backward_params_bi->numimages);
+
+  if (burstchannels_ > backward_params_bi->inchannels) {
+    burstchannels_ = backward_params_bi->inchannels;
+  } else {
+    int tchannel = burstchannels_;
+    while (backward_params_bi->inchannels % tchannel != 0)
+      tchannel--;
+    burstchannels_ = tchannel;
+  }
   rpofm = num_cu_;
   burstoc = 1;
   if (rpofm > backward_params_bi->outchannels) {
@@ -281,9 +269,16 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
         rpofm++;
     }
   }
+
+  backward_params_bi->burstchannels = burstchannels_;
+  backward_params_bi->rpo = backward_params_bi->inchannels / burstchannels_;
+  backward_params_bi->numgroups = this->group_;
+  backward_params_bi->fc = 0;
+  backward_params_bi->relu = cr_param.relu();
+  backward_params_bi->pool = 0;
+  backward_params_bi->pksize = 2;
   backward_params_bi->rpofm = rpofm;
   backward_params_bi->burstydim = burstoc;
-
 
   // Set bias update parameters
   kernel_params *bias_params = &ocl_params_bb_;
@@ -291,9 +286,9 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   bias_params->burstydim = 1;
   bias_params->stride = 1;
   bias_params->pad = 0;
-  bias_params->ydim = backward_params->ydim;
-  bias_params->xdim = backward_params->xdim;
-  bias_params->inchannels = backward_params->inchannels;
+  bias_params->ydim = backward_params_bi->ydim;
+  bias_params->xdim = backward_params_bi->xdim;
+  bias_params->inchannels = backward_params_bi->inchannels;
   bias_params->outchannels = 1;
   bias_params->burstchannels = burstchannels_;
   bias_params->numimages = num_;
@@ -361,6 +356,35 @@ void OCLCRHWCNLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
 
   relu_indices.Reshape(shape);
   bias_placeholder.Reshape(1, 1, 1, 1);
+}
+
+template <typename Dtype>
+void OCLCRHWCNLayer<Dtype>::launchKernel(const cpfp *bottom,
+    const cpfp *weights, const cpfp *bias, cpfp *top, int *tags,
+    const int *params, int numgroups) {
+  std::vector<cl_event> events;
+
+  int events_size = numgroups;
+  events.resize(events_size, 0);
+  
+  clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
+    (const void *)&bottom);
+  clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
+    (const void *)&weights);
+  clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
+    (const void *)&bias);
+  clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
+    (const void *)&top);
+  clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
+    (const void *)&tags);
+  clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
+    (const void *)&params);
+  for (int g = 0; g < numgroups; ++g) {
+    clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
+        (const void *)&g);
+    clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0, NULL, &(events[g]));
+  }
+  clWaitForEvents(events.size(), events.data()); 
 }
 
 template <typename Dtype>
@@ -447,16 +471,19 @@ void OCLCRHWCNLayer<Dtype>::copyToFloatWeights(cpfp *input,
   int oc = params.outchannels * params.numgroups;
   int ic = params.inchannels;
   int bc = params.burstchannels;
+  int ic_new = weight_pad_;
+  int bc_new = weight_pad_ / params.rpo;
   int ksize = params.ksize;
+
   for (int o = 0; o < oc; ++o) {
-    for (int n = 0; n < ic / bc; ++n) {
-      for (int k = 0; k < ksize * ksize; ++k) {
+    for (int n = 0; n < ic_new / bc_new; ++n) {
+      for (int k = 0; k < params.ksize * params.ksize; ++k) {
         for (int m = 0; m < bc / 4; ++m) {
           for (int j = 0; j < 4; ++j) {
-            int in_idx = ((n * bc + m + j * bc / 4) * oc + o) * ksize * ksize
+            int in_idx = (o * ic + n * bc + m + j * (bc / 4)) * ksize * ksize
               + k;
-            int out_idx = o * ksize * ksize * ic + (n * ksize * ksize +
-                ksize * ksize - 1 - k) * bc + m * 4 + j;
+            int out_idx = o * ksize * ksize * ic_new +
+              (n * ksize * ksize + k) * bc_new + m * 4 + j;
             output[in_idx] = (Dtype)float(input[out_idx]);
           }
         }
@@ -476,7 +503,7 @@ void OCLCRHWCNLayer<Dtype>::backward_bias(const vector<Blob<Dtype>*>& top,
   cpfp *bias_diff = bias_h.mutable_ocl_diff(0);
 
   params->backward = 1;
-  int numgroups_ = params->numgroups;
+  int numgroups = params->numgroups;
 
   shape[0] = sizeof(kernel_params) / sizeof(int);
   param_vals.Reshape(shape);
@@ -490,35 +517,15 @@ void OCLCRHWCNLayer<Dtype>::backward_bias(const vector<Blob<Dtype>*>& top,
   const int* cr_params_b = param_vals.ocl_data();
 
   size_t outsize = sizeof(cpfp) * top[0]->count();
-  std::vector<cl_event> events;
-
-  int events_size = numgroups_;
 
   const cpfp *top_diff;
-  const int *relu_vals;
+  int *relu_vals;
   for (int i = 0; i < bottom.size(); i++) {
-    events.resize(events_size, 0);
     top_diff = reinterpret_cast<const cpfp *>(top[i]->ocl_diff(outsize));
-    relu_vals = relu_indices.ocl_data();
-    clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
-      (const void *)&top_diff);
-    clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
-      (const void *)&weights_data);
-    clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
-      (const void *)&bias_diff);
-    clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
-      (const void *)&bias_diff);
-    clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
-      (const void *)&relu_vals);
-    clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
-      (const void *)&cr_params_b);
-    for (int g = 0; g < numgroups_; ++g) {
-      clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
-          (const void *)&g);
-      clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0, NULL, &(events[g]));
-    }
-    clWaitForEvents(events.size(), events.data());
-  }
+    relu_vals = relu_indices.mutable_ocl_data();
+    launchKernel(top_diff, weights_data, (const cpfp *)bias_diff, bias_diff,
+        relu_vals, cr_params_b, numgroups);
+  } 
   bias_diff = bias_h.mutable_cpu_diff();
   Dtype *bias_diff_out = this->blobs_[1]->mutable_cpu_diff();
   for (int i = 0; i < this->blobs_[1]->count(); ++i) {
@@ -540,7 +547,7 @@ void OCLCRHWCNLayer<Dtype>::backward_data(const vector<Blob<Dtype>*>& top,
   const cpfp *bias_data = bias_placeholder.ocl_data();
 
   params->backward = 2;
-  int numgroups_ = params->numgroups;
+  int numgroups = params->numgroups;
 
   shape[0] = sizeof(kernel_params) / sizeof(int);
   param_vals.Reshape(shape);
@@ -555,37 +562,17 @@ void OCLCRHWCNLayer<Dtype>::backward_data(const vector<Blob<Dtype>*>& top,
 
   size_t insize = sizeof(cpfp) * bottom[0]->count();
   size_t outsize = sizeof(cpfp) * top[0]->count();
-  std::vector<cl_event> events;
-
-  int events_size = numgroups_;
 
   const cpfp *top_diff;
-  const int *relu_vals;
+  int *relu_vals;
   cpfp *bottom_diff;
   for (int i = 0; i < bottom.size(); i++) {
-    events.resize(events_size, 0);
     bottom_diff =
       reinterpret_cast<cpfp *>(bottom[i]->mutable_ocl_diff(0, insize));
     top_diff = reinterpret_cast<const cpfp *>(top[i]->ocl_diff(outsize));
-    relu_vals = relu_indices.ocl_data();
-    clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
-      (const void *)&top_diff);
-    clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
-      (const void *)&weight_data_r);
-    clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
-      (const void *)&bias_data);
-    clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
-      (const void *)&bottom_diff);
-    clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
-      (const void *)&relu_vals);
-    clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
-      (const void *)&cr_params_b);
-    for (int g = 0; g < numgroups_; ++g) {
-      clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
-          (const void *)&g);
-      clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0, NULL, &(events[g]));
-    }
-    clWaitForEvents(events.size(), events.data());
+    relu_vals = relu_indices.mutable_ocl_data();
+    launchKernel(top_diff, weight_data_r, bias_data, bottom_diff, relu_vals,
+        cr_params_b, numgroups);
   }
 }
 
@@ -601,7 +588,7 @@ void OCLCRHWCNLayer<Dtype>::backward_weights(const vector<Blob<Dtype>*>& top,
   const cpfp *bias_data = bias_placeholder.ocl_data();
 
   params->backward = 1;
-  int numgroups_ = params->numgroups;
+  int numgroups = params->numgroups;
 
   vector<int> shape(1);
   shape[0] = sizeof(kernel_params) / sizeof(int);
@@ -617,37 +604,17 @@ void OCLCRHWCNLayer<Dtype>::backward_weights(const vector<Blob<Dtype>*>& top,
 
   size_t insize = sizeof(cpfp) * bottom[0]->count();
   size_t outsize = sizeof(cpfp) * top[0]->count();
-  std::vector<cl_event> events;
-
-  int events_size = numgroups_;
 
   const cpfp *top_diff;
-  const int *relu_vals;
+  int *relu_vals;
   const cpfp *bottom_data;
   for (int i = 0; i < bottom.size(); i++) {
-    events.resize(events_size, 0);
     bottom_data =
       reinterpret_cast<const cpfp *>(bottom[i]->ocl_data(insize));
     top_diff = reinterpret_cast<const cpfp *>(top[i]->ocl_diff(outsize));
-    relu_vals = relu_indices.ocl_data();
-    clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
-      (const void *)&top_diff);
-    clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
-      (const void *)&bottom_data);
-    clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
-      (const void *)&bias_data);
-    clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
-      (const void *)&weight_diff);
-    clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
-      (const void *)&relu_vals);
-    clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
-      (const void *)&cr_params_b);
-    for (int g = 0; g < numgroups_; ++g) {
-      clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
-          (const void *)&g);
-      clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0, NULL, &(events[g]));
-    }
-    clWaitForEvents(events.size(), events.data());
+    relu_vals = relu_indices.mutable_ocl_data();
+    launchKernel(bottom_data, top_diff, bias_data, weight_diff, relu_vals,
+        cr_params_b, numgroups);
   }
   weight_diff = weights_h.mutable_cpu_diff();
   copyToFloatWeights(weight_diff, weight_diff_dtype,
@@ -667,7 +634,7 @@ void OCLCRHWCNLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
   const cpfp *bias_data = bias_h.ocl_data();
 
   params->backward = 0;
-  int numgroups_ = params->numgroups;
+  int numgroups = params->numgroups;
 
   vector<int> shape(1);
   shape[0] = sizeof(kernel_params) / sizeof(int);
@@ -683,35 +650,16 @@ void OCLCRHWCNLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
 
   size_t insize = sizeof(cpfp) * bottom[0]->count();
   size_t outsize = sizeof(cpfp) * top[0]->count();
-  std::vector<cl_event> events;
-  int events_size = numgroups_;
 
   cpfp *top_data;
   int *relu_vals;
   for (int i = 0; i < bottom.size(); i++) {
-    events.resize(events_size, 0);
     const cpfp* bottom_data =
       reinterpret_cast<const cpfp *>(bottom[i]->ocl_data(insize));
     top_data = reinterpret_cast<cpfp *>(top[i]->mutable_ocl_data(0, outsize));
     relu_vals = relu_indices.mutable_ocl_data(0);
-    clSetKernelArg(this->ocl_kernel, 0, sizeof(cl_mem),
-      (const void *)&bottom_data);
-    clSetKernelArg(this->ocl_kernel, 1, sizeof(cl_mem),
-      (const void *)&weight_data);
-    clSetKernelArg(this->ocl_kernel, 2, sizeof(cl_mem),
-      (const void *)&bias_data);
-    clSetKernelArg(this->ocl_kernel, 3, sizeof(cl_mem),
-      (const void *)&top_data);
-    clSetKernelArg(this->ocl_kernel, 4, sizeof(cl_mem),
-      (const void *)&relu_vals);
-    clSetKernelArg(this->ocl_kernel, 5, sizeof(cl_mem),
-      (const void *)&cr_params);
-    for (int g = 0; g < numgroups_; ++g) {
-      clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
-          (const void *)&g);
-      clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0, NULL, &(events[g]));
-    }
-    clWaitForEvents(events.size(), events.data());
+    launchKernel(bottom_data, weight_data, bias_data, top_data, relu_vals,
+        cr_params, numgroups);
   }
 }
 

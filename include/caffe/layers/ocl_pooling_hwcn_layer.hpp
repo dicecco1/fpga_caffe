@@ -30,6 +30,9 @@ class OCLPoolingHWCNLayer : public PoolingLayer<Dtype> {
       const vector<Blob<Dtype>*>& top);
   virtual void Backward_ocl(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+  void launchKernel(const cpfp *bottom, const cpfp *weights, const cpfp *bias,
+      cpfp *top, int *tags, const int *params);
+
  private:
   kernel_params ocl_params_;
   kernel_params ocl_params_bi_;
