@@ -285,6 +285,126 @@ void ref_backward_conv_layer(std::vector<float> input,
   }
 }
 
+void ref_conv_layer_hwcn(std::vector<float> input, std::vector<float> weights,
+    std::vector<float> bias, std::vector<float>& output, kernel_params params,
+    bool wino) {
+  int o_head, k_head;
+  int out_idx, in_idx, k_idx;
+
+  int numgroups = params.numgroups;
+  int inchannels = params.inchannels * numgroups;
+  int outchannels = params.outchannels * numgroups;
+  int ydim = params.ydim;
+  int xdim = params.xdim;
+  int numimages = params.numimages;
+  int ksize = params.ksize;
+
+  int pad = params.pad;
+  int stride = params.stride;
+
+  // Convolution
+  for (int n = 0; n < numimages; n++) {
+    for (int g = 0; g < numgroups; g++) {
+      o_head = (outchannels / numgroups) * g;
+      k_head = (inchannels / numgroups) * g;
+      int o_g = outchannels / numgroups;
+      int k_g = inchannels / numgroups;
+      for (int o = 0; o < o_g; o++) {
+        for (int k = 0; k < k_g / 4; k++) {
+          for (int m = 0; m < 4; ++m) {
+            for (int y = 0; y < ydim; y++) {
+              for (int x = 0; x < xdim; x++) {
+                for (int p = 0; p < ksize; p++) {
+                  for (int q = 0; q < ksize; q++) {
+                    int in_y = y * stride - pad + p;
+                    int in_x = x * stride - pad + q;
+                    if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
+                      out_idx = ((y * xdim + x) * outchannels + o + o_head)
+                        * numimages + n;
+                      in_idx = ((in_y * xdim + in_x) * inchannels + m *
+                        (k_g / 4) + k + k_head) * numimages + n;
+                      if (wino)
+                        k_idx = ((q * o_g + (o + o_head)) * ksize + p) * k_g +
+                          k * 4 + m;
+                      else 
+                        k_idx = (((o + o_head) * ksize + p) * ksize + q) *
+                          k_g + k * 4 + m;
+                      output[out_idx] += input[in_idx] * weights[k_idx];
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  for (int n = 0; n < numimages; n++) {
+    for (int o = 0; o < outchannels; ++o) {
+      for (int y = 0; y < ydim; ++y) {
+        for (int x = 0; x < xdim; ++x) {
+          out_idx = ((y * xdim + x) * outchannels + o) * numimages + n;
+          output[out_idx] += bias[o];
+        }
+      }
+    }
+  }
+}
+
+void ref_backward_conv_layer_hwcn(std::vector<float> input,
+    std::vector<float> weights, std::vector<float>& output,
+    kernel_params params) {
+  int o_head, k_head;
+  int out_idx, in_idx, k_idx;
+
+  int numgroups = params.numgroups;
+  int inchannels = params.inchannels * numgroups;
+  int outchannels = params.outchannels * numgroups;
+  int ydim = params.ydim;
+  int xdim = params.xdim;
+  int numimages = params.numimages;
+  int ksize = params.ksize;
+
+  int pad = params.pad;
+  int stride = params.stride;
+
+  for (int n = 0; n < numimages; n++) {
+    for (int g = 0; g < numgroups; g++) {
+      o_head = (outchannels / numgroups) * g;
+      k_head = (inchannels / numgroups) * g;
+      int o_g = outchannels / numgroups;
+      int k_g = inchannels / numgroups;
+      for (int o = 0; o < o_g; o++) {
+        for (int k = 0; k < k_g / 4; k++) {
+          for (int m = 0; m < 4; ++m) {
+            for (int p = 0; p < ydim; p++) {
+              for (int q = 0; q < xdim; q++) {
+                for (int y = 0; y < ksize; y++) {
+                  for (int x = 0; x < ksize; x++) {
+                    int in_y = y * stride - pad + p;
+                    int in_x = x * stride - pad + q;
+                    if (in_y >= 0 && in_y < ydim
+                      && in_x >= 0 && in_x < xdim) {
+                      out_idx = ((p * xdim + q) * outchannels + o + o_head)
+                        * numimages + n;
+                      in_idx = ((in_y * xdim + in_x) * inchannels + m *
+                        (k_g / 4) + k + k_head) * numimages + n;
+                      k_idx = (((o + o_head) * ksize + y) * ksize + x) *
+                        k_g + k * 4 + m;
+                      output[k_idx] += input[in_idx] * weights[out_idx];
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 bool checkEQ(float expected, float result, float epsilon, float absError) {
   float absExpected = fabs(expected);
   float absResult = fabs(result);

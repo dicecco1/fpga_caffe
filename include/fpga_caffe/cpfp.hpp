@@ -49,6 +49,7 @@ cpfp operator*(cpfp T, float U);
 cpfp operator*(cpfp T, int U);
 cpfp operator*(cpfp T, cpfp U);
 cpfp operator+(cpfp T, cpfp U);
+cpfp operator-(cpfp T, cpfp U);
 cpfp operator/(cpfp T, cpfp U);
 cpfp operator/(cpfp T, int U);
 bool operator<(cpfp T, cpfp U);
@@ -111,6 +112,7 @@ class cpfp {
   friend cpfp operator*(cpfp T, int U);
   friend cpfp operator*(cpfp T, cpfp U);
   friend cpfp operator+(cpfp T, cpfp U);
+  friend cpfp operator-(cpfp T, cpfp U);
   friend cpfp max(cpfp T, cpfp U, short Tmask, short Umask,
       short *out_mask);
   friend cpfp max(cpfp T, cpfp U);
@@ -883,6 +885,26 @@ cpfp operator+(cpfp T, cpfp U) {
 #else
   return cpfp(float(T) + float(U));
 #endif
+}
+
+#ifndef SYNTHESIS
+inline
+#endif
+cpfp operator-(cpfp T, cpfp U) {
+#ifdef SYNTHESIS
+  ap_uint<FP_WIDTH> Udata_ = U.data_;
+  ap_uint<FP_WIDTH> e2 = Udata_ >> EXP_SHIFT;
+  ap_uint<MANT_SIZE> mant2 = Udata_;
+  ap_uint<FP_WIDTH> sign2 = Udata_ >> SIGN_SHIFT;
+  ap_uint<FP_WIDTH> sign_res = sign2 ^ 1;
+
+  ap_uint<FP_WIDTH> neg = ((sign_res << SIGN_SHIFT) & SIGN_MASK) |
+    ((e2 << EXP_SHIFT) & EXP_MASK) | mant2;
+  return T + cpfp(neg);
+#else
+  return cpfp(float(T) - float(U));
+#endif
+
 }
 
 #ifndef SYNTHESIS

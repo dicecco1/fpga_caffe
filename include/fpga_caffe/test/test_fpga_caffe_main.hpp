@@ -71,6 +71,14 @@ void ref_backward_conv_layer(std::vector<float> input,
     std::vector<float> weights, std::vector<float>& output, 
     kernel_params params);
 
+void ref_conv_layer_hwcn(std::vector<float> input, std::vector<float> weights,
+    std::vector<float> bias, std::vector<float>& output, kernel_params params,
+    bool wino = false);
+
+void ref_backward_conv_layer_hwcn(std::vector<float> input,
+    std::vector<float> weights, std::vector<float>& output,
+    kernel_params params);
+
 void fillVector(std::vector<float>& input, float beg, float end);
 
 void fillVectorCPFP(std::vector<float>& input, float beg, float end);
