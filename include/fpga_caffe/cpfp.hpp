@@ -892,19 +892,206 @@ inline
 #endif
 cpfp operator-(cpfp T, cpfp U) {
 #ifdef SYNTHESIS
+#pragma HLS INLINE off
+#pragma HLS pipeline
+  ap_uint<FP_WIDTH> Tdata_ = T.data_;
   ap_uint<FP_WIDTH> Udata_ = U.data_;
-  ap_uint<FP_WIDTH> e2 = Udata_ >> EXP_SHIFT;
+  ap_uint<EXP_SIZE> e1 = Tdata_ >> EXP_SHIFT;
+  ap_uint<EXP_SIZE> e2 = Udata_ >> EXP_SHIFT;
+  ap_uint<MANT_SIZE> mant1 = Tdata_;
   ap_uint<MANT_SIZE> mant2 = Udata_;
-  ap_uint<FP_WIDTH> sign2 = Udata_ >> SIGN_SHIFT;
-  ap_uint<FP_WIDTH> sign_res = sign2 ^ 1;
+  ap_uint<1> sign1 = Tdata_ >> SIGN_SHIFT;
+  ap_uint<1> sign2 = (Udata_ >> SIGN_SHIFT) ^ 1;
 
-  ap_uint<FP_WIDTH> neg = ((sign_res << SIGN_SHIFT) & SIGN_MASK) |
-    ((e2 << EXP_SHIFT) & EXP_MASK) | mant2;
-  return T + cpfp(neg);
+  // EOP = 1 -> add, EOP = 0 -> sub
+  ap_uint<1> EOP = sign1 == sign2; 
+
+  // 1 if e1 is bigger, 0 if e2 is bigger
+  ap_uint<1> exp_cmp = (e1 >= e2) ? 1 : 0;
+  ap_uint<1> guard, round;
+  ap_uint<MANT_SIZE> mantresf;
+  ap_uint<MANT_SIZE + EXP_SIZE> eresf;
+
+  ap_uint<MANT_SIZE + 5> sum_fpath;
+  ap_uint<1> sum_fpath_sign = 0;
+
+  ap_int<2> Rshifter = 0;
+  ap_uint<5> Lshifter = 0;
+ 
+  ap_uint<MANT_SIZE> mant1_s, mant2_s;
+  ap_uint<1> sign1_s, sign2_s;
+  ap_uint<EXP_SIZE> e1_s, e2_s;
+
+  mant1_s = (exp_cmp) ? mant1 : mant2;
+  mant2_s = (exp_cmp) ? mant2 : mant1;
+  e1_s = (exp_cmp) ? e1 : e2;
+  e2_s = (exp_cmp) ? e2 : e1;
+  sign1_s = (exp_cmp) ? sign1 : sign2;
+  sign2_s = (exp_cmp) ? sign2 : sign1;
+
+  ap_uint<EXP_SIZE> eres = e1_s;
+  ap_uint<EXP_SIZE> diff = e1_s - e2_s; 
+
+  // Flag for determining if we're in the far or close path
+  ap_uint<1> fpath_flag = (diff > 1) || EOP;
+
+  ap_uint<MANT_SIZE + 4> mant1_large = (e1_s != 0) ?
+    (ap_uint<MANT_SIZE + 4>)(mant1_s | MANT_NORM) : (ap_uint<MANT_SIZE + 4>)0;
+  ap_uint<PRODUCT_SIZE + 6> mant2_large = (e2_s != 0) ?
+    (ap_uint<PRODUCT_SIZE>)(mant2_s | MANT_NORM) : (ap_uint<PRODUCT_SIZE>)0;
+
+  // Close path, sub and (diff = 0 or diff = 1)
+  ap_uint<MANT_SIZE + 2> mant1_cpath;
+  ap_uint<MANT_SIZE + 2> mant2_cpath;
+
+  mant1_cpath = mant1_large << 1;
+
+  if (diff == 1)
+    // mant2 needs to be shifted by 1 wrt to mant1 to be on the same exponent
+    mant2_cpath = mant2_large;
+  else
+    // mant1 and mant2 are aligned, shift by same amount
+    mant2_cpath = mant2_large << 1;
+
+  ap_int<MANT_SIZE + 4> sum_cpath_t;
+ 
+  sum_cpath_t = mant1_cpath - mant2_cpath;
+
+  ap_uint<1> sum_cpath_sign;
+
+  ap_uint<MANT_SIZE + 2> sum_cpath;
+
+  // If the result is negative then mant1 < mant2, need to complement the 
+  // result and set the sign to sign2_s
+  if (sum_cpath_t < 0) {
+    sum_cpath = -1 * sum_cpath_t;
+    sum_cpath_sign = sign2_s; 
+  } else {
+    sum_cpath = sum_cpath_t;
+    sum_cpath_sign = sign1_s;
+  }
+
+  ap_uint<1> zero_flag = 0;
+  // Determine amount to shift by with leading one detector
+  Lshifter = LOD(sum_cpath, &zero_flag);
+
+  ap_uint<MANT_SIZE> sum_cpath_f = ((sum_cpath) << Lshifter) >> 1;
+
+  // Far path
+
+  // saturate difference at MANT_SIZE + 4 bits
+  // bit -1: guard
+  // bit -2: round
+  // bit -3: position for sticky bit
+
+  ap_uint<EXP_SIZE> diff_sat = (diff > (MANT_SIZE + 4)) ?
+    (ap_uint<EXP_SIZE>)(MANT_SIZE + 4) : diff;
+
+  ap_uint<PRODUCT_SIZE + 6> mant2_a =
+    (mant2_large) << ((MANT_SIZE + 4) - diff_sat);
+
+  ap_uint<1> sticky;
+ 
+  // Compute sticky bit for round-to-nearest
+#if ROUND_NEAREST_ADD == 1
+  sticky = (mant2_a & ((1 << (MANT_SIZE + 1)) - 1)) > 0;
+#else
+  sticky = 0;
+#endif
+
+  // Shift mant1 by 3 to match width of mant2
+  ap_uint<MANT_SIZE + 4> mant1_fpath = (mant1_large) << 3;
+  // Shift mant2 back and or sticky to bit -3 position
+  ap_uint<MANT_SIZE + 4> mant2_fpath = (mant2_a >> (MANT_SIZE + 1)) | sticky;
+
+  if (EOP) 
+    sum_fpath = mant1_fpath + mant2_fpath;
+  else
+    sum_fpath = mant1_fpath - mant2_fpath; 
+
+  ap_uint<MANT_SIZE + 2> sum_t = (sum_fpath >> 3);
+  // Extract rounding bits
+  guard = (sum_fpath >> 2) & 0x1;
+  round = (sum_fpath >> 1) & 0x1;
+  sticky = sum_fpath & 0x1;
+
+  if ((sum_t >> (MANT_SIZE + 1)) & 0x1) {
+    // Carry generated, need to shift output to the right, and shift rounding
+    // bits
+    Rshifter = 1;
+    sticky |= round;
+    round = guard;
+    guard = sum_t & 0x1;
+    sum_t = (sum_fpath >> 4);
+  } else if (((sum_t >> (MANT_SIZE)) & 0x1) == 0) {
+    // Leading 0 at output, need to shift to the left by 1 bit, shift rounding
+    // bits accordingly
+    Rshifter = -1;
+    guard = round;
+    round = 0;
+    sum_t = sum_fpath >> 2;
+  }
+
+  ap_uint<1> last = sum_t & 0x1;
+  ap_uint<1> rnd_ovfl = 0;
+
+  // Rounding logic
+#if ROUND_NEAREST_ADD == 1
+  if (guard & (last | round | sticky)) {
+    if (sum_t == (MAX_MANT | MANT_NORM))
+      rnd_ovfl = 1;
+    sum_t++;
+  }
+#endif
+
+  ap_uint<MANT_SIZE> sum_fpath_f = sum_t;
+
+  // Select sign based off of close or far path in use
+  ap_uint<FP_WIDTH> sign = (fpath_flag) ? sign1_s :
+    sum_cpath_sign;
+
+  ap_uint<EXP_SIZE> eres_t;
+
+  // Compute resulting exponent for far path/close path
+  ap_uint<EXP_SIZE> eres_fpath_f = eres + Rshifter + rnd_ovfl;
+  ap_uint<EXP_SIZE> eres_cpath_f = eres - Lshifter;
+  if (fpath_flag) {
+    eres_t = eres_fpath_f;
+    mantresf = sum_fpath_f;
+    if (eres + Rshifter + rnd_ovfl >= MAX_EXP) {
+      // Saturate result if the exponent overflows
+      eres_t = MAX_EXP - 1;
+      mantresf = MAX_MANT;
+    } else if (eres + Rshifter + rnd_ovfl <= 0) {
+      // Set result to 0 if the resulting exponent underflows
+      eres_t = 0;
+      mantresf = 0;
+    } else {
+      eres_t = eres_fpath_f;
+      mantresf = sum_fpath_f;
+    }
+  } else {
+    if ((eres - Lshifter < 1) || (zero_flag == 1)) {
+      // Set result to 0 if the exponent underflows, or if the leading one
+      // detector does not detect a one
+      eres_t = 0;
+      mantresf = 0;
+    } else {
+      eres_t = eres_cpath_f;
+      mantresf = sum_cpath_f;
+    }
+  }
+
+  eresf = eres_t;
+
+  ap_uint<FP_WIDTH> res;
+  res = ((sign << SIGN_SHIFT) & SIGN_MASK) |
+    ((eresf << EXP_SHIFT) & EXP_MASK) | mantresf;
+
+  return cpfp(res);
 #else
   return cpfp(float(T) - float(U));
 #endif
-
 }
 
 #ifndef SYNTHESIS
