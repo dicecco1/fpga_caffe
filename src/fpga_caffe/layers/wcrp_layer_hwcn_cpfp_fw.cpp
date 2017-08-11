@@ -14,7 +14,7 @@
  * maximum value in the window */
 
 
-void w_transform(cpfp input[3], cpfp output[4]) {
+void w_transform(cpfp input[3], cpfp output[4], int ksize) {
 #pragma HLS INLINE off
   ap_uint<FP_WIDTH> half_exp = EXP_OFFSET - 1;
   ap_uint<FP_WIDTH> half_shifted = half_exp << EXP_SHIFT;
@@ -22,7 +22,7 @@ void w_transform(cpfp input[3], cpfp output[4]) {
 
   cpfp preadd = input[0] + input[2];
   output[0] = input[0];
-  output[1] = (preadd + input[1]) * half_mult;
+  output[1] = (ksize == 1) ? input[0] : (preadd + input[1]) * half_mult;
   output[2] = (preadd - input[1]) * half_mult;
   output[3] = input[2];
 }
@@ -36,20 +36,22 @@ void p_transform(cpfp input[4], cpfp output[4], int ksize) {
   cpfp A2 = input[2];
   cpfp A3 = input[3];
 
-  output[0] = A0 - A2;
-  output[1] = A1 + A2;
+  output[0] = (ksize == 1) ? A0 : A0 - A2;
+  output[1] = (ksize == 1) ? A1 : A1 + A2;
   output[2] = A2 - A1;
   output[3] = A1 - A3;
 }
 
 cpfp out_trans_p(cpfp in0, cpfp in1, cpfp in2, int ksize) {
 #pragma HLS INLINE off
-  return in0 + in1 + in2;
+  cpfp retval = (ksize == 1) ? in0 : in0 + in1 + in2;
+  return retval;
 }
 
 cpfp out_trans_m(cpfp in0, cpfp in1, cpfp in2, int ksize) {
 #pragma HLS INLINE off
-  return in0 - in1 - in2;
+  cpfp retval = (ksize == 1) ? in0 : in0 - in1 - in2;
+  return retval;
 }
 
 void winograd_input_stage(cpfp input[4][16][4], int ksize, cpfp it[4][16][4]) {
@@ -309,8 +311,10 @@ void wcrp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
   bool poolMode = (pool == 1);
 
   ap_uint<10> ydim_out = ((ydim - ksize + 2 * pad) / stride) + 1;
-  ap_uint<10> xdim_out = ydim_out;
-  short xdim_iter = (xdim % 2 == 0) ? xdim >> 1 : (xdim >> 1) + 1;
+  short xdim_out = ydim_out;
+  short xdim_iter = (xdim_out % 2 == 0) ? xdim_out >> 1 : (xdim_out >> 1) + 1;
+
+  short kExtIter = (ksize / 3) + 1;
 
   ap_uint<8> imgFact = numImages >> 4;
   short burstFact = burstChannels >> 2;
@@ -345,309 +349,322 @@ void wcrp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
     // Read in the input data
     for (int n = 0; n < rpo; ++n) {
       for (int o = 0; o < ofm_iters; ++o) {
-        for (int y = 0; y < ydim_out; ++y) {
-          for (int x = 0; x < xdim_iter; ++x) {
-            ap_uint<8> yk_off = 0;
-            ap_uint<8> xk_off = 0;
-            ap_uint<8> yksize = 0;
-            ap_uint<8> xksize = 4;
-            bool xkset = true;
-            bool ykset = false;
-            // Iterate over each window position
-            for (int p = 0; p < ksize; ++p) {
-              for (int q = 0; q < 4; ++q) {
-                short in_y = y * stride - pad + p;
-                short in_x = x * 2 - pad + q;
-                int inIdx = (((in_y * xdim + in_x) * numgroups + group_idx) *
-                    inChannels + n * burstChannels) * imgFact;
-                int inBufIdx = p * burstFact * imgFact;
-                short inSize = burstFact * imgFact;
+        for (int off = 0; off < kExtIter; ++off) {
+          for (int y = 0; y < ydim_out; ++y) {
+            for (int x = 0; x < xdim_iter; ++x) {
+              ap_uint<8> yk_off = 0;
+              ap_uint<8> xk_off = 0;
+              ap_uint<8> yksize = 0;
+              ap_uint<8> xksize = 4;
+              bool xkset = true;
+              bool ykset = false;
+              // Iterate over each window position
+              for (int p = 0; p < ksize; ++p) {
+                for (int q = 0; q < 4; ++q) {
+                  short in_y = y * stride - pad + p;
+                  short in_x = x * 2 - pad + q + off * 3;
+                  int inIdx = (((in_y * xdim + in_x) * numgroups + group_idx) *
+                      inChannels + n * burstChannels) * imgFact;
+                  int inBufIdx = p * burstFact * imgFact;
+                  short inSize = burstFact * imgFact;
 
-                // Determine the begining of none-zero data for non-zero
-                // padding
-                if (in_y >= 0 && in_y < ydim) {
-                  if (q == 0)
-                    yksize++;
-                  if (!ykset) {
-                    yk_off = p;
-                    ykset = true;
+                  // Determine the begining of none-zero data for non-zero
+                  // padding
+                  if (in_y >= 0 && in_y < ydim) {
+                    if (q == 0)
+                      yksize++;
+                    if (!ykset) {
+                      yk_off = p;
+                      ykset = true;
+                    }
                   }
-                }
 
-                if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
-                  if ((x >= 2) && (stride == 1) && (q < 2)) {
-                    // Shift input to the left rather than doing a memory
-                    // transfer for each window (stride of one only)
-                    SHIFT_LOOP: for (int i = 0; i < inSize; ++i) {
+                  if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
+                    if ((x >= 2) && (stride == 1) && (q < 2)) {
+                      // Shift input to the left rather than doing a memory
+                      // transfer for each window (stride of one only)
+                      SHIFT_LOOP: for (int i = 0; i < inSize; ++i) {
 #pragma HLS pipeline
 #pragma HLS dependence variable=inBuf inter false
+                        for (int j = 0; j < 4; ++j) {
+                          inBuf[q][j][i + inBufIdx] =
+                            inBuf[q + 2][j][i + inBufIdx];
+                        }
+                      }
+                    } else {
+                      // If we can't shift the data then we need to transfer
+                      // from on-board memory
                       for (int j = 0; j < 4; ++j) {
-                        inBuf[q][j][i + inBufIdx] =
-                          inBuf[q + 2][j][i + inBufIdx];
+                        int f_inIdx = inIdx + j * burstFact * imgFact;
+                        memcpy(inBuf[q][j] + inBufIdx, input + f_inIdx,
+                          sizeof(cpfp16) * inSize);
                       }
                     }
                   } else {
-                    // If we can't shift the data then we need to transfer
-                    // from on-board memory
-                    for (int j = 0; j < 4; ++j) {
-                      int f_inIdx = inIdx + j * burstFact * imgFact;
-                      memcpy(inBuf[q][j] + inBufIdx, input + f_inIdx,
-                        sizeof(cpfp16) * inSize);
-                    }
-                  }
-                } else {
-                  for (int i = 0; i < inSize; ++i) {
+                    for (int i = 0; i < inSize; ++i) {
 #pragma HLS pipeline
-                    for (int j = 0; j < 4; ++j) {
-                      inBuf[q][j][i + inBufIdx] = 0;
-                    }
-                  } 
+                      for (int j = 0; j < 4; ++j) {
+                        inBuf[q][j][i + inBufIdx] = 0;
+                      }
+                    } 
+                  }
                 }
               }
-            }
 
-            if (n == 0) {
-              // Set the output to be the bias
-              for (int b = 0; b < burstoc; ++b) {
-                for (int i = 0; i < imgFact; ++i) {
+              if ((n == 0) && (off == 0)) {
+                // Set the output to be the bias
+                for (int b = 0; b < burstoc; ++b) {
+                  for (int i = 0; i < imgFact; ++i) {
 #pragma HLS pipeline
-                  for (int k = 0; k < OCFACT; ++k) {
-                    for (int p = 0; p < 2; ++p) {
-                      outBuf[k][p][b * imgFact + i] =
-                        biasBuf[k][o * burstoc + b];
+                    for (int k = 0; k < OCFACT; ++k) {
+                      for (int p = 0; p < 2; ++p) {
+                        outBuf[k][p][b * imgFact + i] =
+                          biasBuf[k][o * burstoc + b];
+                      }
+                    }
+                  }
+                }
+              } else {
+                // Read the output from on-board memory in the case where not all
+                // of the input could fit on device
+                for (int k = 0; k < OCFACT; ++k) {
+                  for (int p = 0; p < 2; ++p) {
+                    int outIdx, outIdxFW;
+                    short outSize, outSizeFW;
+                    outIdxFW = (((y * xdim_out + x * 2 + p) * numgroups +
+                      group_idx) * outChannels + (o * OCFACT + k) * burstoc) *
+                      imgFact; 
+                    outSizeFW = burstoc * imgFact;
+
+                    // Handles the edge case where the burst transfer exceeds the
+                    // data size by reducing the burst transfer
+                    if ((o * OCFACT + k) * burstoc + burstoc > outChannels) {
+                      short newBurst = outChannels - (o * OCFACT + k) * burstoc;
+                      outSizeFW =  newBurst * imgFact;
+                    }
+
+                    outIdx = outIdxFW;
+                    outSize = outSizeFW;
+                    bool readEnable = ((o * OCFACT + k) * burstoc < outChannels)
+                      && (x * 2 + p < xdim_out);
+
+                    if (readEnable)
+                      memcpy(outBuf[k][p], output + outIdx, sizeof(cpfp16) *
+                          outSize);
+                  }
+                }
+              }
+
+              // Read the weights from main memory for the forward pass, or read
+              // the output diff for the backward pass
+              for (int k = 0; k < OCFACT; ++k) {
+                for (int p = 0; p < 3; ++p) {
+                  int wIdxFW, wIdx;
+                  short wSizeFW, wSize;
+                  wIdxFW = ((p + off * 3) * outChannels + ((o * OCFACT + k) *
+                    burstoc + outChannels * group_idx)) * ksize * icFact +
+                    n * burstoc * ksize * wcFact;
+                  wSizeFW = burstoc * ksize * wcFact;
+                  
+                  // Handles the edge case where the burst transfer exceeds the
+                  // data size by reducing the burst transfer
+
+                  if ((o * OCFACT + k) * burstoc + burstoc > outChannels) {
+                    short newBurst = outChannels - (o * OCFACT + k) * burstoc;
+                    wSizeFW = newBurst * ksize * wcFact;
+                  }
+
+                  wIdx = wIdxFW;
+                  wSize = wSizeFW;
+
+                  bool readEnable = ((o * OCFACT + k) * burstoc < outChannels)
+                    && ((x == 0) && (y == 0));
+                  if (readEnable) {
+                    if (p + off * 3 < ksize) {
+                      memcpy(wBuf[k][p], weights + wIdx, sizeof(cpfp16) *
+                        wSize);
+                    } else {
+                      for (int i = 0; i < wSize; ++i)
+#pragma HLS pipeline
+                        wBuf[k][p][i] = 0;
                     }
                   }
                 }
               }
-            } else {
-              // Read the output from on-board memory in the case where not all
-              // of the input could fit on device
+
+              ap_uint<10> w_off = 0;
+              ap_uint<6> img_off = 0;
+              ap_uint<10> iter = 0;
+              ap_uint<8> xdim_off = 0;
+              ap_uint<8> ydim_off = 0;
+              ap_uint<2> counter_bw = 0;
+              ap_uint<2> counter_fw = 0;
+              ap_uint<5> b_off = 0;
+              int mac_iterations = burstoc * yksize * imgFact * burstFact;
+              MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter) {
+#pragma HLS pipeline
+#pragma HLS DEPENDENCE variable outBuf inter false
+#pragma HLS DEPENDENCE variable outBufRelu inter false
+#pragma HLS DEPENDENCE variable finalOut inter false
+                // FW index calculation
+                if (iter == imgFact) {
+                  if (b_off == burstoc - 1) {
+                    b_off = 0;
+                    if (w_off == burstFact - 1) {
+                      counter_fw = 0;
+                      w_off = 0;
+                      ydim_off++;
+                    } else {
+                      counter_fw++;
+                      w_off++;
+                    }
+                  } else {
+                    b_off++;
+                  }
+                  iter = 0;
+                }
+                img_off = iter;
+
+                short filt_off = (yk_off + ydim_off);
+                short wIdxFW = (b_off * ksize + filt_off) * wcFact +
+                  (w_off >> 2);
+                short wIdx = wIdxFW;
+                short inIdx = (filt_off * burstFact + w_off) * imgFact
+                  + img_off;
+                short outIdxFW = b_off * imgFact + img_off;
+                short outIdx = outIdxFW;
+                for (int m = 0; m < 4; ++m) {
+                  for (int p = 0; p < 4; ++p) {
+                    inVal[m][0][p] = inBuf[p][m][inIdx].s0;
+                    inVal[m][1][p] = inBuf[p][m][inIdx].s1;
+                    inVal[m][2][p] = inBuf[p][m][inIdx].s2;
+                    inVal[m][3][p] = inBuf[p][m][inIdx].s3;
+                    inVal[m][4][p] = inBuf[p][m][inIdx].s4;
+                    inVal[m][5][p] = inBuf[p][m][inIdx].s5;
+                    inVal[m][6][p] = inBuf[p][m][inIdx].s6;
+                    inVal[m][7][p] = inBuf[p][m][inIdx].s7;
+                    inVal[m][8][p] = inBuf[p][m][inIdx].s8;
+                    inVal[m][9][p] = inBuf[p][m][inIdx].s9;
+                    inVal[m][10][p] = inBuf[p][m][inIdx].sa;
+                    inVal[m][11][p] = inBuf[p][m][inIdx].sb;
+                    inVal[m][12][p] = inBuf[p][m][inIdx].sc;
+                    inVal[m][13][p] = inBuf[p][m][inIdx].sd;
+                    inVal[m][14][p] = inBuf[p][m][inIdx].se;
+                    inVal[m][15][p] = inBuf[p][m][inIdx].sf;
+                  }
+                }
+                winograd_input_stage(inVal, ksize, inTr);
+
+                for (int k = 0; k < OCFACT; ++k) {
+                  for (int p = 0; p < 3; ++p) {
+                    weightIn[0][p] = wBuf[k][p][wIdx].s0;
+                    weightIn[1][p] = wBuf[k][p][wIdx].s1;
+                    weightIn[2][p] = wBuf[k][p][wIdx].s2;
+                    weightIn[3][p] = wBuf[k][p][wIdx].s3;   
+                    weightIn[4][p] = wBuf[k][p][wIdx].s4;
+                    weightIn[5][p] = wBuf[k][p][wIdx].s5;
+                    weightIn[6][p] = wBuf[k][p][wIdx].s6;
+                    weightIn[7][p] = wBuf[k][p][wIdx].s7;
+                    weightIn[8][p] = wBuf[k][p][wIdx].s8;
+                    weightIn[9][p] = wBuf[k][p][wIdx].s9;
+                    weightIn[10][p] = wBuf[k][p][wIdx].sa;
+                    weightIn[11][p] = wBuf[k][p][wIdx].sb;
+                    weightIn[12][p] = wBuf[k][p][wIdx].sc;
+                    weightIn[13][p] = wBuf[k][p][wIdx].sd;
+                    weightIn[14][p] = wBuf[k][p][wIdx].se;
+                    weightIn[15][p] = wBuf[k][p][wIdx].sf;
+                  }
+                  
+                  for (int m = 0; m < 4; ++m)
+                    for (int j = 0; j < 4; ++j)
+                      w_transform(weightIn[counter_fw * 4 + m], weightVal[m],
+                        ksize);
+
+                   for (int p = 0; p < 4; ++p) {
+                    for (int m = 0; m < 4; ++m) {
+                      for (int j = 0; j < 16; ++j) {
+                        weightsTr[m][j][p] = weightVal[m][p];
+                      }
+                    }
+                  }
+                 
+                  for (int m = 0; m < 4; ++m) {
+                    // 4x16xOCFACT multiplications
+                    for (int j = 0; j < 16; ++j) {
+                      for (int p = 0; p < 4; ++p) {
+                        multTr[k][m][j][p] = inTr[m][j][p] *
+                          weightsTr[m][j][p];
+                      }
+                    }
+                  }
+
+                  // Adder tree, forward: OCFACTx16x4 to OCFACTx16 reduction
+                  
+                  // Stage 1
+                  for (int m = 0; m < 2; ++m) {
+                    for (int j = 0; j < 16; ++j) {
+                      for (int p = 0; p < 4; ++p) {
+                        addTreeS1[k][m][j][p] = multTr[k][m * 2 + 0][j][p] +
+                          multTr[k][m * 2 + 1][j][p];
+                      }
+                    }
+                  }
+
+                  for (int j = 0; j < 16; ++j) {
+                    for (int p = 0; p < 4; ++p) {
+                      addTreeS2[k][j][p] = addTreeS1[k][0][j][p]
+                        + addTreeS1[k][1][j][p];
+                    }
+                  }
+
+                  for (int j = 0; j < 16; ++j) {
+                    finalOut[k][0][j] = out_trans_p(addTreeS2[k][j][0],
+                        addTreeS2[k][j][1], addTreeS2[k][j][2], ksize);
+                    finalOut[k][1][j] = out_trans_m(addTreeS2[k][j][1],
+                        addTreeS2[k][j][2], addTreeS2[k][j][3], ksize);
+                  }
+                  bool reluFWEnable = relu && (n == rpo - 1) &&
+                    (w_off == burstFact - 1) && (ydim_off == yksize - 1) &&
+                    (off == kExtIter - 1);
+                  // 16 Accumulations, forward accumulate every cycle, backward
+                  // accumulate every four cycles. In the forward path ReLU is
+                  // applied when all accumulations for an output are computed.
+                  for (int p = 0; p < 2; ++p) {
+                    outBuf[k][p][outIdx] = relu_fw(outBuf[k][p][outIdx]
+                      + finalOut[k][p], &(outBufRelu[k][p][outIdx]),
+                      reluFWEnable);
+                  }
+                }
+              }
+
+              // Write the outputs back to board memory
               for (int k = 0; k < OCFACT; ++k) {
                 for (int p = 0; p < 2; ++p) {
                   int outIdx, outIdxFW;
                   short outSize, outSizeFW;
-                  outIdxFW = (((y * xdim_out + x * 2 + p) * numgroups +
-                    group_idx) * outChannels + (o * OCFACT + k) * burstoc) *
-                    imgFact; 
+                  outIdxFW = (((y * xdim_out + x * 2 + p) * numgroups
+                    + group_idx) * outChannels + (o * OCFACT + k) * burstoc) *
+                    imgFact;
                   outSizeFW = burstoc * imgFact;
-
-                  // Handles the edge case where the burst transfer exceeds the
-                  // data size by reducing the burst transfer
-                  if ((o * OCFACT + k) * burstoc + burstoc > outChannels) {
+                  if ((o * OCFACT + k) * burstoc + burstoc > outChannels) { 
                     short newBurst = outChannels - (o * OCFACT + k) * burstoc;
                     outSizeFW =  newBurst * imgFact;
                   }
 
                   outIdx = outIdxFW;
                   outSize = outSizeFW;
-                  bool readEnable = ((o * OCFACT + k) * burstoc < outChannels)
+
+                  bool writeEnable = ((o * OCFACT + k) * burstoc < outChannels)
                     && (x * 2 + p < xdim_out);
 
-                  if (readEnable)
-                    memcpy(outBuf[k][p], output + outIdx, sizeof(cpfp16) *
+                  if (relu && (writeEnable) && (n == rpo - 1)) {
+                    memcpy(tagVals + outIdx, outBufRelu[k][p], sizeof(short) *
                         outSize);
-                }
-              }
-            }
-
-            // Read the weights from main memory for the forward pass, or read
-            // the output diff for the backward pass
-            for (int k = 0; k < OCFACT; ++k) {
-              for (int p = 0; p < 3; ++p) {
-                int wIdxFW, wIdx;
-                short wSizeFW, wSize;
-                wIdxFW = (p * outChannels + ((o * OCFACT + k) * burstoc +
-                  outChannels * group_idx)) * ksize * icFact + n * burstoc *
-                  ksize * wcFact;
-                wSizeFW = burstoc * ksize * wcFact;
-                
-                // Handles the edge case where the burst transfer exceeds the
-                // data size by reducing the burst transfer
-
-                if ((o * OCFACT + k) * burstoc + burstoc > outChannels) {
-                  short newBurst = outChannels - (o * OCFACT + k) * burstoc;
-                  wSizeFW = newBurst * ksize * wcFact;
-                }
-
-                wIdx = wIdxFW;
-                wSize = wSizeFW;
-
-                bool readEnable = ((o * OCFACT + k) * burstoc < outChannels) &&
-                  ((x == 0) && (y == 0));
-                if (readEnable) {
-                  memcpy(wBuf[k][p], weights + wIdx, sizeof(cpfp16) * wSize);
-                }
-              }
-            }
-
-            ap_uint<10> w_off = 0;
-            ap_uint<6> img_off = 0;
-            ap_uint<10> iter = 0;
-            ap_uint<8> xdim_off = 0;
-            ap_uint<8> ydim_off = 0;
-            ap_uint<2> counter_bw = 0;
-            ap_uint<2> counter_fw = 0;
-            ap_uint<5> b_off = 0;
-            int mac_iterations = burstoc * yksize * imgFact * burstFact;
-            MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter) {
-#pragma HLS pipeline
-#pragma HLS DEPENDENCE variable outBuf inter false
-#pragma HLS DEPENDENCE variable outBufRelu inter false
-#pragma HLS DEPENDENCE variable finalOut inter false
-              // FW index calculation
-              if (iter == imgFact) {
-                if (b_off == burstoc - 1) {
-                  b_off = 0;
-                  if (w_off == burstFact - 1) {
-                    counter_fw = 0;
-                    w_off = 0;
-                    ydim_off++;
-                  } else {
-                    counter_fw++;
-                    w_off++;
                   }
-                } else {
-                  b_off++;
-                }
-                iter = 0;
-              }
-              img_off = iter;
-
-              short filt_off = (yk_off + ydim_off);
-              short wIdxFW = (b_off * ksize + filt_off) * wcFact +
-                (w_off >> 2);
-              short wIdx = wIdxFW;
-              short inIdx = (filt_off * burstFact + w_off) * imgFact
-                + img_off;
-              short outIdxFW = b_off * imgFact + img_off;
-              short outIdx = outIdxFW;
-              for (int m = 0; m < 4; ++m) {
-                for (int p = 0; p < 4; ++p) {
-                  inVal[m][0][p] = inBuf[p][m][inIdx].s0;
-                  inVal[m][1][p] = inBuf[p][m][inIdx].s1;
-                  inVal[m][2][p] = inBuf[p][m][inIdx].s2;
-                  inVal[m][3][p] = inBuf[p][m][inIdx].s3;
-                  inVal[m][4][p] = inBuf[p][m][inIdx].s4;
-                  inVal[m][5][p] = inBuf[p][m][inIdx].s5;
-                  inVal[m][6][p] = inBuf[p][m][inIdx].s6;
-                  inVal[m][7][p] = inBuf[p][m][inIdx].s7;
-                  inVal[m][8][p] = inBuf[p][m][inIdx].s8;
-                  inVal[m][9][p] = inBuf[p][m][inIdx].s9;
-                  inVal[m][10][p] = inBuf[p][m][inIdx].sa;
-                  inVal[m][11][p] = inBuf[p][m][inIdx].sb;
-                  inVal[m][12][p] = inBuf[p][m][inIdx].sc;
-                  inVal[m][13][p] = inBuf[p][m][inIdx].sd;
-                  inVal[m][14][p] = inBuf[p][m][inIdx].se;
-                  inVal[m][15][p] = inBuf[p][m][inIdx].sf;
-                }
-              }
-              winograd_input_stage(inVal, ksize, inTr);
-
-              for (int k = 0; k < OCFACT; ++k) {
-                for (int p = 0; p < 3; ++p) {
-                  weightIn[0][p] = wBuf[k][p][wIdx].s0;
-                  weightIn[1][p] = wBuf[k][p][wIdx].s1;
-                  weightIn[2][p] = wBuf[k][p][wIdx].s2;
-                  weightIn[3][p] = wBuf[k][p][wIdx].s3;   
-                  weightIn[4][p] = wBuf[k][p][wIdx].s4;
-                  weightIn[5][p] = wBuf[k][p][wIdx].s5;
-                  weightIn[6][p] = wBuf[k][p][wIdx].s6;
-                  weightIn[7][p] = wBuf[k][p][wIdx].s7;
-                  weightIn[8][p] = wBuf[k][p][wIdx].s8;
-                  weightIn[9][p] = wBuf[k][p][wIdx].s9;
-                  weightIn[10][p] = wBuf[k][p][wIdx].sa;
-                  weightIn[11][p] = wBuf[k][p][wIdx].sb;
-                  weightIn[12][p] = wBuf[k][p][wIdx].sc;
-                  weightIn[13][p] = wBuf[k][p][wIdx].sd;
-                  weightIn[14][p] = wBuf[k][p][wIdx].se;
-                  weightIn[15][p] = wBuf[k][p][wIdx].sf;
-                }
-                
-                for (int m = 0; m < 4; ++m)
-                  for (int j = 0; j < 4; ++j)
-                    w_transform(weightIn[counter_fw * 4 + m], weightVal[m]);
-
-                 for (int p = 0; p < 4; ++p) {
-                  for (int m = 0; m < 4; ++m) {
-                    for (int j = 0; j < 16; ++j) {
-                      weightsTr[m][j][p] = weightVal[m][p];
-                    }
+                  if (writeEnable) {
+                    memcpy(output + outIdx, outBuf[k][p], sizeof(cpfp16) *
+                        outSize);
                   }
-                }
-               
-                for (int m = 0; m < 4; ++m) {
-                  // 4x16xOCFACT multiplications
-                  for (int j = 0; j < 16; ++j) {
-                    for (int p = 0; p < 4; ++p) {
-                      multTr[k][m][j][p] = inTr[m][j][p] * weightsTr[m][j][p];
-                    }
-                  }
-                }
-
-                // Adder tree, forward: OCFACTx16x4 to OCFACTx16 reduction
-                
-                // Stage 1
-                for (int m = 0; m < 2; ++m) {
-                  for (int j = 0; j < 16; ++j) {
-                    for (int p = 0; p < 4; ++p) {
-                      addTreeS1[k][m][j][p] = multTr[k][m * 2 + 0][j][p] +
-                        multTr[k][m * 2 + 1][j][p];
-                    }
-                  }
-                }
-
-                for (int j = 0; j < 16; ++j) {
-                  for (int p = 0; p < 4; ++p) {
-                    addTreeS2[k][j][p] = addTreeS1[k][0][j][p]
-                      + addTreeS1[k][1][j][p];
-                  }
-                }
-
-                for (int j = 0; j < 16; ++j) {
-                  finalOut[k][0][j] = out_trans_p(addTreeS2[k][j][0],
-                      addTreeS2[k][j][1], addTreeS2[k][j][2], ksize);
-                  finalOut[k][1][j] = out_trans_m(addTreeS2[k][j][1],
-                      addTreeS2[k][j][2], addTreeS2[k][j][3], ksize);
-                }
-                bool reluFWEnable = relu && (n == rpo - 1) &&
-                  (w_off == burstFact - 1) && (ydim_off == yksize - 1);
-                // 16 Accumulations, forward accumulate every cycle, backward
-                // accumulate every four cycles. In the forward path ReLU is
-                // applied when all accumulations for an output are computed.
-                for (int p = 0; p < 2; ++p) {
-                  outBuf[k][p][outIdx] = relu_fw(outBuf[k][p][outIdx]
-                    + finalOut[k][p], &(outBufRelu[k][p][outIdx]),
-                    reluFWEnable);
-                }
-              }
-            }
-
-            // Write the outputs back to board memory
-            for (int k = 0; k < OCFACT; ++k) {
-              for (int p = 0; p < 2; ++p) {
-                int outIdx, outIdxFW;
-                short outSize, outSizeFW;
-                outIdxFW = (((y * xdim_out + x * 2 + p) * numgroups + group_idx)
-                    * outChannels + (o * OCFACT + k) * burstoc) * imgFact;
-                outSizeFW = burstoc * imgFact;
-                if ((o * OCFACT + k) * burstoc + burstoc > outChannels) { 
-                  short newBurst = outChannels - (o * OCFACT + k) * burstoc;
-                  outSizeFW =  newBurst * imgFact;
-                }
-
-                outIdx = outIdxFW;
-                outSize = outSizeFW;
-
-                bool writeEnable = ((o * OCFACT + k) * burstoc < outChannels)
-                  && (x * 2 + p < xdim_out);
-
-                if (relu && (writeEnable) && (n == rpo - 1)) {
-                  memcpy(tagVals + outIdx, outBufRelu[k][p], sizeof(short) *
-                      outSize);
-                }
-                if (writeEnable) {
-                  memcpy(output + outIdx, outBuf[k][p], sizeof(cpfp16) *
-                      outSize);
                 }
               }
             }
