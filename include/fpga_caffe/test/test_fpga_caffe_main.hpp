@@ -3,7 +3,7 @@
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-
+#include <cfloat>
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
@@ -55,7 +55,12 @@ int main(int argc, char** argv);
 
 void ref_relu_layer(std::vector<float>& output);
 
-void ref_pool_layer(std::vector<float>& output, kernel_params params);
+void ref_pool_layer_hwcn(std::vector<float> input, std::vector<float>& output,
+    std::vector<short>& sw_relu_vals, kernel_params params);
+
+void ref_backward_pool_layer_hwcn(std::vector<float> input,
+    std::vector<float>& output, std::vector<short> relu_vals,
+    kernel_params params);
 
 void ref_conv_layer(std::vector<float> input, std::vector<float> weights,
     std::vector<float> bias, std::vector<float>& output, kernel_params params);

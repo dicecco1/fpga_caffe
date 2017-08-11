@@ -161,6 +161,87 @@ void ref_relu_layer(std::vector<float>& output) {
     output[i] = std::max((float)0.0, output[i]);
 }
 
+void ref_pool_layer_hwcn(std::vector<float> input, std::vector<float>& output,
+    std::vector<short>& sw_relu_vals, kernel_params params) {
+
+  for (int i = 0; i < output.size(); ++i)
+    output[i] = -FLT_MAX;
+
+  int pooled_height_ = static_cast<int>(ceil(static_cast<float>(
+       params.ydim - params.pksize) / 2)) + 1;
+  int pooled_width_ = pooled_height_;
+  int kernel_h_ = params.pksize;
+  int kernel_w_ = params.pksize;
+  int height_ = params.ydim;
+  int width_ = params.xdim;
+  int channels_ = params.inchannels;
+  int num_ = params.numimages;
+  int stride_h_ = 2;
+  int stride_w_ = 2;
+ 
+  for (int ph = 0; ph < pooled_height_; ++ph) {
+    for (int pw = 0; pw < pooled_width_; ++pw) {
+      int hstart = ph * stride_h_;
+      int wstart = pw * stride_w_;
+      int hend = std::min(hstart + kernel_h_, height_);
+      int wend = std::min(wstart + kernel_w_, width_);
+      hstart = std::max(hstart, 0);
+      wstart = std::max(wstart, 0);
+      for (int h = hstart; h < hend; ++h) {
+        for (int w = wstart; w < wend; ++w) {
+          for (int c = 0; c < channels_; ++c) {
+            for (int n = 0; n < num_; ++n) {
+              int top_offset = ((ph * pooled_width_ + pw) * channels_ + c)
+                * num_ + n;
+              int index = h * width_ + w;
+              int bot_offset = (index * channels_ + c) * num_ + n;
+              if (input[bot_offset] > output[top_offset]) {
+                output[top_offset] = input[bot_offset];
+                sw_relu_vals[top_offset] = (h - hstart) * 3 + (w - wstart);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+void ref_backward_pool_layer_hwcn(std::vector<float> input,
+    std::vector<float>& output, std::vector<short> relu_vals,
+    kernel_params params) {
+
+  for (int i = 0; i < output.size(); ++i)
+    output[i] = 0;
+
+  int pooled_height_ = static_cast<int>(ceil(static_cast<float>(
+       params.ydim - params.pksize) / 2)) + 1;
+  int pooled_width_ = pooled_height_;
+  int width_ = params.xdim;
+  int channels_ = params.inchannels;
+  int num_ = params.numimages;
+  int stride_h_ = 2;
+  int stride_w_ = 2;
+ 
+  for (int ph = 0; ph < pooled_height_; ++ph) {
+    for (int pw = 0; pw < pooled_width_; ++pw) {
+      for (int c = 0; c < channels_; ++c) {
+        for (int n = 0; n < num_; ++n) {
+          int in_idx = ((ph * pooled_width_ + pw) * channels_ + c) * num_ + n;
+          int hw = relu_vals[in_idx];
+          int hstart = ph * stride_h_;
+          int wstart = pw * stride_w_;
+          int w = hw % 3;
+          int h = hw / 3;
+          int bottom_index = (((hstart + h) * width_ + (wstart + w))
+              * channels_ + c) * num_ + n;
+          output[bottom_index] += input[in_idx];
+        }
+      }
+    }
+  }
+}
+
 void ref_conv_layer(std::vector<float> input, std::vector<float> weights,
     std::vector<float> bias, std::vector<float>& output,
     kernel_params params) {

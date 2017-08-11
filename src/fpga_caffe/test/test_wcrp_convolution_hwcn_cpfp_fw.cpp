@@ -26,16 +26,16 @@ class WCRPConvolutionFWHWCNCPFPTest : public OCLDeviceTest<TypeParam> {
     params[0].rpo = 1;
     params[0].rpofm = 1;
     params[0].burstydim = 1;
-    params[0].ydim = 4;
-    params[0].xdim = 4;
+    params[0].ydim = 8;
+    params[0].xdim = 8;
     params[0].xtile_pad = 0;
     params[0].numimages = 256;
-    params[0].ksize = 3;
+    params[0].ksize = 5;
     params[0].backward = 0;
-    params[0].relu = 0;
+    params[0].relu = 1;
     params[0].stride = 1;
     params[0].fc = 1;
-    params[0].pad = 1;
+    params[0].pad = 2;
     params[0].pool = 0;
     params[0].pksize = 2;
   }
@@ -166,7 +166,7 @@ TYPED_TEST(WCRPConvolutionFWHWCNCPFPTest, TestWinogradConvReLU1x1FOnly_CPFP) {
 
     ref_conv_layer_hwcn(this->input, this->weights, this->bias,
         this->sw_results, params[i], true);
-    //ref_relu_layer(this->sw_results);
+    ref_relu_layer(this->sw_results);
     int size = params[i].numimages * params[i].outchannels *
       params[i].numgroups * params[i].ydim * params[i].xdim;
     for (int j = 0; j < size; ++j) {
