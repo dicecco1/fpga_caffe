@@ -56,7 +56,7 @@ cpfp16 max9(cpfp16 poolInBuf[9][16 * 16], int n, short16 *outMask) {
 
 /* ReLU forward pass implementation, processes 16 input values in parallel */
 
-cpfp16 relu_fw(cpfp16 outVal, short *outBufRelu, bool enable) {
+cpfp16 relu_fw_nobuf(cpfp16 outVal, bool enable) {
   cpfp16 val = max(outVal);
   short reluOut = 0;
   reluOut |= (val.s0 != cpfp(0)) ? 1 << 0 : 0;
@@ -77,10 +77,8 @@ cpfp16 relu_fw(cpfp16 outVal, short *outBufRelu, bool enable) {
   reluOut |= (val.sf != cpfp(0)) ? 1 << 15 : 0;
 
   if (enable) {
-    *outBufRelu = reluOut;
     return val;
   } else {
-    *outBufRelu = reluOut;
     return outVal;
   }
 }
@@ -128,10 +126,6 @@ void crp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
   cpfp16 inBuf[4][2 * 256 * 16];
 #pragma HLS ARRAY_PARTITION variable=inBuf complete dim=1
 
-  // Output relu buffer, used only in forward pass
-  short outBufRelu[OCFACT][8 * 256];
-#pragma HLS ARRAY_PARTITION variable=outBufRelu complete dim=1
-
   // Output buffer used for writing
   cpfp16 outBuf[OCFACT][256];
 #pragma HLS ARRAY_PARTITION variable=outBuf complete dim=1
@@ -150,10 +144,6 @@ void crp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 
   // Pooling output buffer, used for outputting max pooling value
   cpfp16 poolOutBuf[16 * 16];
-
-  // Pooling output mask buffer, used for storing max input tags
-  short outMask[16 * 256];
-#pragma HLS ARRAY_PARTITION variable=outMask cyclic factor=16 dim=1
 
   cpfp multRes[OCFACT][4][16];
 #pragma HLS ARRAY_PARTITION variable=multRes complete dim=1
@@ -421,7 +411,6 @@ void crp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               ++counter_bw) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable outBuf inter false
-#pragma HLS DEPENDENCE variable outBufRelu inter false
 #pragma HLS DEPENDENCE variable finalOut inter false
               // FW index calculation
               if (iter == imgFact) {
@@ -538,8 +527,8 @@ void crp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                 // accumulate every four cycles. In the forward path ReLU is
                 // applied when all accumulations for an output are computed.
                 if (accEnable) {
-                  outBuf[k][outIdx] = relu_fw(outBuf[k][outIdx] + finalOut[k],
-                      &(outBufRelu[k][outIdx]), reluFWEnable);
+                  outBuf[k][outIdx] = relu_fw_nobuf(outBuf[k][outIdx] +
+                    finalOut[k], reluFWEnable);
                 }               
               }
             }
@@ -561,10 +550,6 @@ void crp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 
               bool writeEnable = ((o * OCFACT + k) * burstoc < outChannels);
 
-              if (relu && (writeEnable) && (n == rpo - 1)) {
-                memcpy(tagVals + outIdx, outBufRelu[k], sizeof(short) *
-                    outSize);
-              }
               if (writeEnable)
                 memcpy(output + outIdx, outBuf[k], sizeof(cpfp16) * outSize);
             }
@@ -610,23 +595,6 @@ void crp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               short16 mask;
               // Compute 3x3 max window
               poolOutBuf[n * 2 + j] = max9(poolInBuf, n * 2 + j, &mask);
-              // Set the tag for each input image
-              outMask[(n * 2 + j) * 16 + 0] = mask.s0;
-              outMask[(n * 2 + j) * 16 + 1] = mask.s1;
-              outMask[(n * 2 + j) * 16 + 2] = mask.s2;
-              outMask[(n * 2 + j) * 16 + 3] = mask.s3;
-              outMask[(n * 2 + j) * 16 + 4] = mask.s4;
-              outMask[(n * 2 + j) * 16 + 5] = mask.s5;
-              outMask[(n * 2 + j) * 16 + 6] = mask.s6;
-              outMask[(n * 2 + j) * 16 + 7] = mask.s7;
-              outMask[(n * 2 + j) * 16 + 8] = mask.s8;
-              outMask[(n * 2 + j) * 16 + 9] = mask.s9;
-              outMask[(n * 2 + j) * 16 + 10] = mask.sa;
-              outMask[(n * 2 + j) * 16 + 11] = mask.sb;
-              outMask[(n * 2 + j) * 16 + 12] = mask.sc;
-              outMask[(n * 2 + j) * 16 + 13] = mask.sd;
-              outMask[(n * 2 + j) * 16 + 14] = mask.se;
-              outMask[(n * 2 + j) * 16 + 15] = mask.sf;
             }
           }
           // Write the output and tags to on-board memory
@@ -634,8 +602,6 @@ void crp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               c * burstChannels) * imgFact;
           memcpy(output + outIdx, poolOutBuf, sizeof(cpfp16) *
               imgFact * burstChannels);
-          memcpy(tagVals + outIdx * 16, outMask,
-              sizeof(short) * numImages * burstChannels);
         }
       }
     }

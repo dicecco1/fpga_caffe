@@ -21,10 +21,10 @@ class CRPConvolutionFWHWCNCPFPTest : public OCLDeviceTest<TypeParam> {
     params.resize(1);
     params[0].numgroups = 1;
     params[0].inchannels = 16;
-    params[0].outchannels = 16;
+    params[0].outchannels = 1;
     params[0].burstchannels = 16;
     params[0].rpo = 1;
-    params[0].rpofm = 16;
+    params[0].rpofm = 1;
     params[0].burstydim = 1;
     params[0].ydim = 4;
     params[0].xdim = 4;
