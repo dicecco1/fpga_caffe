@@ -311,8 +311,8 @@ void wcrp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
   ap_uint<10> ydim_out = ((ydim - ksize + 2 * pad) / stride) + 1;
   short xdim_out = ydim_out;
   short xdim_iter = (xdim_out % 2 == 0) ? xdim_out >> 1 : (xdim_out >> 1) + 1;
-
-  short kExtIter = (ksize / 3) + 1;
+  short kdiv = ksize / 3;
+  short kExtIter = (ksize % 3 == 0) ? kdiv : kdiv + 1;
 
   ap_uint<8> imgFact = numImages >> 4;
   short burstFact = burstChannels >> 2;
