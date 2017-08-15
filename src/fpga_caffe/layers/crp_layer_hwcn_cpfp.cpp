@@ -193,7 +193,6 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
   short inMask[16 * 256];
 #pragma HLS ARRAY_PARTITION variable=inMask cyclic factor=16 dim=1
 
-
   cpfp multRes[OCFACT][4][16];
 #pragma HLS ARRAY_PARTITION variable=multRes complete dim=1
 #pragma HLS ARRAY_PARTITION variable=multRes complete dim=2
@@ -345,10 +344,10 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
       for (int o = 0; o < ofm_iters; ++o) {
         for (int y = 0; y < ydim_out; ++y) {
           for (int x = 0; x < xdim_out; ++x) {
-            ap_uint<8> yk_off = 0;
-            ap_uint<8> xk_off = 0;
-            ap_uint<8> yksize = 0;
-            ap_uint<8> xksize = 0;
+            ap_uint<4> yk_off = 0;
+            ap_uint<4> xk_off = 0;
+            ap_uint<4> yksize = 0;
+            ap_uint<4> xksize = 0;
             bool xkset = false;
             bool ykset = false;
             // Iterate over each window position
@@ -503,83 +502,84 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               }
             }
 
-            ap_uint<10> w_off = 0;
-            ap_uint<6> img_off = 0;
-            ap_uint<10> iter = 0;
-            ap_uint<8> xdim_off = 0;
-            ap_uint<8> ydim_off = 0;
-            ap_uint<2> counter_bw = 0;
-            ap_uint<2> counter_fw = 0;
-            ap_uint<5> b_off = 0;
+            ap_uint<10> w_off_fw = 0, w_off_bw = 0;
+            ap_uint<6> img_off_fw = 0, img_off_bw = 0;
+            ap_uint<10> iter_fw = 0, iter_bw = 0;
+            ap_uint<4> xdim_off_fw = 0, ydim_off_fw = 0;
+            ap_uint<4> xdim_off_bw = 0, ydim_off_bw = 0;
+            ap_uint<2> counter_bw = 0, counter_fw = 0;
+            ap_uint<5> b_off_fw = 0, b_off_bw;
             int mac_iterations = burstoc * yksize * xksize * imgFact
               * burstFact;
-            MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter,
-              ++counter_bw) {
+            MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter_bw,
+              ++iter_fw, ++counter_bw) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable outBuf inter false
 #pragma HLS DEPENDENCE variable outBufRelu inter false
 #pragma HLS DEPENDENCE variable finalOut inter false
 #pragma HLS DEPENDENCE variable wUpdate inter false
-              if (!bwMode) {
-                // FW index calculation
-                if (iter == imgFact) {
-                  if (b_off == burstoc - 1) {
-                    b_off = 0;
-                    if (w_off == burstFact - 1) {
-                      counter_fw = 0;
-                      w_off = 0;
-                      if (xdim_off == xksize - 1) {
-                        xdim_off = 0;
-                        ydim_off++;
-                      } else {
-                        xdim_off++;
-                      }
+              // FW index calculation
+              if (iter_fw == imgFact) {
+                if (b_off_fw == burstoc - 1) {
+                  b_off_fw = 0;
+                  if (w_off_fw == burstFact - 1) {
+                    counter_fw = 0;
+                    w_off_fw = 0;
+                    if (xdim_off_fw == xksize - 1) {
+                      xdim_off_fw = 0;
+                      ydim_off_fw++;
                     } else {
-                      counter_fw++;
-                      w_off++;
+                      xdim_off_fw++;
                     }
                   } else {
-                    b_off++;
+                    counter_fw++;
+                    w_off_fw++;
                   }
-                  iter = 0;
+                } else {
+                  b_off_fw++;
                 }
-                img_off = iter;
-              } else {
-                // BW index calculation
-                if (iter == burstFact) {
-                  if (b_off == burstoc - 1) {
-                    b_off = 0;
-                    if (xdim_off == xksize - 1) {
-                      xdim_off = 0;
-                      if (ydim_off == yksize - 1) {
-                        ydim_off = 0;
-                        img_off++;
-                      } else {
-                        ydim_off++;
-                      }
-                    } else {
-                      xdim_off++;
-                    }
-                  } else {
-                    b_off++;
-                  }
-                  iter = 0;
-                }
-                w_off = iter;
+                iter_fw = 0;
               }
+              img_off_fw = iter_fw;
+              // BW index calculation
+              if (iter_bw == burstFact) {
+                if (b_off_bw == burstoc - 1) {
+                  b_off_bw = 0;
+                  if (xdim_off_bw == xksize - 1) {
+                    xdim_off_bw = 0;
+                    if (ydim_off_bw == yksize - 1) {
+                      ydim_off_bw = 0;
+                      img_off_bw++;
+                    } else {
+                      ydim_off_bw++;
+                    }
+                  } else {
+                    xdim_off_bw++;
+                  }
+                } else {
+                  b_off_bw++;
+                }
+                iter_bw = 0;
+              }
+              w_off_bw = iter_bw;
 
-              short filt_off = (yk_off + ydim_off) * ksize + xk_off +
-                xdim_off;
-              short wIdxFW = (b_off * ksize * ksize + filt_off) * wcFact +
-                (w_off >> 2);
-              short wIdxBW = b_off * imgFact + img_off;
+              short filt_off_fw = (yk_off + ydim_off_fw) * ksize + xk_off +
+                xdim_off_fw;
+              short filt_off_bw = (yk_off + ydim_off_bw) * ksize + xk_off +
+                xdim_off_bw;
+              short wIdxFW = (b_off_fw * ksize * ksize + filt_off_fw) * wcFact
+                + (w_off_fw >> 2);
+              short wIdxBW = b_off_bw * imgFact + img_off_bw;
               short wIdx = (bwMode) ? wIdxBW : wIdxFW;
               short foutIdx = counter_bw * 4;
-              short inIdx = (filt_off * burstFact + w_off) * imgFact
-                + img_off;
-              short outIdxFW = b_off * imgFact + img_off;
-              short outIdxBW = b_off * ksize * ksize * wcFact +
-                filt_off * wcFact + (w_off >> 2);
+              short inIdxFW = (filt_off_fw * burstFact + w_off_fw) * imgFact
+                + img_off_fw;
+              short inIdxBW = (filt_off_bw * burstFact + w_off_bw) * imgFact
+                + img_off_bw;
+              short outIdxFW = b_off_fw * imgFact + img_off_fw;
+              short outIdxBW = b_off_bw * ksize * ksize * wcFact +
+                filt_off_bw * wcFact + (w_off_bw >> 2);
+              short inIdx = (bwMode) ? inIdxBW : inIdxFW;
               short outIdx = (bwMode) ? outIdxBW : outIdxFW;
               bool accEnable = (bwMode) ? (counter_bw == 3) : true;
 
@@ -699,9 +699,9 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                   else
                     finalOut[k][j] = addTreeS2[k][j];
                 }
-                bool reluFWEnable = relu && (fwMode) && (n == rpo - 1)
-                  && (w_off == burstFact - 1) && (xdim_off == xksize - 1) &&
-                  (ydim_off == yksize - 1);
+                bool reluFWEnable = relu && fwMode && (n == rpo - 1)
+                  && (w_off_fw == burstFact - 1) && (xdim_off_fw == xksize - 1)
+                  && (ydim_off_fw == yksize - 1);
                 // 16 Accumulations, forward accumulate every cycle, backward
                 // accumulate every four cycles. In the forward path ReLU is
                 // applied when all accumulations for an output are computed.
@@ -831,77 +831,32 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                 sizeof(short) * numImages * burstChannels);
 
             // Initialization logic to reduce the amount of transfers required
-            // TODO: simplify this logic
-            if ((ph == 0) && (pw == 0)) {
-              for (int i = 0; i < imgFact * burstChannels; ++i) {
-#pragma HLS pipeline
-                for (int h = 0; h < 3; ++h) {
-                  for (int w = 0; w < 3; ++w) {
-                    poolOutBufBW[h * 3 + w][i] = cpfp(0);
-                  }
-                }
-              }
-            } else if ((ph != 0) && (pw == 0)) {
-               for (int i = 0; i < imgFact * burstChannels; ++i) {
-#pragma HLS pipeline
-                for (int h = 1; h < 3; ++h) {
-                  for (int w = 0; w < 3; ++w) {
-                    poolOutBufBW[h * 3 + w][i] = cpfp(0);
-                  }
-                }
-              }
-              if ((pksize == 3) && (hstart < ydim)) {
-                for (int w = 0; w < 3; ++w) {
-                  int outIdx = ((hstart * xdim + (wstart + w)) * inChannels +
-                      c * burstChannels) * imgFact;
-                  if (wstart + w < xdim)
-                    memcpy(poolOutBufBW[w], output + outIdx, sizeof(cpfp16) *
-                        imgFact * burstChannels);
-                }
-              } else {
-                for (int i = 0; i < imgFact * burstChannels; ++i) {
-                  for (int w = 0; w < 3; ++w) {
-                    poolOutBufBW[w][i] = cpfp(0);
-                  }
-                }
-              }
-            } else if ((ph == 0) && (pw != 0)) {
-                for (int i = 0; i < imgFact * burstChannels; ++i) {
-#pragma HLS pipeline
-                for (int h = 0; h < 3; ++h) {
-                  for (int w = 1; w < 3; ++w) {
-                    poolOutBufBW[h * 3 + w][i] = cpfp(0);
-                  }
-                }
-              }
-            } else {
-              for (int i = 0; i < imgFact * burstChannels; ++i) {
-#pragma HLS pipeline
-                for (int h = 1; h < 3; ++h) {
-                  for (int w = 1; w < 3; ++w) {
-                    poolOutBufBW[h * 3 + w][i] = cpfp(0);
-                  }
-                }
-              }
-              if ((pksize == 3) && (hstart < ydim)) {
-                for (int w = 1; w < 3; ++w) {
-                  int outIdx = ((hstart * xdim + (wstart + w)) * inChannels +
-                      c * burstChannels) * imgFact;
-                  if (wstart + w < xdim) {
-                    memcpy(poolOutBufBW[w], output + outIdx, sizeof(cpfp16) *
-                        imgFact * burstChannels);
-                  }
-                }
-              } else {
-                for (int i = 0; i < imgFact * burstChannels; ++i) {
-#pragma HLS pipeline
-                  for (int w = 1; w < 3; ++w) {
-                    poolOutBufBW[w][i] = cpfp(0);
-                  }
+            
+            for (int h = 0; h < 3; ++h) {
+              for (int w = 0; w < 3; ++w) {
+                int outIdx = (((hstart + h) * xdim + (wstart + w)) *
+                  inChannels + c * burstChannels) * imgFact;
+                if ((ph != 0) && ((pksize == 3) && (hstart < ydim) && (h == 0)
+                  && (wstart + w < xdim))) {
+                  if ((pw == 0) || ((pw != 0) && (w != 0)))
+                    memcpy(poolOutBufBW[h * 3 + w], output + outIdx,
+                      sizeof(cpfp16) * imgFact * burstChannels);
                 }
               }
             }
 
+            for (int i = 0; i < imgFact * burstChannels; ++i) {
+#pragma HLS pipeline
+              for (int h = 0; h < 3; ++h) {
+                for (int w = 0; w < 3; ++w) {
+                  if (((ph == 0) && ((pw == 0) || ((pw != 0) && (w != 0)))) ||
+                    (((ph != 0) && ((pw == 0) || ((pw != 0) && (w != 0)))) &&
+                    ((h != 0) || (!((pksize == 3) && (hstart < ydim)))))) {
+                    poolOutBufBW[h * 3 + w][i] = 0;
+                  }
+                }
+              }
+            }
             // Accumulate diffs in overlapping case, in non-overlapping case
             // accumulation isn't required
             for (int n = 0; n < imgFact * burstChannels; ++n) {
@@ -934,14 +889,12 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                   memcpy(output + outIdx, poolOutBufBW[h * 3 + w],
                       sizeof(cpfp16) * imgFact * burstChannels);
               }
-              // Shift output window to the left if overlapping pooling
-              for (int i = 0; i < imgFact * burstChannels; ++i) {
+            }
+              // Shift output window to the left
+            for (int i = 0; i < imgFact * burstChannels; ++i) {
 #pragma HLS pipeline
-                if (pksize == 3) {
-                  poolOutBufBW[h * 3][i] = poolOutBufBW[h * 3 + 2][i];
-                } else {
-                  poolOutBufBW[h * 3][i] = cpfp(0);
-                }
+              for (int h = 0; h < 3; ++h) {
+                poolOutBufBW[h * 3][i] = poolOutBufBW[h * 3 + 2][i];
               }
             } 
           }
