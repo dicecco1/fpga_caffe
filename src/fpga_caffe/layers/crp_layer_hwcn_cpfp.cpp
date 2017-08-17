@@ -97,12 +97,25 @@ cpfp16 relu_fw(cpfp16 outVal, short *outBufRelu, bool enable) {
 }
 
 /* ReLU backward pass implementation, allows the input through if enable is
- * high */
+ * high, processes 16 inputs in parallel */
 
-cpfp relu_bw(cpfp input, bool enable) {
-#pragma HLS INLINE
-  cpfp res = (enable) ? input : cpfp(0);
-  return res;
+void relu_bw(cpfp16 input, bool enable[16], cpfp output[16]) {
+  output[0] = (enable[0]) ? input.s0 : cpfp(0);
+  output[1] = (enable[1]) ? input.s1 : cpfp(0);
+  output[2] = (enable[2]) ? input.s2 : cpfp(0);
+  output[3] = (enable[3]) ? input.s3 : cpfp(0);   
+  output[4] = (enable[4]) ? input.s4 : cpfp(0);
+  output[5] = (enable[5]) ? input.s5 : cpfp(0);
+  output[6] = (enable[6]) ? input.s6 : cpfp(0);
+  output[7] = (enable[7]) ? input.s7 : cpfp(0);
+  output[8] = (enable[8]) ? input.s8 : cpfp(0);
+  output[9] = (enable[9]) ? input.s9 : cpfp(0);
+  output[10] = (enable[10]) ? input.sa : cpfp(0);
+  output[11] = (enable[11]) ? input.sb : cpfp(0);
+  output[12] = (enable[12]) ? input.sc : cpfp(0);
+  output[13] = (enable[13]) ? input.sd : cpfp(0);
+  output[14] = (enable[14]) ? input.se : cpfp(0);
+  output[15] = (enable[15]) ? input.sf : cpfp(0);
 }
 
 extern "C" {
@@ -570,7 +583,6 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               short wIdxFW = (b_off_fw * ksize * ksize + filt_off_fw) * wcFact
                 + (w_off_fw >> 2);
               short wIdxBW = b_off_bw * imgFact + img_off_bw;
-              short wIdx = (bwMode) ? wIdxBW : wIdxFW;
               short foutIdx = counter_bw * 4;
               short inIdxFW = (filt_off_fw * burstFact + w_off_fw) * imgFact
                 + img_off_fw;
@@ -581,6 +593,7 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                 filt_off_bw * wcFact + (w_off_bw >> 2);
               short inIdx = (bwMode) ? inIdxBW : inIdxFW;
               short outIdx = (bwMode) ? outIdxBW : outIdxFW;
+              short wIdx = (bwMode) ? wIdxBW : wIdxFW;
               bool accEnable = (bwMode) ? (counter_bw == 3) : true;
 
               for (int k = 0; k < OCFACT; ++k) {
@@ -592,22 +605,7 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 
                 // Apply backward ReLU if relu, reluWeights, and backward is
                 // set
-                weightIn[0] = relu_bw(wBuf[k][wIdx].s0, reluEnW[k][0]);
-                weightIn[1] = relu_bw(wBuf[k][wIdx].s1, reluEnW[k][1]);
-                weightIn[2] = relu_bw(wBuf[k][wIdx].s2, reluEnW[k][2]);
-                weightIn[3] = relu_bw(wBuf[k][wIdx].s3, reluEnW[k][3]);   
-                weightIn[4] = relu_bw(wBuf[k][wIdx].s4, reluEnW[k][4]);
-                weightIn[5] = relu_bw(wBuf[k][wIdx].s5, reluEnW[k][5]);
-                weightIn[6] = relu_bw(wBuf[k][wIdx].s6, reluEnW[k][6]);
-                weightIn[7] = relu_bw(wBuf[k][wIdx].s7, reluEnW[k][7]);
-                weightIn[8] = relu_bw(wBuf[k][wIdx].s8, reluEnW[k][8]);
-                weightIn[9] = relu_bw(wBuf[k][wIdx].s9, reluEnW[k][9]);
-                weightIn[10] = relu_bw(wBuf[k][wIdx].sa, reluEnW[k][10]);
-                weightIn[11] = relu_bw(wBuf[k][wIdx].sb, reluEnW[k][11]);
-                weightIn[12] = relu_bw(wBuf[k][wIdx].sc, reluEnW[k][12]);
-                weightIn[13] = relu_bw(wBuf[k][wIdx].sd, reluEnW[k][13]);
-                weightIn[14] = relu_bw(wBuf[k][wIdx].se, reluEnW[k][14]);
-                weightIn[15] = relu_bw(wBuf[k][wIdx].sf, reluEnW[k][15]);
+                relu_bw(wBuf[k][wIdx], reluEnW[k], weightIn);
                 for (int m = 0; m < 4; ++m) {
                   for (int j = 0; j < 16; ++j) {
                     if (bwMode)
@@ -616,29 +614,14 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                       weightVal[m][j] = weightIn[counter_fw * 4 + m];
                   }
 
-                  short reluVal = (backward == 2) ? inBufRelu[m][inIdx] : -1;
+                  short reluVal = inBufRelu[m][inIdx];
 
                   for (int j = 0; j < 16; ++j)
                     reluEn[m][j] = ((reluVal >> j) & 0x1) ||
                       fwMode || (relu == 0) || (reluWeights == 1);
                   // Apply backward ReLU on the input values if relu, 
                   // reluWeights == 0 and backward != 0
-                  inVal[m][0] = relu_bw(inBuf[m][inIdx].s0, reluEn[m][0]);
-                  inVal[m][1] = relu_bw(inBuf[m][inIdx].s1, reluEn[m][1]);
-                  inVal[m][2] = relu_bw(inBuf[m][inIdx].s2, reluEn[m][2]);
-                  inVal[m][3] = relu_bw(inBuf[m][inIdx].s3, reluEn[m][3]);
-                  inVal[m][4] = relu_bw(inBuf[m][inIdx].s4, reluEn[m][4]);
-                  inVal[m][5] = relu_bw(inBuf[m][inIdx].s5, reluEn[m][5]);
-                  inVal[m][6] = relu_bw(inBuf[m][inIdx].s6, reluEn[m][6]);
-                  inVal[m][7] = relu_bw(inBuf[m][inIdx].s7, reluEn[m][7]);
-                  inVal[m][8] = relu_bw(inBuf[m][inIdx].s8, reluEn[m][8]);
-                  inVal[m][9] = relu_bw(inBuf[m][inIdx].s9, reluEn[m][9]);
-                  inVal[m][10] = relu_bw(inBuf[m][inIdx].sa, reluEn[m][10]);
-                  inVal[m][11] = relu_bw(inBuf[m][inIdx].sb, reluEn[m][11]);
-                  inVal[m][12] = relu_bw(inBuf[m][inIdx].sc, reluEn[m][12]);
-                  inVal[m][13] = relu_bw(inBuf[m][inIdx].sd, reluEn[m][13]);
-                  inVal[m][14] = relu_bw(inBuf[m][inIdx].se, reluEn[m][14]);
-                  inVal[m][15] = relu_bw(inBuf[m][inIdx].sf, reluEn[m][15]);
+                  relu_bw(inBuf[m][inIdx], reluEn[m], inVal[m]);
 
                   // 4x16xOCFACT multiplications
                   for (int j = 0; j < 16; ++j) 
@@ -779,31 +762,28 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                     poolInBuf[h * 3 + w][n] = cpfp(CPFP_MIN_VAL);
               }
             }
-            POOL_LOOP: for (int n = 0; n < (imgFact * burstChannels) >> 1;
-              ++n) {
+            POOL_LOOP: for (int n = 0; n < imgFact * burstChannels; ++n) {
 #pragma HLS pipeline
-              for (int j = 0; j < 2; ++j) {
-                short16 mask;
-                // Compute 3x3 max window
-                poolOutBuf[n * 2 + j] = max9(poolInBuf, n * 2 + j, &mask);
-                // Set the tag for each input image
-                outMask[(n * 2 + j) * 16 + 0] = mask.s0;
-                outMask[(n * 2 + j) * 16 + 1] = mask.s1;
-                outMask[(n * 2 + j) * 16 + 2] = mask.s2;
-                outMask[(n * 2 + j) * 16 + 3] = mask.s3;
-                outMask[(n * 2 + j) * 16 + 4] = mask.s4;
-                outMask[(n * 2 + j) * 16 + 5] = mask.s5;
-                outMask[(n * 2 + j) * 16 + 6] = mask.s6;
-                outMask[(n * 2 + j) * 16 + 7] = mask.s7;
-                outMask[(n * 2 + j) * 16 + 8] = mask.s8;
-                outMask[(n * 2 + j) * 16 + 9] = mask.s9;
-                outMask[(n * 2 + j) * 16 + 10] = mask.sa;
-                outMask[(n * 2 + j) * 16 + 11] = mask.sb;
-                outMask[(n * 2 + j) * 16 + 12] = mask.sc;
-                outMask[(n * 2 + j) * 16 + 13] = mask.sd;
-                outMask[(n * 2 + j) * 16 + 14] = mask.se;
-                outMask[(n * 2 + j) * 16 + 15] = mask.sf;
-              }
+              short16 mask;
+              // Compute 3x3 max window
+              poolOutBuf[n] = max9(poolInBuf, n, &mask);
+              // Set the tag for each input image
+              outMask[n * 16 + 0] = mask.s0;
+              outMask[n * 16 + 1] = mask.s1;
+              outMask[n * 16 + 2] = mask.s2;
+              outMask[n * 16 + 3] = mask.s3;
+              outMask[n * 16 + 4] = mask.s4;
+              outMask[n * 16 + 5] = mask.s5;
+              outMask[n * 16 + 6] = mask.s6;
+              outMask[n * 16 + 7] = mask.s7;
+              outMask[n * 16 + 8] = mask.s8;
+              outMask[n * 16 + 9] = mask.s9;
+              outMask[n * 16 + 10] = mask.sa;
+              outMask[n * 16 + 11] = mask.sb;
+              outMask[n * 16 + 12] = mask.sc;
+              outMask[n * 16 + 13] = mask.sd;
+              outMask[n * 16 + 14] = mask.se;
+              outMask[n * 16 + 15] = mask.sf;
             }
             // Write the output and tags to on-board memory
             int outIdx = ((ph * pooled_width + pw) * inChannels +
@@ -825,22 +805,21 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
             int inIdx = ((ph * pooled_width + pw) * inChannels + c *
                 burstChannels) * imgFact;
             // Read the input diffs and the tag values
-            memcpy(poolInBufBW, input + inIdx, sizeof(cpfp16) * imgFact
-                * burstChannels);
-            memcpy(inMask, tagVals + inIdx * 16,
-                sizeof(short) * numImages * burstChannels);
+            memcpy(poolInBufBW, input + inIdx, sizeof(cpfp16) * imgFact *
+                burstChannels);
+            memcpy(inMask, tagVals + inIdx * 16, sizeof(short) * numImages *
+                burstChannels);
 
             // Initialization logic to reduce the amount of transfers required
             
-            for (int h = 0; h < 3; ++h) {
+            if (pksize == 3) {
               for (int w = 0; w < 3; ++w) {
-                int outIdx = (((hstart + h) * xdim + (wstart + w)) *
-                  inChannels + c * burstChannels) * imgFact;
-                if ((ph != 0) && ((pksize == 3) && (hstart < ydim) && (h == 0)
-                  && (wstart + w < xdim))) {
-                  if ((pw == 0) || ((pw != 0) && (w != 0)))
-                    memcpy(poolOutBufBW[h * 3 + w], output + outIdx,
-                      sizeof(cpfp16) * imgFact * burstChannels);
+                int outIdx = ((hstart * xdim + (wstart + w)) * inChannels +
+                  c * burstChannels) * imgFact;
+                if ((ph != 0) && (hstart < ydim) && (wstart + w < xdim) &&
+                    ((pw == 0) || (w != 0))) {
+                  memcpy(poolOutBufBW[w], output + outIdx,
+                    sizeof(cpfp16) * imgFact * burstChannels); 
                 }
               }
             }
@@ -849,9 +828,8 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 #pragma HLS pipeline
               for (int h = 0; h < 3; ++h) {
                 for (int w = 0; w < 3; ++w) {
-                  if (((ph == 0) && ((pw == 0) || ((pw != 0) && (w != 0)))) ||
-                    (((ph != 0) && ((pw == 0) || ((pw != 0) && (w != 0)))) &&
-                    ((h != 0) || (!((pksize == 3) && (hstart < ydim)))))) {
+                  if ((pksize != 3) || ((ph == 0) && ((pw == 0) || (w != 0)))
+                    || (((h != 0) && (ph != 0)) && ((pw == 0) || (w != 0)))) {
                     poolOutBufBW[h * 3 + w][i] = 0;
                   }
                 }
@@ -880,17 +858,16 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               poolOutBufBW[inMask[n * 16 + 15]][n].sf += poolInBufBW[n].sf;
             }
             // Write the output diff window to on-board memory
-            for (int h = 0; h < 3; ++h) {
-              for (int w = 0; w < 2; ++w) {
+            for (int h = 0; h < pksize; ++h) {
+              for (int w = 0; w < pksize; ++w) {
                 int outIdx = (((hstart + h) * xdim + (wstart + w))
                     * inChannels + c * burstChannels) * imgFact;
-                if ((hstart + h < ydim) && (wstart + w < xdim) &&
-                    (h < pksize) && (w < pksize))
+                if ((hstart + h < ydim) && (wstart + w < xdim))
                   memcpy(output + outIdx, poolOutBufBW[h * 3 + w],
                       sizeof(cpfp16) * imgFact * burstChannels);
               }
             }
-              // Shift output window to the left
+            // Shift output window to the left
             for (int i = 0; i < imgFact * burstChannels; ++i) {
 #pragma HLS pipeline
               for (int h = 0; h < 3; ++h) {
