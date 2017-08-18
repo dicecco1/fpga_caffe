@@ -135,7 +135,7 @@ extern "C" {
  * group_idx:     Group index used for forward convolution only currently
  */ 
 
-void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
+void crp_layer_hwcn_cpfp_8pegrp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
     cpfp16 *output, short *tagVals, int *params, int group_idx) { 
 // Ports 
 #pragma HLS data_pack variable=weights
@@ -248,7 +248,7 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 
   // Enables for the two relu paths in the backward pass
 
-  bool reluEn[4][16];
+  bool reluEn[8][16];
 #pragma HLS ARRAY_PARTITION variable=reluEn complete dim=1
 #pragma HLS ARRAY_PARTITION variable=reluEn complete dim=2
 
@@ -520,7 +520,7 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
             ap_uint<4> xdim_off_fw = 0, ydim_off_fw = 0;
             ap_uint<4> xdim_off_bw = 0, ydim_off_bw = 0;
             ap_uint<1> counter_bw = 0, counter_fw = 0;
-            ap_uint<5> b_off_fw = 0, b_off_bw = 0;
+            ap_uint<6> b_off_fw = 0, b_off_bw = 0;
             int mac_iterations = burstoc * yksize * xksize * imgFact
               * burstFact;
             MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter_bw,
@@ -580,7 +580,7 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               short filt_off_bw = (yk_off + ydim_off_bw) * ksize + xk_off +
                 xdim_off_bw;
               short wIdxFW = (b_off_fw * ksize * ksize + filt_off_fw) * wcFact
-                + (w_off_fw >> 3);
+                + (w_off_fw >> 1);
               short wIdxBW = b_off_bw * imgFact + img_off_bw;
               short foutIdx = counter_bw * 8;
               short inIdxFW = (filt_off_fw * burstFact + w_off_fw) * imgFact
@@ -589,7 +589,7 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                 + img_off_bw;
               short outIdxFW = b_off_fw * imgFact + img_off_fw;
               short outIdxBW = b_off_bw * ksize * ksize * wcFact +
-                filt_off_bw * wcFact + (w_off_bw >> 3);
+                filt_off_bw * wcFact + (w_off_bw >> 1);
               short inIdx = (bwMode) ? inIdxBW : inIdxFW;
               short outIdx = (bwMode) ? outIdxBW : outIdxFW;
               short wIdx = (bwMode) ? wIdxBW : wIdxFW;
@@ -635,12 +635,13 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                 for (int off = 0; off < 4; ++off) {
                   for (int m = 0; m < 2; ++m) {
                     for (int j = 0; j < 8; ++j) {
+                      cpfp temp1, temp2;
                       if (bwMode) {
                         temp1 = multRes[k][off * 2 + m][j * 2];
                         temp2 = multRes[k][off * 2 + m][j * 2 + 1];
                       } else {
-                        temp1 = multres[k][off * 2 + 0][m * 8 + j];
-                        temp2 = multres[k][off * 2 + 1][m * 8 + j];
+                        temp1 = multRes[k][off * 2 + 0][m * 8 + j];
+                        temp2 = multRes[k][off * 2 + 1][m * 8 + j];
                       }
                       addTreeS1[k][(off * 2 + m) * 8 + j] = temp1 + temp2;
                     }
@@ -683,7 +684,8 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 
                 // Stage 4 BW: 2x8->1x8
                 for (int m = 0; m < 8; ++m)
-                  addTreeS4[k][m] = addTreeS3[k][m * 2] + addTreeS3[m * 2 + 1];
+                  addTreeS4[k][m] = addTreeS3[k][m * 2] +
+                    addTreeS3[k][m * 2 + 1];
 
                 for (int m = 0; m < 8; ++m)
                   wUpdate[k][foutIdx + m] = addTreeS4[k][m];

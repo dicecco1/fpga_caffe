@@ -6,13 +6,13 @@ endif
 
 SDA_FLOW = cpu_emu
 XOCC = xocc
-KERNEL_SRCS = crp_layer_hwcn_cpfp.cpp
-KERNEL_NAME = crp_layer_hwcn_cpfp
+KERNEL_SRCS = crp_layer_hwcn_cpfp_8pegrp.cpp
+KERNEL_NAME = crp_layer_hwcn_cpfp_8pegrp
 NK = 1
 
 DSA = xilinx:adm-pcie-8k5:2ddr:3.2
 
-XCLBIN_NAME=crp_layer_hwcn_cpfp
+XCLBIN_NAME=crp_layer_hwcn_cpfp_8pegrp
 
 INCLUDE_DIR=../../../include/
 
