@@ -7,7 +7,7 @@
 #include "../../../include/fpga_caffe/cpfp.hpp"
 #include "../../../include/fpga_caffe/vector_types.hpp"
 
-#define OCFACT 1 
+#define OCFACT 2 
 
 /* Computes the maximum value of a 3x3 window via a reduction tree,
  * also saves the window index at each stage to determine the index of the
@@ -594,6 +594,16 @@ void crp_layer_hwcn_cpfp_8pegrp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               short outIdx = (bwMode) ? outIdxBW : outIdxFW;
               short wIdx = (bwMode) ? wIdxBW : wIdxFW;
               bool accEnable = (bwMode) ? (counter_bw == 1) : true;
+              
+              for (int m = 0; m < 8; ++m) {
+                short reluVal = inBufRelu[m][inIdx];
+                for (int j = 0; j < 16; ++j)
+                  reluEn[m][j] = ((reluVal >> j) & 0x1) ||
+                    fwMode || (relu == 0) || (reluWeights == 1);
+                // Apply backward ReLU on the input values if relu, 
+                // reluWeights == 0 and backward != 0
+                relu_bw(inBuf[m][inIdx], reluEn[m], inVal[m]);
+              }
 
               for (int k = 0; k < OCFACT; ++k) {
                 short reluValW = wBufRelu[k][wIdx];
@@ -612,16 +622,7 @@ void crp_layer_hwcn_cpfp_8pegrp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                     else
                       weightVal[m][j] = weightIn[counter_fw * 8 + m];
                   }
-
-                  short reluVal = inBufRelu[m][inIdx];
-
-                  for (int j = 0; j < 16; ++j)
-                    reluEn[m][j] = ((reluVal >> j) & 0x1) ||
-                      fwMode || (relu == 0) || (reluWeights == 1);
-                  // Apply backward ReLU on the input values if relu, 
-                  // reluWeights == 0 and backward != 0
-                  relu_bw(inBuf[m][inIdx], reluEn[m], inVal[m]);
-
+                  
                   // 4x16xOCFACT multiplications
                   for (int j = 0; j < 16; ++j) 
                     multRes[k][m][j] = inVal[m][j] * weightVal[m][j];
