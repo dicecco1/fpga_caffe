@@ -322,6 +322,15 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 
   ap_uint<8> imgFact = numImages >> 4;
   short burstFact = burstChannels >> 2;
+  ap_uint<2> counter_bw_lim;
+
+  if (burstChannels % 16 == 0)
+    counter_bw_lim = 3;
+  else if (burstChannels % 8 == 0)
+    counter_bw_lim = 1;
+  else
+    counter_bw_lim = 0;
+
   short icFact = (inChannels % 16 == 0) ? (inChannels >> 4) :
     (inChannels >> 4) + 1;
   short wcFact = (burstChannels % 16 == 0) ? (burstChannels >> 4) :
@@ -576,6 +585,8 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               }
               w_off_bw = iter_bw;
 
+              if (counter_bw > counter_bw_lim)
+                counter_bw = 0;
               short filt_off_fw = (yk_off + ydim_off_fw) * ksize + xk_off +
                 xdim_off_fw;
               short filt_off_bw = (yk_off + ydim_off_bw) * ksize + xk_off +
@@ -594,7 +605,8 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               short inIdx = (bwMode) ? inIdxBW : inIdxFW;
               short outIdx = (bwMode) ? outIdxBW : outIdxFW;
               short wIdx = (bwMode) ? wIdxBW : wIdxFW;
-              bool accEnable = (bwMode) ? (counter_bw == 3) : true;
+              bool accEnable = (bwMode) ? (counter_bw == counter_bw_lim) :
+                true;
 
               for (int k = 0; k < OCFACT; ++k) {
                 short reluValW = wBufRelu[k][wIdx];
