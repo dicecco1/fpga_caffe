@@ -1441,6 +1441,7 @@ message CRParameter {
   optional uint32 relu = 1 [default = 0];
   optional bool swap_inputs = 2 [default = false];
   optional uint32 num_cu = 3 [default = 1];
+  optional uint32 num_pe = 4 [default = 4];
 }
 message XCLParameter {
   optional bool once = 1 [default = true];

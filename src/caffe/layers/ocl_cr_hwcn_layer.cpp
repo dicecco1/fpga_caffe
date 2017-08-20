@@ -158,7 +158,16 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     weight_pad_ = ((bottom[0]->shape(2) / this->group_) / 16 + 1) * 16;
 
   CRParameter cr_param = this->layer_param_.cr_param();
-  num_cu_ = cr_param.num_cu(); 
+  num_cu_ = cr_param.num_cu();
+  num_pe_ = cr_param.num_pe();
+  switch(num_pe_) {
+    case 4:   burstoc_limit_ = 16;
+              break;
+    case 8:   burstoc_limit_ = 32;
+              break;
+    case 16:  burstoc_limit_ = 64;
+              break;
+  }
   kernel_params *forward_params = &ocl_params_;
   int num_ = bottom[0]->shape(3); 
   forward_params->ydim = bottom[0]->shape(0);
@@ -187,7 +196,7 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     burstoc = 1;
   } else {
     while (rpofm * burstoc < forward_params->outchannels) {
-      if (burstoc < 16)
+      if (burstoc < burstoc_limit_)
         burstoc++;
       else
         rpofm++;
@@ -263,7 +272,7 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     burstoc = 1;
   } else {
     while (rpofm * burstoc < backward_params_bi->outchannels) {
-      if (burstoc < 16)
+      if (burstoc < burstoc_limit_)
         burstoc++;
       else
         rpofm++;
@@ -313,6 +322,7 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 
   shape = (this->blobs_[0])->shape();
 
+  shape[0] = forward_params->rpofm * forward_params->burstydim;
   shape[1] = weight_pad_;
 
   weights_h.Reshape(shape);
@@ -321,6 +331,7 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 
   if (shape[0] % 16 != 0)
     shape[0] = ((shape[0] / 16) + 1) * 16;
+  shape[1] = backward_params_bi->rpofm * backward_params_bi->burstydim;
 
   weights_h_r.Reshape(shape);
 
@@ -419,20 +430,25 @@ void OCLCRHWCNLayer<Dtype>::copyToHalfWeights(const Dtype *input,
   int ic_new = weight_pad_;
   int bc_new = weight_pad_ / params.rpo;
   int ksize = params.ksize;
-
-  for (int o = 0; o < oc; ++o) {
-    for (int n = 0; n < ic_new / bc_new; ++n) {
-      for (int k = 0; k < params.ksize * params.ksize; ++k) {
-        for (int m = 0; m < bc_new / 4; ++m) {
-          for (int j = 0; j < 4; ++j) {
-            int in_idx = (o * ic + n * bc + m + j * (bc / 4)) * ksize * ksize
-              + k;
-            int out_idx = o * ksize * ksize * ic_new +
-              (n * ksize * ksize + k) * bc_new + m * 4 + j;
-            if (m < bc / 4) {
-              output[out_idx] = cpfp((float)input[in_idx]);
-            } else {
-              output[out_idx] = cpfp(0);
+  int burstoc = params.burstydim;
+  int rpofm = params.rpofm;
+  for (int o = 0; o < rpofm; ++o) {
+    for (int b = 0; b < burstoc; ++b) {
+      for (int n = 0; n < ic_new / bc_new; ++n) {
+        for (int k = 0; k < params.ksize * params.ksize; ++k) {
+          for (int m = 0; m < bc_new / num_pe_; ++m) {
+            for (int j = 0; j < num_pe_; ++j) {
+              int burst_idx = k * bc_new + m * num_pe_ + j + b * ksize * ksize
+                * bc_new; 
+              int in_idx = ((o * burstoc + b) * ic + n * bc + m + j *
+                (bc / num_pe_)) * ksize * ksize + k;
+              int out_idx = o * burstoc * ksize * ksize * ic_new +
+                n * bc_new * ksize * ksize * burstoc + burst_idx;
+              if (m < bc / num_pe_ && o * burstoc + b < oc) {
+                output[out_idx] = cpfp((float)input[in_idx]);
+              } else {
+                output[out_idx] = cpfp(0);
+              }
             }
           }
         }
@@ -448,16 +464,25 @@ void OCLCRHWCNLayer<Dtype>::RotateWeightsHalf(const Dtype *input,
   int ic = params.inchannels;
   int bc = params.burstchannels;
   int ksize = params.ksize;
-  for (int o = 0; o < oc; ++o) {
-    for (int n = 0; n < ic / bc; ++n) {
-      for (int k = 0; k < ksize * ksize; ++k) {
-        for (int m = 0; m < bc / 4; ++m) {
-          for (int j = 0; j < 4; ++j) {
-            int in_idx = ((n * bc + m + j * bc / 4) * oc + o) * ksize * ksize
-              + k;
-            int out_idx = o * ksize * ksize * ic + (n * ksize * ksize +
-                ksize * ksize - 1 - k) * bc + m * 4 + j;
-            output[out_idx] = cpfp((float)input[in_idx]);
+  int rpofm = params.rpofm;
+  int burstoc = params.burstydim;
+  for (int o = 0; o < rpofm; ++o) {
+    for (int b = 0; b < burstoc; ++b) {
+      for (int n = 0; n < ic / bc; ++n) {
+        for (int k = 0; k < ksize * ksize; ++k) {
+          for (int m = 0; m < bc / num_pe_; ++m) {
+            for (int j = 0; j < num_pe_; ++j) {
+              int in_idx = ((n * bc + m + j * bc / num_pe_) * oc + o *
+                burstoc + b) * ksize * ksize + k;
+              int burst_idx = (ksize * ksize - 1 - k) * bc + m * num_pe_ + j +
+                b * ksize * ksize * bc;
+              int out_idx = o * burstoc * ksize * ksize * ic +
+                n * bc * ksize * ksize * burstoc + burst_idx;
+              if (o * burstoc + b < oc) 
+                output[out_idx] = cpfp((float)input[in_idx]);
+              else
+                output[out_idx] = 0;
+            }
           }
         }
       }
@@ -474,17 +499,24 @@ void OCLCRHWCNLayer<Dtype>::copyToFloatWeights(cpfp *input,
   int ic_new = weight_pad_;
   int bc_new = weight_pad_ / params.rpo;
   int ksize = params.ksize;
+  int rpofm = params.rpofm;
+  int burstoc = params.burstydim;
 
-  for (int o = 0; o < oc; ++o) {
-    for (int n = 0; n < ic_new / bc_new; ++n) {
-      for (int k = 0; k < params.ksize * params.ksize; ++k) {
-        for (int m = 0; m < bc / 4; ++m) {
-          for (int j = 0; j < 4; ++j) {
-            int in_idx = (o * ic + n * bc + m + j * (bc / 4)) * ksize * ksize
-              + k;
-            int out_idx = o * ksize * ksize * ic_new +
-              (n * ksize * ksize + k) * bc_new + m * 4 + j;
-            output[in_idx] = (Dtype)float(input[out_idx]);
+  for (int o = 0; o < rpofm; ++o) {
+    for (int b = 0; b < burstoc; ++b) {
+      for (int n = 0; n < ic_new / bc_new; ++n) {
+        for (int k = 0; k < params.ksize * params.ksize; ++k) {
+          for (int m = 0; m < bc / num_pe_; ++m) {
+            for (int j = 0; j < num_pe_; ++j) {
+              int in_idx = ((o * burstoc + b) * ic + n * bc + m + j *
+                (bc / num_pe_)) * ksize * ksize + k;
+              int burst_idx = k * bc_new + m * num_pe_ + j + b * ksize * ksize
+                * bc_new;
+              int out_idx = o * burstoc * ksize * ksize * ic_new + 
+                n * ksize * ksize * burstoc * bc_new + burst_idx;
+              if (o * burstoc + b < oc)
+                output[in_idx] = (Dtype)float(input[out_idx]);
+            }
           }
         }
       }
@@ -528,8 +560,12 @@ void OCLCRHWCNLayer<Dtype>::backward_bias(const vector<Blob<Dtype>*>& top,
   } 
   bias_diff = bias_h.mutable_cpu_diff();
   Dtype *bias_diff_out = this->blobs_[1]->mutable_cpu_diff();
-  for (int i = 0; i < this->blobs_[1]->count(); ++i) {
-    bias_diff_out[i] = (Dtype)float(bias_diff[i]);
+
+  for (int i = 0; i < bias_h.count() / num_pe_; ++i) {
+    for (int j = 0; j < num_pe_; ++j) {
+      bias_diff_out[i + j * bias_h.count() / num_pe_] =
+        (Dtype)float(bias_diff[i * num_pe_ + j]);
+    }
   }
 }
 

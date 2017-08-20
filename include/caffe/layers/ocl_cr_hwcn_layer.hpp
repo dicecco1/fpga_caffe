@@ -92,6 +92,8 @@ class OCLCRHWCNLayer : public ConvolutionLayer<Dtype> {
   int conv_out_spatial_dim_;
   int weight_pad_;
   int num_cu_;
+  int num_pe_;
+  int burstoc_limit_;
 };
 #endif
 

@@ -58,6 +58,15 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
 
   CRParameter cr_param = this->layer_param_.cr_param();
   num_cu_ = cr_param.num_cu();
+  num_pe_ = cr_param.num_pe();
+  switch(num_pe_) {
+    case 4:   burstoc_limit_ = 16;
+              break;
+    case 8:   burstoc_limit_ = 32;
+              break;
+    case 16:  burstoc_limit_ = 64;
+              break;
+  }
   kernel_params *params = &ocl_params_;
   params->inchannels = this->K_;
   params->numgroups = 1;
@@ -89,7 +98,7 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
     burstoc = 1;
   } else {
     while (rpofm * burstoc < params->outchannels) {
-      if (burstoc < 16)
+      if (burstoc < burstoc_limit_)
         burstoc++;
       else
         rpofm++;
@@ -148,7 +157,7 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
     burstoc = 1;
   } else {
     while (rpofm * burstoc < backward_params_bi->outchannels) {
-      if (burstoc < 16)
+      if (burstoc < burstoc_limit_)
         burstoc++;
       else
         rpofm++;
@@ -168,7 +177,7 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
     burstchannels_ = tchannel;
   }
 
-  if (burstoc * burstchannels_ / 4 < 16) {
+  if (burstoc * burstchannels_ / num_pe_ < 16) {
     backward_params_bi->inchannels = 16;
     burstchannels_ = 16;
     use_aux_ = true;
@@ -205,7 +214,7 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
     burstchannels_ = tchannel;
   }
 
-  if (burstchannels_ / 4 < 16) {
+  if (burstchannels_ / num_pe_ < 16) {
     bias_params->inchannels = 16;
     burstchannels_ = 16;
     use_aux_ = true;
@@ -458,11 +467,11 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_bias(
   }
   bias_diff = bias_h.mutable_cpu_diff();
   Dtype *bias_diff_out = this->blobs_[1]->mutable_cpu_diff();
-  for (int i = 0; i < bias_h.count() / 4; ++i) {
-    for (int j = 0; j < 4; ++j)
-      if (i + j * bias_h.count() / 4 < this->blobs_[1]->count())
-        bias_diff_out[i + j * bias_h.count() / 4] =
-          (Dtype)float(bias_diff[i * 4 + j]);
+  for (int i = 0; i < bias_h.count() / num_pe_; ++i) {
+    for (int j = 0; j < num_pe_; ++j)
+      if (i + j * bias_h.count() / num_pe_ < this->blobs_[1]->count())
+        bias_diff_out[i + j * bias_h.count() / num_pe_] =
+          (Dtype)float(bias_diff[i * num_pe_ + j]);
   }
 }
 
@@ -478,15 +487,15 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_data(
   const Dtype *weight_data = this->blobs_[0]->cpu_data();
   cpfp *weight_data_h_t = weights_h_t.mutable_cpu_data();
   int outchannels_pad = weights_h_t.shape(1);
-  for (int i = 0; i < outchannels_pad / 4; ++i) {
-    for (int k = 0; k < 4; ++k) {
-      int oc_idx_in = i + k * outchannels_pad / 4;
-      int oc_idx_out = i * 4 + k;
-      if (i + k * outchannels_pad / 4 < outchannels) {
-        for (int j = 0; j < inchannels / 4; ++j) {
-          for (int n = 0; n < 4; ++n) {
-            int ic_idx_in = j * 4 + n;
-            int ic_idx_out = j + n * inchannels / 4;
+  for (int i = 0; i < outchannels_pad / num_pe_; ++i) {
+    for (int k = 0; k < num_pe_; ++k) {
+      int oc_idx_in = i + k * outchannels_pad / num_pe_;
+      int oc_idx_out = i * num_pe_ + k;
+      if (i + k * outchannels_pad / num_pe_ < outchannels) {
+        for (int j = 0; j < inchannels / num_pe_; ++j) {
+          for (int n = 0; n < num_pe_; ++n) {
+            int ic_idx_in = j * num_pe_ + n;
+            int ic_idx_out = j + n * inchannels / num_pe_;
             weight_data_h_t[ic_idx_out * outchannels_pad + oc_idx_out] =
               cpfp((float)weight_data[oc_idx_in * inchannels + ic_idx_in]);
           }

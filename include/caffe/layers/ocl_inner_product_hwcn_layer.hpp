@@ -56,6 +56,8 @@ class OCLHWCNInnerProductLayer : public InnerProductLayer<Dtype> {
   int pad_oc_;
   bool use_aux_;
   int num_cu_;
+  int num_pe_;
+  int burstoc_limit_;
   Blob<int> relu_indices;
   Blob<cpfp> weights_h;
   Blob<cpfp> weights_h_t;

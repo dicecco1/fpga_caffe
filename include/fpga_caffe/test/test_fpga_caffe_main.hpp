@@ -62,18 +62,11 @@ void ref_backward_pool_layer_hwcn(std::vector<float> input,
     std::vector<float>& output, std::vector<short> relu_vals,
     kernel_params params);
 
-void ref_conv_layer(std::vector<float> input, std::vector<float> weights,
-    std::vector<float> bias, std::vector<float>& output, kernel_params params);
-
 void ref_fc_layer(std::vector<float> input, std::vector<float> weights,
     std::vector<float> bias, std::vector<float>& output, kernel_params params);
 
 void ref_backward_fc_layer(std::vector<float> input,
     std::vector<float> weights, std::vector<float>& output,
-    kernel_params params);
-
-void ref_backward_conv_layer(std::vector<float> input, 
-    std::vector<float> weights, std::vector<float>& output, 
     kernel_params params);
 
 void ref_conv_layer_hwcn(std::vector<float> input, std::vector<float> weights,
