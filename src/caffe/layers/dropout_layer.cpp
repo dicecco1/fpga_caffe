@@ -30,14 +30,8 @@ void DropoutLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
 template <typename Dtype>
 void DropoutLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top) {
-#ifndef USE_HALF
   const Dtype* bottom_data = bottom[0]->cpu_data();
   Dtype* top_data = top[0]->mutable_cpu_data();
-#else
-  const cpfp* bottom_data =
-    reinterpret_cast<const cpfp*>(bottom[0]->cpu_data());
-  cpfp* top_data = reinterpret_cast<cpfp*>(top[0]->mutable_cpu_data());
-#endif
   unsigned int* mask = rand_vec_.mutable_cpu_data();
   const int count = bottom[0]->count();
   if (this->phase_ == TRAIN) {
@@ -47,12 +41,7 @@ void DropoutLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       top_data[i] = bottom_data[i] * mask[i] * scale_;
     }
   } else {
-#ifndef USE_HALF
     caffe_copy(bottom[0]->count(), bottom_data, top_data);
-#else
-    for (int i = 0; i < bottom[0]->count(); ++i)
-      top_data[i] = bottom_data[i];
-#endif
   }
 }
 
@@ -61,14 +50,8 @@ void DropoutLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down,
     const vector<Blob<Dtype>*>& bottom) {
   if (propagate_down[0]) {
-#ifndef USE_HALF
     const Dtype* top_diff = top[0]->cpu_diff();
     Dtype* bottom_diff = bottom[0]->mutable_cpu_diff();
-#else
-    const cpfp* top_diff = reinterpret_cast<const cpfp*>(top[0]->cpu_diff());
-    cpfp* bottom_diff =
-      reinterpret_cast<cpfp*>(bottom[0]->mutable_cpu_diff());
-#endif
     if (this->phase_ == TRAIN) {
       const unsigned int* mask = rand_vec_.cpu_data();
       const int count = bottom[0]->count();
@@ -76,12 +59,7 @@ void DropoutLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
         bottom_diff[i] = top_diff[i] * mask[i] * scale_;
       }
     } else {
-#ifndef USE_HALF
       caffe_copy(top[0]->count(), top_diff, bottom_diff);
-#else
-      for (int i = 0; i < top[0]->count(); ++i)
-        bottom_diff[i] = top_diff[i];
-#endif
     }
   }
 }

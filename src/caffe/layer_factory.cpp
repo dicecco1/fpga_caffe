@@ -27,11 +27,6 @@
 #include "caffe/layers/cudnn_tanh_layer.hpp"
 #endif
 
-#ifdef USE_OCL
-#include "caffe/layers/ocl_conv_layer.hpp"
-#include "caffe/layers/ocl_inner_product_layer.hpp"
-#endif
-
 #ifdef WITH_PYTHON_LAYER
 #include "caffe/layers/python_layer.hpp"
 #endif
@@ -69,10 +64,6 @@ shared_ptr<Layer<Dtype> > GetConvolutionLayer(
                  << param.name();
     }
     return shared_ptr<Layer<Dtype> >(new CuDNNConvolutionLayer<Dtype>(param));
-#endif
-#ifdef USE_OCL
-  } else if (engine == ConvolutionParameter_Engine_OCL) {
-    return shared_ptr<Layer<Dtype> >(new OCLConvolutionLayer<Dtype>(param));
 #endif
   } else {
     LOG(FATAL) << "Layer " << param.name() << " has unknown engine.";

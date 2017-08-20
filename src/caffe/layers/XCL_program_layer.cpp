@@ -29,9 +29,6 @@ void XCLProgramLayer<Dtype>::Forward_ocl(const vector <Blob<Dtype>*>& bottom,
     size_t sourceSize = caffe::convertToString(path + xcl_param.xcl_name(),
         &sourceStr);
 
-    clReleaseKernel(this->ocl_kernel);
-    clReleaseProgram(this->ocl_layer_program);
-
     this->ocl_layer_program = clCreateProgramWithBinary(oclContext, 1,
         &oclDevices, &sourceSize, (const unsigned char **)&sourceStr, NULL,
         &error);
