@@ -334,10 +334,30 @@ void OCLHWCNInnerProductLayer<Dtype>::Forward_ocl(
   const Dtype *weights_dtype = this->blobs_[0]->cpu_data();
   cpfp *weight_data_temp = weights_h.mutable_cpu_data();
 
-  int weight_size = weights_h.count();
+  int oc = params->outchannels;
+  int ic = params->inchannels;
+  int bc = params->burstchannels;
+  int burstoc = params->burstydim;
+  int rpofm = params->rpofm;
 
-  for (int i = 0; i < weight_size; ++i)
-    weight_data_temp[i] = cpfp((float)weights_dtype[i]);
+  for (int o = 0; o < rpofm; ++o) {
+    for (int b = 0; b < burstoc; ++b) {
+      for (int n = 0; n < ic / bc; ++n) {
+        for (int m = 0; m < bc / num_pe_; ++m) {
+          for (int j = 0; j < num_pe_; ++j) {
+            int burst_idx = m * num_pe_ + j + b * bc;
+            int in_idx = (o * burstoc + b) * ic + m + j * (bc / num_pe_);
+            int out_idx = o * burstoc * ic + n * bc * burstoc + burst_idx;
+            if (o * burstoc + b < oc) {
+              weight_data_temp[out_idx] = cpfp((float)weights_dtype[in_idx]);
+            } else {
+              weight_data_temp[out_idx] = 0;
+            }
+          }
+        }
+      }
+    }
+  }
 
   if (this->bias_term_)
     copyToHalf(this->blobs_[1]->mutable_cpu_data(), bias_h.mutable_cpu_data(),
@@ -420,10 +440,28 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_weights(
   }
   weight_diff = weights_h.mutable_cpu_diff();
 
-  int weight_size = weights_h.count();
+  int oc = params->outchannels;
+  int ic = params->inchannels;
+  int bc = params->burstchannels;
+  int rpofm = params->rpofm;
+  int burstoc = params->burstydim;
 
-  for (int i = 0; i < weight_size; ++i)
-    weight_diff_dtype[i] = (Dtype)float(weight_diff[i]);
+  for (int o = 0; o < rpofm; ++o) {
+    for (int b = 0; b < burstoc; ++b) {
+      for (int n = 0; n < ic / bc; ++n) {
+        for (int m = 0; m < bc / num_pe_; ++m) {
+          for (int j = 0; j < num_pe_; ++j) {
+            int in_idx = (o * burstoc + b) * ic + n * bc + m + j *
+              (bc / num_pe_);
+            int burst_idx = m * num_pe_ + j + b * bc;
+            int out_idx = o * burstoc * ic + n * burstoc * bc + burst_idx;
+            if (o * burstoc + b < oc)
+              weight_diff_dtype[in_idx] = (Dtype)float(weight_diff[out_idx]);
+          }
+        }
+      }
+    }
+  }
 }
 
 template <typename Dtype>
@@ -481,33 +519,34 @@ void OCLHWCNInnerProductLayer<Dtype>::backward_data(
     const vector<Blob<Dtype>*>& bottom) {
   kernel_params *params = &ocl_params_bi_;
   params->backward = 2;
-  int outchannels = this->blobs_[0]->shape(0);
-  int inchannels = this->blobs_[0]->shape(1);
 
   const Dtype *weight_data = this->blobs_[0]->cpu_data();
   cpfp *weight_data_h_t = weights_h_t.mutable_cpu_data();
-  int outchannels_pad = weights_h_t.shape(1);
-  for (int i = 0; i < outchannels_pad / num_pe_; ++i) {
-    for (int k = 0; k < num_pe_; ++k) {
-      int oc_idx_in = i + k * outchannels_pad / num_pe_;
-      int oc_idx_out = i * num_pe_ + k;
-      if (i + k * outchannels_pad / num_pe_ < outchannels) {
-        for (int j = 0; j < inchannels / num_pe_; ++j) {
-          for (int n = 0; n < num_pe_; ++n) {
-            int ic_idx_in = j * num_pe_ + n;
-            int ic_idx_out = j + n * inchannels / num_pe_;
-            weight_data_h_t[ic_idx_out * outchannels_pad + oc_idx_out] =
-              cpfp((float)weight_data[oc_idx_in * inchannels + ic_idx_in]);
+
+  int oc = params->outchannels;
+  int ic = params->inchannels;
+  int bc = params->burstchannels;
+  int rpofm = params->rpofm;
+  int burstoc = params->burstydim;
+
+  for (int o = 0; o < rpofm; ++o) {
+    for (int b = 0; b < burstoc; ++b) {
+      for (int n = 0; n < ic / bc; ++n) {
+        for (int m = 0; m < bc / num_pe_; ++m) {
+          for (int j = 0; j < num_pe_; ++j) {
+            int in_idx = (n * bc + m + j * bc / num_pe_) * oc + o *
+              burstoc + b;
+            int burst_idx = m * num_pe_ + j + b * bc;
+            int out_idx = o * burstoc * ic + n * bc * burstoc + burst_idx;
+            if (o * burstoc + b < oc)
+              weight_data_h_t[out_idx] = cpfp((float)weight_data[in_idx]);
+            else
+              weight_data_h_t[out_idx] = 0;
           }
-        }
-      } else {
-        for (int j = 0; j < inchannels; ++j) {
-          weight_data_h_t[j * outchannels_pad + oc_idx_out] = 0;
         }
       }
     }
   }
-
   const cpfp *weight_data_t = weights_h_t.ocl_data();
 
   vector<int> shape(1);
