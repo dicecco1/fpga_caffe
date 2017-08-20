@@ -1,6 +1,6 @@
 # FPGA Caffe
 
-This is a branch of Caffe with kernels for forward and backward: convolution, relu, max pooling, and inner product. These kernels target the Xilinx SDAccel OpenCL environment. The kernels use custom-precision floating-point arithmetic to save area and improve the throughput of the kernels, while also allowing for experimentation with different floating-point precisions and rounding modes for training and inference with CNNs.
+This is a version of Caffe with FPGA kernels for forward and backward: convolution, relu, max pooling, and inner product. These kernels target the Xilinx SDAccel OpenCL environment. The kernels use custom-precision floating-point arithmetic to save area and improve the throughput of the kernels, while also allowing for experimentation with different floating-point precisions and rounding modes for training and inference with CNNs.
 
 Infrastructure has been added to facilitate the use of Xilinx SDAccel kernels within Caffe, while making it essentially seamless to outside users that an FPGA is in use (aside from some additional layers required to program the device). 
 
