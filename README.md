@@ -1,3 +1,26 @@
+# FPGA Caffe
+
+This is a version of Caffe with FPGA kernels for forward and backward: convolution, relu, max pooling, and inner product. These kernels target the Xilinx SDAccel OpenCL environment. The kernels use custom-precision floating-point arithmetic to save area and improve the throughput of the kernels, while also allowing for experimentation with different floating-point precisions and rounding modes for training and inference with CNNs.
+
+Infrastructure has been added to facilitate the use of Xilinx SDAccel kernels within Caffe, while making it essentially seamless to outside users that an FPGA is in use (aside from some additional layers required to program the device). 
+
+## License and Citation
+
+The license for this project is the same as that of the original Caffe implementation. Our initial paper related to this work can be found at: http://ieeexplore.ieee.org/document/7929549/
+
+Citation:
+@INPROCEEDINGS{7929549, 
+author={R. DiCecco and G. Lacey and J. Vasiljevic and P. Chow and G. Taylor and S. Areibi}, 
+booktitle={2016 International Conference on Field-Programmable Technology (FPT)}, 
+title={Caffeinated FPGAs: FPGA framework For Convolutional Neural Networks}, 
+year={2016}, 
+pages={265-268}, 
+keywords={Computational modeling;Convolution;Field programmable gate arrays;Graphics processing units;Kernel;Parallel processing;Pipelines}, 
+doi={10.1109/FPT.2016.7929549}, 
+month={Dec},}
+
+The work related to the CPFP based training is currently under review. 
+
 # Caffe
 
 [![Build Status](https://travis-ci.org/BVLC/caffe.svg?branch=master)](https://travis-ci.org/BVLC/caffe)
