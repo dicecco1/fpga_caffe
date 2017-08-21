@@ -208,7 +208,11 @@ void OCLPoolingHWCNLayer<Dtype>::Forward_ocl(
 
 template <typename Dtype>
 void OCLPoolingHWCNLayer<Dtype>::Backward_ocl(const vector<Blob<Dtype>*>& top,
-      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) 
+{
+  if (!propagate_down[0]) {
+    return;
+  }
   kernel_params *params = &ocl_params_bi_;
   vector<int> shape(1);
   shape[0] = sizeof(kernel_params) / sizeof(int);
