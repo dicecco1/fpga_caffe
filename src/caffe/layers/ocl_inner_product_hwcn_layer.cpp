@@ -263,7 +263,7 @@ void OCLHWCNInnerProductLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom
 
   vector<int> weight_shape(2);
 
-  weight_shape[0] = this->N_;
+  weight_shape[0] = ocl_params_.burstydim * ocl_params_.rpofm;
   weight_shape[1] = this->K_;
 
   if (weight_shape[1] % 16 != 0)
@@ -271,7 +271,7 @@ void OCLHWCNInnerProductLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom
 
   weights_h.Reshape(weight_shape);
 
-  weight_shape[0] = this->K_;
+  weight_shape[0] = ocl_params_bi_.burstydim * ocl_params_bi_.rpofm;
   weight_shape[1] = ocl_params_bi_.inchannels;
   
   if (use_aux_) {
@@ -358,7 +358,6 @@ void OCLHWCNInnerProductLayer<Dtype>::Forward_ocl(
       }
     }
   }
-
   if (this->bias_term_)
     copyToHalf(this->blobs_[1]->mutable_cpu_data(), bias_h.mutable_cpu_data(),
         params->outchannels, 1, 1);
