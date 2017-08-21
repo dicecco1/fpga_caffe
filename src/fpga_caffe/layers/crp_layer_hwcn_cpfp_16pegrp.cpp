@@ -384,10 +384,10 @@ void crp_layer_hwcn_cpfp_16pegrp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                 }
 
                 if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
-                  if ((x != 0) && (stride == 1) && (q != ksize - 1)) {
+                  if ((x != 0) && (q + stride < ksize)) {
                     // Shift input to the left rather than doing a memory
                     // transfer for each window (stride of one only)
-                    short q_off = burstFact * imgFact;
+                    short q_off = burstFact * imgFact * stride;
                     SHIFT_LOOP: for (int i = 0; i < inSize; ++i) {
 #pragma HLS pipeline
 #pragma HLS dependence variable=inBuf inter false
