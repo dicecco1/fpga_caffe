@@ -369,8 +369,8 @@ void ref_backward_conv_layer_hwcn(std::vector<float> input,
                   for (int q = 0; q < outXDim; q++) {
                     for (int y = 0; y < ksize; y++) {
                       for (int x = 0; x < ksize; x++) {
-                        int in_y = y * stride - pad + p;
-                        int in_x = x * stride - pad + q;
+                        int in_y = p * stride - pad + y;
+                        int in_x = q * stride - pad + x;
                         if (in_y >= 0 && in_y < ydim
                           && in_x >= 0 && in_x < xdim
                           && o * burstoc + b < o_g) {
