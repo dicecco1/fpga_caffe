@@ -67,6 +67,8 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
     case 16:  burstoc_limit_ = 64;
               break;
   }
+  CHECK(this->M_ % 16 == 0);
+  int num_ = this->M_;
   kernel_params *params = &ocl_params_;
   params->inchannels = this->K_;
   params->numgroups = 1;
@@ -93,10 +95,18 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
   
   int rpofm = num_cu_;
   int burstoc = 1;
-  if (rpofm > params->outchannels) {
-    rpofm = params->outchannels;
-    burstoc = 1;
+  if (params->outchannels < num_cu_) {
+    rpofm = 1;
+    burstoc = 1; 
+    while (rpofm * burstoc < params->outchannels) {
+      if (burstoc < burstoc_limit_)
+        burstoc++;
+      else
+        rpofm++;
+    }
   } else {
+    rpofm = num_cu_;
+    burstoc = 1;
     while (rpofm * burstoc < params->outchannels) {
       if (burstoc < burstoc_limit_)
         burstoc++;
@@ -104,12 +114,16 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
         rpofm++;
     }
   }
+
   params->rpofm = rpofm;
   params->burstydim = burstoc;
   params->burstchannels = burstchannels_;
   params->rpo = params->inchannels / burstchannels_;
   params->pool = 0;
   params->pksize = 2;
+
+  CHECK(burstoc * (num_ / 16) >= 16);
+  CHECK(burstoc * burstchannels_ >= 16);
 
   // Backward params
   kernel_params *backward_params = &ocl_params_bw_;
@@ -165,6 +179,7 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
   }
   backward_params_bi->burstydim = burstoc;
   backward_params_bi->rpofm = rpofm;
+  CHECK(burstoc * (num_ / 16) >= 16);
 
   burstchannels_ = 8 * 256 * 256 / (backward_params_bi->numimages);
 
@@ -226,6 +241,7 @@ void OCLHWCNInnerProductLayer<Dtype>::LayerSetUp(
     bias_params->inchannels = burstchannels_ * rpo;
     use_aux_ = true;
   }
+  CHECK(burstchannels_ >= 16);
 
   bias_params->burstchannels = burstchannels_;
   bias_params->ksize = 1;

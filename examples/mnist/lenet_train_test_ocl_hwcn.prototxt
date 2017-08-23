@@ -37,8 +37,8 @@ layer {
   name: "PROGRAM3"
   type: "XCLProgram"
   xcl_param {
-    xcl_name: "cr_layer_hwcn_cpfp.xclbin"
-    kernel_name: "cr_layer_hwcn_cpfp"
+    xcl_name: "crp_layer_hwcn_cpfp.xclbin"
+    kernel_name: "crp_layer_hwcn_cpfp"
     once: true
   }
 }
@@ -95,7 +95,8 @@ layer {
   }
   cr_param {
     relu: 1
-    num_cu: 12
+    num_cu: 16 
+    num_pe: 4
   }
 }
 layer {
@@ -133,7 +134,8 @@ layer {
   }
   cr_param {
     relu: 1
-    num_cu: 12 
+    num_cu: 16 
+    num_pe: 4
   }
 }
 layer {
@@ -169,7 +171,8 @@ layer {
   }
   cr_param {
     relu: 1
-    num_cu: 12
+    num_cu: 16
+    num_pe: 4
   }
 }
 layer {
@@ -194,7 +197,8 @@ layer {
   }
   cr_param {
     relu: 0
-    num_cu: 12
+    num_cu: 16
+    num_pe: 4
   }
 }
 layer {

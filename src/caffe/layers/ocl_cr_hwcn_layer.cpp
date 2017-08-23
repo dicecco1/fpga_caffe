@@ -158,21 +158,24 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     weight_pad_ = ((bottom[0]->shape(2) / this->group_) / 16 + 1) * 16;
 
   CRParameter cr_param = this->layer_param_.cr_param();
+  int num_ = bottom[0]->shape(3);
   num_cu_ = cr_param.num_cu();
   num_pe_ = cr_param.num_pe();
   switch(num_pe_) {
-    case 4:   burstoc_limit_ = 16;
+    case 4:   burstoc_limit_ = (16 * 256) / num_;
               break;
-    case 8:   burstoc_limit_ = 32;
+    case 8:   burstoc_limit_ = (32 * 256) / num_;
               break;
-    case 16:  burstoc_limit_ = 64;
+    case 16:  burstoc_limit_ = (64 * 256) / num_;
               break;
   }
+
   kernel_params *forward_params = &ocl_params_;
-  int num_ = bottom[0]->shape(3); 
+  CHECK(num_ % 16 == 0);
+
   forward_params->ydim = bottom[0]->shape(0);
   forward_params->xdim = bottom[0]->shape(1);
-  forward_params->inchannels = bottom[0]->shape(2) / this->group_;
+  forward_params->inchannels = bottom[0]->shape(2);
   forward_params->outchannels = this->num_output_ / this->group_;
   forward_params->numimages = num_;
   forward_params->ksize = (this->blobs_[0])->shape(3);  
@@ -202,6 +205,9 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
         rpofm++;
     }
   }
+  int ksize = (this->blobs_[0])->shape(3);
+  CHECK(burstoc * (num_ / 16) >= 16);
+  CHECK(burstoc * burstchannels_ * ksize * ksize >= 16);
 
   forward_params->rpofm = rpofm;
   forward_params->xtile_pad = 0;
@@ -223,7 +229,7 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   backward_params->ydim = bottom[0]->shape(0);
   backward_params->xdim = bottom[0]->shape(1);
   backward_params->outchannels = this->num_output_ / this->group_;
-  backward_params->inchannels = bottom[0]->shape(2) / this->group_;
+  backward_params->inchannels = bottom[0]->shape(2);
   backward_params->ksize = (this->blobs_[0])->shape(3);
   backward_params->numimages = num_;
   backward_params->rpofm = rpofm;
@@ -267,10 +273,19 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   }
   rpofm = num_cu_;
   burstoc = 1;
-  if (rpofm > backward_params_bi->outchannels) {
-    rpofm = backward_params_bi->outchannels;
-    burstoc = 1;
+
+  if (backward_params_bi->outchannels < num_cu_) {
+    rpofm = 1;
+    burstoc = 1; 
+    while (rpofm * burstoc < backward_params_bi->outchannels) {
+      if (burstoc < burstoc_limit_)
+        burstoc++;
+      else
+        rpofm++;
+    }
   } else {
+    rpofm = num_cu_;
+    burstoc = 1;
     while (rpofm * burstoc < backward_params_bi->outchannels) {
       if (burstoc < burstoc_limit_)
         burstoc++;
@@ -278,6 +293,8 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
         rpofm++;
     }
   }
+
+  CHECK(burstoc * (num_ / 16) >= 16);
 
   backward_params_bi->burstchannels = burstchannels_;
   backward_params_bi->rpo = backward_params_bi->inchannels / burstchannels_;
@@ -288,6 +305,8 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   backward_params_bi->pksize = 2;
   backward_params_bi->rpofm = rpofm;
   backward_params_bi->burstydim = burstoc;
+
+  CHECK(burstchannels_ >= 16);
 
   // Set bias update parameters
   kernel_params *bias_params = &ocl_params_bb_;
