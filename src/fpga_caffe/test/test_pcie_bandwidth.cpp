@@ -40,7 +40,6 @@ class PCIeBandwidthTest : public OCLDeviceTest<TypeParam> {
 TYPED_TEST_CASE(PCIeBandwidthTest, TestOCLDtypesAndDevices);
 
 TYPED_TEST(PCIeBandwidthTest, TestSetup) {
-  typedef typename TypeParam::Dtype Dtype;
   this->ocl.Setup_Platform();
 }
 
