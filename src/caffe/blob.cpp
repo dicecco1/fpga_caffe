@@ -95,6 +95,12 @@ const Dtype* Blob<Dtype>::cpu_data(size_t size) const {
 template <typename Dtype>
 void Blob<Dtype>::set_cpu_data(Dtype* data) {
   CHECK(data);
+  // Make sure CPU and GPU sizes remain equal
+  size_t size = count_ * sizeof(Dtype);
+  if (data_->size() != size) {
+    data_.reset(new SyncedMemory(size));
+    diff_.reset(new SyncedMemory(size));
+  }
   data_->set_cpu_data(data);
 }
 
@@ -114,6 +120,18 @@ template <typename Dtype>
 const Dtype* Blob<Dtype>::ocl_data(size_t size) const {
   CHECK(data_);
   return (const Dtype*)data_->ocl_data(size);
+}
+
+template <typename Dtype>
+void Blob<Dtype>::set_gpu_data(Dtype* data) {
+  CHECK(data);
+  // Make sure CPU and GPU sizes remain equal
+  size_t size = count_ * sizeof(Dtype);
+  if (data_->size() != size) {
+    data_.reset(new SyncedMemory(size));
+    diff_.reset(new SyncedMemory(size));
+  }
+  data_->set_gpu_data(data);
 }
 
 template <typename Dtype>
