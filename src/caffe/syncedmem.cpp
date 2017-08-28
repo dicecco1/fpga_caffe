@@ -45,7 +45,7 @@ SyncedMemory::~SyncedMemory() {
 }
 
 inline void SyncedMemory::to_cpu(size_t size) {
-  int tx_size_;
+  size_t tx_size_;
   if (size != 0)
     tx_size_ = size;
   else
@@ -53,18 +53,18 @@ inline void SyncedMemory::to_cpu(size_t size) {
   check_device();
   switch (head_) {
   case UNINITIALIZED:
-    CaffeMallocHost(&cpu_ptr_, size_, &cpu_malloc_use_cuda_);
-    caffe_memset(size_, 0, cpu_ptr_);
+    CaffeMallocHost(&cpu_ptr_, tx_size_, &cpu_malloc_use_cuda_);
+    caffe_memset(tx_size_, 0, cpu_ptr_);
     head_ = HEAD_AT_CPU;
     own_cpu_data_ = true;
     break;
   case HEAD_AT_GPU:
 #ifndef CPU_ONLY
     if (cpu_ptr_ == NULL) {
-      CaffeMallocHost(&cpu_ptr_, size_, &cpu_malloc_use_cuda_);
+      CaffeMallocHost(&cpu_ptr_, tx_size_, &cpu_malloc_use_cuda_);
       own_cpu_data_ = true;
     }
-    caffe_gpu_memcpy(size_, gpu_ptr_, cpu_ptr_);
+    caffe_gpu_memcpy(tx_size_, gpu_ptr_, cpu_ptr_);
     head_ = SYNCED;
 #else
     NO_GPU;
@@ -73,7 +73,7 @@ inline void SyncedMemory::to_cpu(size_t size) {
   case HEAD_AT_OCL:
 #ifdef USE_OCL
     if (cpu_ptr_ == NULL) {
-      CaffeMallocHost(&cpu_ptr_, size_, &cpu_malloc_use_cuda_);
+      CaffeMallocHost(&cpu_ptr_, tx_size_, &cpu_malloc_use_cuda_);
       own_cpu_data_ = true;
     }
     clEnqueueReadBuffer(oclCommandQueue, (cl_mem)ocl_ptr_, CL_TRUE, 0,
@@ -126,8 +126,8 @@ inline void SyncedMemory::to_ocl(int RW, size_t size) {
     tx_size_ = size_;
   switch (head_) {
   case UNINITIALIZED:
-    CaffeMallocHost(&cpu_ptr_, size_, &cpu_malloc_use_cuda_);
-    caffe_memset(size_, 0, cpu_ptr_);
+    CaffeMallocHost(&cpu_ptr_, tx_size_, &cpu_malloc_use_cuda_);
+    caffe_memset(tx_size_, 0, cpu_ptr_);
     own_cpu_data_ = true;
     ocl_ptr_ = reinterpret_cast<void *>(clCreateBuffer(oclContext,
         CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, tx_size_, cpu_ptr_, NULL));

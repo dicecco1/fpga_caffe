@@ -171,6 +171,12 @@ Dtype* Blob<Dtype>::mutable_cpu_data() {
 }
 
 template <typename Dtype>
+Dtype* Blob<Dtype>::mutable_cpu_data(size_t size) {
+  CHECK(data_);
+  return static_cast<Dtype*>(data_->mutable_cpu_data(size));
+}
+
+template <typename Dtype>
 Dtype* Blob<Dtype>::mutable_gpu_data() {
   CHECK(data_);
   return static_cast<Dtype*>(data_->mutable_gpu_data());

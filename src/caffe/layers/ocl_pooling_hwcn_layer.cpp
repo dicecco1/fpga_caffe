@@ -168,7 +168,7 @@ void OCLPoolingHWCNLayer<Dtype>::launchKernel(const cpfp *bottom,
   clSetKernelArg(this->ocl_kernel, 6, sizeof(cl_int),
       (const void *)&g);
   clEnqueueTask(oclCommandQueue, this->ocl_kernel, 0, NULL, &(events[g]));
-  clWaitForEvents(events.size(), events.data()); 
+  clWaitForEvents(events.size(), events.data());
 }
 
 template <typename Dtype>

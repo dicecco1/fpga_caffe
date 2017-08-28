@@ -73,7 +73,7 @@ void PadLayer<Dtype>::Forward_cpu(
             top_idx = ((n * top_shape[1] + c) * top_shape[2] + h) *
               top_shape[3] + w;
             if (((axis_ == 0) && n < dim_) || ((axis_ == 1) && c < dim_) ||
-                ((axis_ == 2) && h < dim_) || ((axis_ == 3) && w < dim_))
+                ((axis_ == 2) && h < dim_) || ((axis_ == 3) && w < dim_)) 
               top_data[top_idx] = bottom_data[bot_idx];
             else if (pad_)
               top_data[top_idx] = 0;

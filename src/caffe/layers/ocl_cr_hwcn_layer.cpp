@@ -700,7 +700,6 @@ void OCLCRHWCNLayer<Dtype>::Forward_ocl(const vector<Blob<Dtype>*>& bottom,
   for (int i = 0; i < shape[0]; ++i) {
     conv_params[i] = ((int *)params)[i];
   }
-  
   const int* cr_params = param_vals.ocl_data();
 
   size_t insize = sizeof(cpfp) * bottom[0]->count();

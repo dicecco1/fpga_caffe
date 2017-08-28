@@ -362,7 +362,8 @@ void OCLHWCNInnerProductLayer<Dtype>::Forward_ocl(
         for (int m = 0; m < bc / num_pe_; ++m) {
           for (int j = 0; j < num_pe_; ++j) {
             int burst_idx = m * num_pe_ + j + b * bc;
-            int in_idx = (o * burstoc + b) * ic + m + j * (bc / num_pe_);
+            int in_idx = (o * burstoc + b) * ic + m + j * (bc / num_pe_) +
+              n * bc;
             int out_idx = o * burstoc * ic + n * bc * burstoc + burst_idx;
             if (o * burstoc + b < oc) {
               weight_data_temp[out_idx] = cpfp((float)weights_dtype[in_idx]);
@@ -398,12 +399,13 @@ void OCLHWCNInnerProductLayer<Dtype>::Forward_ocl(
   const int* k_params = param_vals.ocl_data();
 
   size_t insize = sizeof(cpfp) * bottom[0]->count();
+  size_t outsize = sizeof(cpfp) * top[0]->count();
   cpfp *top_data;
   int *relu_vals;
   for (int i = 0; i < bottom.size(); i++) {
     const cpfp *bottom_data =
       reinterpret_cast<const cpfp *>(bottom[i]->ocl_data(insize));
-    top_data = reinterpret_cast<cpfp *>(top[i]->mutable_ocl_data(0));
+    top_data = reinterpret_cast<cpfp *>(top[i]->mutable_ocl_data(0, outsize));
     relu_vals = relu_indices.mutable_ocl_data(0);
     launchKernel(bottom_data, weight_data, bias_data, top_data, relu_vals,
         k_params);
