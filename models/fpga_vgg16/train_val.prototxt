@@ -1,0 +1,651 @@
+name: "vgg_imagenet"
+layer {
+  top: "data"
+  top: "label"
+  name: "data"
+  type: "Data"
+  data_param {
+    source: "examples/imagenet/ilsvrc12_train_lmdb"
+    backend: LMDB
+    batch_size: 256 
+  }
+  transform_param {
+    crop_size: 224
+    mirror: true
+    mean_value: 104
+    mean_value: 117
+    mean_value: 123
+    #mean_file: "data/ilsvrc12/imagenet_mean.binaryproto"
+  }
+  include: { phase: TRAIN }
+}
+layer {
+  top: "data"
+  top: "label"
+  name: "data"
+  type: "Data"
+  data_param {
+    source: "examples/imagenet/ilsvrc12_val_lmdb"
+    backend: LMDB
+    batch_size: 256
+  }
+  transform_param {
+    crop_size: 224
+    mirror: false
+    mean_value: 104
+    mean_value: 117
+    mean_value: 123
+    #mean_file: "data/ilsvrc12/imagenet_mean.binaryproto"
+  }
+  include: { phase: TEST }
+}
+layer {
+  name: "PROGRAM3"
+  type: "XCLProgram"
+  xcl_param {
+    xcl_name: "crp_layer_hwcn_cpfp.xclbin"
+    kernel_name: "crp_layer_hwcn_cpfp"
+    once: true
+  }
+}
+layer {
+  name: "HWCN1"
+  type: "HWCN"
+  bottom: "data"
+  top: "hwcn1"
+  hwcn_param {
+    convert_to: true
+  }
+}
+layer {
+  name: "PAD1"
+  type: "Pad"
+  bottom: "hwcn1"
+  top: "pad1"
+  pad_param {
+    pad: true
+    axis: 2 
+    pad_to: 4 
+  }
+}
+layer {
+  name: "CPFP1"
+  type: "CPFPConversion"
+  bottom: "pad1"
+  top: "cpfp1"
+  cpfp_conversion_param {
+    convert_to: true
+  }
+}
+layer {
+  name: "conv1_1_4"
+  type: "OCLCRHWCN"
+  bottom: "cpfp1"
+  top: "conv1_1"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 64
+    kernel_size: 3
+    pad: 1
+    stride: 1
+    weight_filler {
+      type: "xavier"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.2
+    }
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "conv1_2"
+  type: "OCLCRHWCN"
+  bottom: "conv1_1"
+  top: "conv1_2"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 64
+    kernel_size: 3
+    pad: 1
+    stride: 1
+    weight_filler {
+      type: "xavier"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.2
+    }
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "pool1"
+  type: "OCLPoolingHWCN"
+  bottom: "conv1_2"
+  top: "pool1"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
+layer {
+  name: "conv2_1"
+  type: "OCLCRHWCN"
+  bottom: "pool1"
+  top: "conv2_1"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 128
+    pad: 1
+    kernel_size: 3
+    stride: 1
+    weight_filler {
+      type: "xavier"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.2
+    }
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "conv2_2"
+  type: "OCLCRHWCN"
+  bottom: "conv2_1"
+  top: "conv2_2"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 128
+    pad: 1
+    kernel_size: 3
+    stride: 1
+    weight_filler {
+      type: "xavier"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.2
+    }
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "pool2"
+  type: "OCLPoolingHWCN"
+  bottom: "conv2_2"
+  top: "pool2"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
+layer {
+  name: "conv3_1"
+  type: "OCLCRHWCN"
+  bottom: "pool2"
+  top: "conv3_1"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 256
+    kernel_size: 3
+    stride: 1
+    pad: 1
+    weight_filler {
+      type: "xavier"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.2
+    }
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "conv3_2"
+  type: "OCLCRHWCN"
+  bottom: "conv3_1"
+  top: "conv3_2"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 256
+    kernel_size: 3
+    stride: 1
+    pad: 1
+    weight_filler {
+      type: "xavier"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.2
+    }
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "conv3_3"
+  type: "OCLCRHWCN"
+  bottom: "conv3_2"
+  top: "conv3_3"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 256
+    kernel_size: 3
+    stride: 1
+    pad: 1
+    weight_filler {
+      type: "xavier"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.2
+    }
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "pool3"
+  type: "OCLPoolingHWCN"
+  bottom: "conv3_3"
+  top: "pool3"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
+layer {
+  name: "conv4_1"
+  type: "OCLCRHWCN"
+  bottom: "pool3"
+  top: "conv4_1"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 512
+    kernel_size: 3
+    stride: 1
+    pad: 1
+    weight_filler {
+      type: "xavier"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.2
+    }
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "conv4_2"
+  type: "OCLCRHWCN"
+  bottom: "conv4_1"
+  top: "conv4_2"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 512
+    kernel_size: 3
+    stride: 1
+    pad: 1
+    weight_filler {
+      type: "xavier"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.2
+    }
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "conv4_3"
+  type: "OCLCRHWCN"
+  bottom: "conv4_2"
+  top: "conv4_3"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 512
+    kernel_size: 3
+    stride: 1
+    pad: 1
+    weight_filler {
+      type: "xavier"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.2
+    }
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "pool4"
+  type: "OCLPoolingHWCN"
+  bottom: "conv4_3"
+  top: "pool4"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
+layer {
+  name: "conv5_1"
+  type: "OCLCRHWCN"
+  bottom: "pool4"
+  top: "conv5_1"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 512
+    kernel_size: 3
+    stride: 1
+    pad: 1
+    weight_filler {
+      type: "xavier"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.2
+    }
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "conv5_2"
+  type: "OCLCRHWCN"
+  bottom: "conv5_1"
+  top: "conv5_2"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 512
+    kernel_size: 3
+    stride: 1
+    pad: 1
+    weight_filler {
+      type: "xavier"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.2
+    }
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "conv5_3"
+  type: "OCLCRHWCN"
+  bottom: "conv5_2"
+  top: "conv5_3"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 512
+    kernel_size: 3
+    stride: 1
+    pad: 1
+    weight_filler {
+      type: "xavier"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.2
+    }
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "pool5"
+  type: "OCLPoolingHWCN"
+  bottom: "conv5_3"
+  top: "pool5"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
+layer {
+  name: "fc6_n"
+  type: "OCLHWCNInnerProduct"
+  bottom: "pool5"
+  top: "fc6"
+  inner_product_param {
+    num_output: 4096
+  }
+  cr_param {
+    relu: 1
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "fc7"
+  type: "OCLHWCNInnerProduct"
+  bottom: "fc6"
+  top: "fc7"
+  inner_product_param {
+    num_output: 4096
+  }
+  cr_param {
+    relu: 1
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "fc8"
+  type: "OCLHWCNInnerProduct"
+  bottom: "fc7"
+  top: "fc8"
+  inner_product_param {
+    num_output: 1000
+  }
+  cr_param {
+    relu: 0
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "CPFP4"
+  type: "CPFPConversion"
+  bottom: "fc8"
+  top: "cpfp4"
+  cpfp_conversion_param {
+    convert_to: false
+  }
+}
+layer {
+  name: "HWCN4"
+  type: "HWCN"
+  bottom: "cpfp4"
+  top: "hwcn4"
+  hwcn_param {
+    convert_to: false
+  }
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy" 
+  bottom: "hwcn4"
+  bottom: "label"
+  top: "accuracy"
+  include: { phase: TEST }
+}
+layer {
+  name: "accuracy_top_5"
+  type: "Accuracy"
+  bottom: "hwcn4"
+  bottom: "label"
+  top: "accuracy_top_5"
+  accuracy_param {
+    top_k: 5
+  }
+  include {
+    phase: TEST
+  }
+} 
+layer {
+  bottom: "hwcn4"
+  bottom: "label"
+  name: "loss"
+  type: "SoftmaxWithLoss" 
+  include: { phase: TRAIN }
+}
