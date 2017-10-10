@@ -14,8 +14,8 @@
 #include "ap_int.h"
 #endif
 
-#define EXP_SIZE 6
-#define MANT_SIZE 5
+#define EXP_SIZE 6 
+#define MANT_SIZE 5 
 #define EXP_OFFSET ((1 << (EXP_SIZE - 1)) - 1)
 #define MAX_EXP ((1 << EXP_SIZE) - 1)
 #define MAX_MANT ((1 << MANT_SIZE) - 1)
@@ -113,6 +113,7 @@ class cpfp {
   friend cpfp operator*(cpfp T, cpfp U);
   friend cpfp operator+(cpfp T, cpfp U);
   friend cpfp operator-(cpfp T, cpfp U);
+  friend void mult2_1(cpfp T1, cpfp T2, cpfp U, cpfp *O1, cpfp *O2);
   friend cpfp max(cpfp T, cpfp U, short Tmask, short Umask,
       short *out_mask);
   friend cpfp max(cpfp T, cpfp U);
@@ -261,6 +262,136 @@ cpfp operator*(cpfp T, cpfp U) {
   return cpfp(res);
 #else
   return cpfp(float(T) * float(U));
+#endif
+}
+
+#ifndef SYNTHESIS
+inline
+#endif
+void mult2_1(cpfp T1, cpfp T2, cpfp U, cpfp *O1, cpfp *O2) {
+#ifdef SYNTHESIS
+#pragma HLS INLINE off
+#pragma HLS pipeline
+  ap_uint<FP_WIDTH> T1data_ = T1.data_;
+  ap_uint<FP_WIDTH> T2data_ = T2.data_;
+  ap_uint<FP_WIDTH> Udata_ = U.data_;
+  ap_uint<EXP_SIZE> e_T1 = (T1data_) >> EXP_SHIFT;
+  ap_uint<EXP_SIZE> e_T2 = (T2data_) >> EXP_SHIFT;
+  ap_uint<EXP_SIZE> e_U = (Udata_) >> EXP_SHIFT;
+  ap_uint<MANT_SIZE + 1> mant_T1 = T1data_ | MANT_NORM;// M + 1 Bits
+  ap_uint<MANT_SIZE + 1> mant_T2 = T2data_ | MANT_NORM;// M + 1 Bits
+  ap_uint<MANT_SIZE + 1> mant_U = Udata_ | MANT_NORM;// M + 1 Bits
+  ap_uint<1> sign_T1 = (T1data_) >> SIGN_SHIFT;
+  ap_uint<1> sign_T2 = (T2data_) >> SIGN_SHIFT;
+  ap_uint<1> sign_U = (Udata_) >> SIGN_SHIFT;
+  ap_uint<1> sign_res_O1 = sign_T1 ^ sign_U;
+  ap_uint<1> sign_res_O2 = sign_T2 ^ sign_U;
+
+  ap_uint<FP_WIDTH> sign_O1 = sign_res_O1;
+  ap_uint<FP_WIDTH> sign_O2 = sign_res_O2;
+  ap_uint<MANT_SIZE + 2> mantres_O1, mantres_O2;
+  ap_uint<MANT_SIZE> mantresf_O1, mantresf_O2;
+  ap_uint<FP_WIDTH> eresf_O1, eresf_O2;
+
+  ap_uint<(MANT_SIZE + 1) * 3> mant_T2_temp = mant_T2;
+
+  ap_uint<(MANT_SIZE + 1) * 3> op = (mant_T2_temp << ((MANT_SIZE + 1) * 2)) |
+    mant_T1;
+
+  // (M + 1) * (M + 1) multiplier
+  ap_uint<(MANT_SIZE + 1) * 4> product = op * mant_U;
+  mantres_O1 = product >> MANT_SIZE;
+  mantres_O2 = product >> (2 * MANT_SIZE + 1);
+  // Compute resulting exponent
+  ap_int<EXP_SIZE + 2> eres_O1 = e_T1 + e_U - EXP_OFFSET;
+  ap_int<EXP_SIZE + 2> eres_O2 = e_T2 + e_U - EXP_OFFSET;
+
+  // Rounding bits
+  ap_uint<1> last_O1 = (product >> MANT_SIZE) & 0x1;
+  ap_uint<1> last_O2 = (product >> (2 * MANT_SIZE + 1)) & 0x1;
+  ap_uint<1> guard_O1 = (product >> (MANT_SIZE - 1)) & 0x1;
+  ap_uint<1> guard_O2 = (product >> (2 * MANT_SIZE - 1)) & 0x1;
+  ap_uint<1> sticky_O1 = ((product & (MAX_MANT >> 1)) > 0);
+  ap_uint<1> sticky_O2 = ((product >> (MANT_SIZE + 1)) & (MAX_MANT >> 1)) > 0;
+
+  // Shift the resulting mantissa by 1 and add 1 to the resulting exponent if
+  // there is a leading one in position MANT_SIZE + 1
+  if ((mantres_O1 >> (MANT_SIZE + 1)) & 0x1) {
+    last_O1 = (product >> (MANT_SIZE + 1)) & 0x1;
+    sticky_O1 |= guard_O1;
+    guard_O1 = (product >> MANT_SIZE) & 0x1;
+    mantres_O1 = (product >> (MANT_SIZE + 1));
+    eres_O1++;
+  }
+
+  // Rounding logic
+#if ROUND_NEAREST_MULT == 1
+  if (guard_O1 & (sticky_O1 | last_O1)) {
+    if (mantres_O1 == (MAX_MANT | MANT_NORM))
+      eres_O1++;
+    mantres_O1++;
+  }
+#endif
+
+  // Shift the resulting mantissa by 1 and add 1 to the resulting exponent if
+  // there is a leading one in position MANT_SIZE + 1
+  if ((mantres_O2 >> (MANT_SIZE + 1)) & 0x1) {
+    last_O2 = (product >> ((MANT_SIZE + 1) * 2)) & 0x1;
+    sticky_O2 |= guard_O2;
+    guard_O2 = (product >> (2 * MANT_SIZE + 1)) & 0x1;
+    mantres_O2 = (product >> (2 * (MANT_SIZE + 1)));
+    eres_O2++;
+  }
+
+  // Rounding logic
+#if ROUND_NEAREST_MULT == 1
+  if (guard_O2 & (sticky_O2 | last_O2)) {
+    if (mantres_O2 == (MAX_MANT | MANT_NORM))
+      eres_O2++;
+    mantres_O2++;
+  }
+#endif
+
+  ap_uint<EXP_SIZE> eres_t_O1, eres_t_O2;
+
+  eres_t_O1 = eres_O1;
+  eres_t_O2 = eres_O2;
+  mantresf_O1 = mantres_O1;
+  mantresf_O2 = mantres_O2;
+  if (eres_O1 >= MAX_EXP) {
+    // Saturate results
+    eres_t_O1 = MAX_EXP - 1;
+    mantresf_O1 = MAX_MANT;
+  } else if ((e_T1 == 0) || (e_U == 0) || (eres_O1 <= 0)) {
+    // Set result to 0 if 0 * val or if there's an underflow
+    eres_t_O1 = 0;
+    mantresf_O1 = 0;
+  }
+  if (eres_O2 >= MAX_EXP) {
+    // Saturate results
+    eres_t_O2 = MAX_EXP - 1;
+    mantresf_O2 = MAX_MANT;
+  } else if ((e_T2 == 0) || (e_U == 0) || (eres_O2 <= 0)) {
+    // Set result to 0 if 0 * val or if there's an underflow
+    eres_t_O2 = 0;
+    mantresf_O2 = 0;
+  }
+
+  eresf_O1 = eres_t_O1;
+  eresf_O2 = eres_t_O2;
+
+  ap_uint<FP_WIDTH> O1_temp, O2_temp;
+
+  O1_temp = ((sign_O1 << SIGN_SHIFT) & SIGN_MASK) |
+    ((eresf_O1 << EXP_SHIFT) & EXP_MASK) | mantresf_O1;
+  O2_temp = ((sign_O2 << SIGN_SHIFT) & SIGN_MASK) |
+    ((eresf_O2 << EXP_SHIFT) & EXP_MASK) | mantresf_O2;
+
+  *O1 = cpfp(O1_temp);
+  *O2 = cpfp(O2_temp);
+#else
+  *O1 = cpfp(float(T1) * float(U));
+  *O2 = cpfp(float(T2) * float(U));
 #endif
 }
 

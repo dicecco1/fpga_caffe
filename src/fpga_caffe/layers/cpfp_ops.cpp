@@ -31,9 +31,16 @@ void cpfp_ops(float *input, float *weights, float *output,
         output[i * 16 + j] = float(cpfp(input[i * 16 + j]) * cpfp(weights[i * 16 + j]));
       else if (op == 1)
         output[i * 16 + j] = float(cpfp(input[i * 16 + j]) + cpfp(weights[i * 16 + j]));
+      else if (op == 2) {
+        cpfp temp1, temp2;
+        mult2_1(cpfp(input[i * 16 + j]), cpfp(input[i * 16 + j]), cpfp(weights[i * 16 + j]), &temp1, &temp2);
+        if (temp1 != temp2)
+          output[i * 16 + j] = 0;
+        else
+          output[i * 16 + j] = float(temp1);
+      }
     }
   }
-
 }
 
 }
