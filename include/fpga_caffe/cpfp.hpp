@@ -301,18 +301,20 @@ void mult2_1(cpfp T1, cpfp T2, cpfp U, cpfp *O1, cpfp *O2) {
   // (M + 1) * (M + 1) multiplier
   ap_uint<(MANT_SIZE + 1) * 4> product = op * mant_U;
   mantres_O1 = product >> MANT_SIZE;
-  mantres_O2 = product >> (2 * MANT_SIZE + 1);
+  mantres_O2 = product >> (2 * (MANT_SIZE + 1) + MANT_SIZE);
   // Compute resulting exponent
   ap_int<EXP_SIZE + 2> eres_O1 = e_T1 + e_U - EXP_OFFSET;
   ap_int<EXP_SIZE + 2> eres_O2 = e_T2 + e_U - EXP_OFFSET;
 
   // Rounding bits
   ap_uint<1> last_O1 = (product >> MANT_SIZE) & 0x1;
-  ap_uint<1> last_O2 = (product >> (2 * MANT_SIZE + 1)) & 0x1;
+  ap_uint<1> last_O2 = (product >> (2 * (MANT_SIZE + 1) + MANT_SIZE)) & 0x1;
   ap_uint<1> guard_O1 = (product >> (MANT_SIZE - 1)) & 0x1;
-  ap_uint<1> guard_O2 = (product >> (2 * MANT_SIZE - 1)) & 0x1;
+  ap_uint<1> guard_O2 = (product >> (2 * (MANT_SIZE + 1) + MANT_SIZE - 1)) &
+    0x1;
   ap_uint<1> sticky_O1 = ((product & (MAX_MANT >> 1)) > 0);
-  ap_uint<1> sticky_O2 = ((product >> (MANT_SIZE + 1)) & (MAX_MANT >> 1)) > 0;
+  ap_uint<1> sticky_O2 = ((product >> (2 * (MANT_SIZE + 1))) &
+    (MAX_MANT >> 1)) > 0;
 
   // Shift the resulting mantissa by 1 and add 1 to the resulting exponent if
   // there is a leading one in position MANT_SIZE + 1
@@ -336,10 +338,10 @@ void mult2_1(cpfp T1, cpfp T2, cpfp U, cpfp *O1, cpfp *O2) {
   // Shift the resulting mantissa by 1 and add 1 to the resulting exponent if
   // there is a leading one in position MANT_SIZE + 1
   if ((mantres_O2 >> (MANT_SIZE + 1)) & 0x1) {
-    last_O2 = (product >> ((MANT_SIZE + 1) * 2)) & 0x1;
+    last_O2 = (product >> ((MANT_SIZE + 1) * 3)) & 0x1;
     sticky_O2 |= guard_O2;
-    guard_O2 = (product >> (2 * MANT_SIZE + 1)) & 0x1;
-    mantres_O2 = (product >> (2 * (MANT_SIZE + 1)));
+    guard_O2 = (product >> (2 * (MANT_SIZE + 1) + MANT_SIZE)) & 0x1;
+    mantres_O2 = (product >> (3 * (MANT_SIZE + 1)));
     eres_O2++;
   }
 
