@@ -32,7 +32,7 @@ typedef struct {
 
 extern "C" {
 
-void bandwidth_test_16(float16 *input, float16 *output, int burst, int rpo) {
+void bandwidth_local_16(float16 *input, float16 *output, int burst, int rpo) {
 
 /* Ports */
 #pragma HLS data_pack variable=output

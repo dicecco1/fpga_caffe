@@ -512,7 +512,7 @@ void crp_layer_hwcn_cpfp_16pegrp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
             ap_uint<4> xdim_off_fw = 0, ydim_off_fw = 0;
             ap_uint<4> xdim_off_bw = 0, ydim_off_bw = 0;
             ap_uint<1> counter_bw = 0, counter_fw = 0;
-            ap_uint<6> b_off_fw = 0, b_off_bw = 0;
+            ap_uint<8> b_off_fw = 0, b_off_bw = 0;
             int mac_iterations = burstoc * yksize * xksize * imgFact
               * burstFact;
             MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter_bw,

@@ -497,7 +497,7 @@ void wcrp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               ap_uint<8> ydim_off = 0;
               ap_uint<2> counter_bw = 0;
               ap_uint<2> counter_fw = 0;
-              ap_uint<5> b_off = 0;
+              ap_uint<8> b_off = 0;
               int mac_iterations = burstoc * yksize * imgFact * burstFact;
               MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter) {
 #pragma HLS pipeline

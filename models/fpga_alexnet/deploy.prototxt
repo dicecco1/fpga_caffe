@@ -1,0 +1,386 @@
+name: "AlexNet"
+layer {
+  name: "data"
+  type: "Input"
+  top: "data"
+  input_param { shape: { dim: 256 dim: 3 dim: 227 dim: 227 } }
+}
+layer {
+  name: "PROGRAM3"
+  type: "XCLProgram"
+  xcl_param {
+    xcl_name: "crp_layer_hwcn_cpfp.xclbin"
+    kernel_name: "crp_layer_hwcn_cpfp"
+    once: true
+  }
+}
+layer {
+  name: "HWCN1"
+  type: "HWCN"
+  bottom: "data"
+  top: "hwcn1"
+  hwcn_param {
+    convert_to: true
+  }
+}
+layer {
+  name: "PAD1"
+  type: "Pad"
+  bottom: "hwcn1"
+  top: "pad1"
+  pad_param {
+    pad: true
+    axis: 2 
+    pad_to: 4 
+  }
+}
+layer {
+  name: "CPFP1"
+  type: "CPFPConversion"
+  bottom: "pad1"
+  top: "cpfp1"
+  cpfp_conversion_param {
+    convert_to: true
+  }
+}
+layer {
+  bottom: "cpfp1"
+  top: "conv1"
+  name: "conv1_4c"
+  type: "OCLCRHWCN"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 96
+    kernel_size: 11
+    stride: 4
+  }
+  cr_param {
+    relu: 1 
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "CPFP_LRN1_1"
+  type: "CPFPConversion"
+  bottom: "conv1"
+  top: "cpfp_lrn1_1"
+  cpfp_conversion_param {
+    convert_to: false
+  }
+}
+layer {
+  name: "HWCN_LRN1_1"
+  type: "HWCN"
+  bottom: "cpfp_lrn1_1"
+  top: "hwcn_lrn1_1"
+  hwcn_param {
+    convert_to: false
+  }
+}
+layer {
+  name: "norm1"
+  type: "LRN"
+  bottom: "hwcn_lrn1_1"
+  top: "norm1"
+  lrn_param {
+    local_size: 5
+    alpha: 0.0001
+    beta: 0.75
+  }
+}
+layer {
+  name: "HWCN_LRN1_2"
+  type: "HWCN"
+  bottom: "norm1"
+  top: "hwcn_lrn1_2"
+  hwcn_param {
+    convert_to: true
+  }
+}
+layer {
+  name: "CPFP_LRN1_2"
+  type: "CPFPConversion"
+  bottom: "hwcn_lrn1_2"
+  top: "cpfp_lrn1_2"
+  cpfp_conversion_param {
+    convert_to: true
+  }
+}
+layer {
+  name: "pool1"
+  type: "OCLPoolingHWCN"
+  bottom: "cpfp_lrn1_2"
+  top: "pool1"
+  pooling_param {
+    pool: MAX
+    kernel_size: 3
+    stride: 2
+  }
+}
+layer {
+  name: "conv2"
+  type: "OCLCRHWCN"
+  bottom: "pool1"
+  top: "conv2"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 256
+    pad: 2
+    kernel_size: 5
+    group: 2
+  }
+  cr_param {
+    relu: 1
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "CPFP_LRN2_1"
+  type: "CPFPConversion"
+  bottom: "conv2"
+  top: "cpfp_lrn2_1"
+  cpfp_conversion_param {
+    convert_to: false
+  }
+}
+layer {
+  name: "HWCN_LRN2_1"
+  type: "HWCN"
+  bottom: "cpfp_lrn2_1"
+  top: "hwcn_lrn2_1"
+  hwcn_param {
+    convert_to: false
+  }
+}
+layer {
+  name: "norm2"
+  type: "LRN"
+  bottom: "hwcn_lrn2_1"
+  top: "norm2"
+  lrn_param {
+    local_size: 5
+    alpha: 0.0001
+    beta: 0.75
+  }
+}
+layer {
+  name: "HWCN_LRN2_2"
+  type: "HWCN"
+  bottom: "norm2"
+  top: "hwcn_lrn2_2"
+  hwcn_param {
+    convert_to: true
+  }
+}
+layer {
+  name: "CPFP_LRN2_2"
+  type: "CPFPConversion"
+  bottom: "hwcn_lrn2_2"
+  top: "cpfp_lrn2_2"
+  cpfp_conversion_param {
+    convert_to: true
+  }
+}
+layer {
+  name: "pool2"
+  type: "OCLPoolingHWCN"
+  bottom: "cpfp_lrn2_2"
+  top: "pool2"
+  pooling_param {
+    pool: MAX
+    kernel_size: 3
+    stride: 2
+  }
+}
+layer {
+  name: "conv3"
+  type: "OCLCRHWCN"
+  bottom: "pool2"
+  top: "conv3"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 384
+    pad: 1
+    kernel_size: 3
+  }
+  cr_param {
+    relu: 1
+    num_cu: 16
+    num_pe: 4
+  }
+
+}
+layer {
+  name: "conv4"
+  type: "OCLCRHWCN"
+  bottom: "conv3"
+  top: "conv4"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 384
+    pad: 1
+    kernel_size: 3
+    group: 2
+  }
+  cr_param {
+    relu: 1
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "conv5"
+  type: "OCLCRHWCN"
+  bottom: "conv4"
+  top: "conv5"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 256
+    pad: 1
+    kernel_size: 3
+    group: 2
+  }
+  cr_param {
+    relu: 1
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "pool3"
+  type: "OCLPoolingHWCN"
+  bottom: "conv5"
+  top: "pool5"
+  pooling_param {
+    pool: MAX
+    kernel_size: 3
+    stride: 2
+  }
+}
+layer {
+  name: "fc6_n"
+  type: "OCLHWCNInnerProduct"
+  bottom: "pool5"
+  top: "fc6"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 4096
+  }
+  cr_param {
+    relu: 1
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "fc7"
+  type: "OCLHWCNInnerProduct"
+  bottom: "fc6"
+  top: "fc7"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 4096
+  }
+  cr_param {
+    relu: 1
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "fc8"
+  type: "OCLHWCNInnerProduct"
+  bottom: "fc7"
+  top: "fc8"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 1000
+  }
+  cr_param {
+    relu: 0
+    num_cu: 16
+    num_pe: 4
+  }
+}
+layer {
+  name: "CPFP2"
+  type: "CPFPConversion"
+  bottom: "fc8"
+  top: "cpfp2"
+  cpfp_conversion_param {
+    convert_to: false
+  }
+}
+layer {
+  name: "HWCN2"
+  type: "HWCN"
+  bottom: "cpfp2"
+  top: "hwcn2"
+  hwcn_param {
+    convert_to: false
+  }
+} 
+layer {
+  bottom: "hwcn2"
+  top: "prob"
+  name: "prob"
+  type: "Softmax" 
+}
