@@ -902,7 +902,7 @@ void crpd_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 #pragma HLS pipeline
             poolInBufBW[n] = poolOutBuf[n] * poolInBufBW[n];
           }
-          memcpy(output + dropIdx, poolOutBuf, sizeof(cpfp16) * dropSize);
+          memcpy(output + dropIdx, poolInBufBW, sizeof(cpfp16) * dropSize);
         } 
       }
     }  
