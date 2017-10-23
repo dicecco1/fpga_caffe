@@ -219,6 +219,27 @@ cpfp16 operator+(cpfp16 T, cpfp U[16]) {
   return retval;
 }
 
+cpfp16 operator*(cpfp16 T, cpfp16 U) {
+  cpfp16 retval;
+  retval.s0 = T.s0 * U.s0;
+  retval.s1 = T.s1 * U.s1;
+  retval.s2 = T.s2 * U.s2;
+  retval.s3 = T.s3 * U.s3;
+  retval.s4 = T.s4 * U.s4;
+  retval.s5 = T.s5 * U.s5;
+  retval.s6 = T.s6 * U.s6;
+  retval.s7 = T.s7 * U.s7;
+  retval.s8 = T.s8 * U.s8;
+  retval.s9 = T.s9 * U.s9;
+  retval.sa = T.sa * U.sa;
+  retval.sb = T.sb * U.sb;
+  retval.sc = T.sc * U.sc;
+  retval.sd = T.sd * U.sd;
+  retval.se = T.se * U.se;
+  retval.sf = T.sf * U.sf;
+  return retval;
+}
+
 struct cpfp32 {
   cpfp16 l, u;
 };
