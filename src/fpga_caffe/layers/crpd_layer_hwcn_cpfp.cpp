@@ -119,8 +119,8 @@ void relu_bw(cpfp16 input, bool enable[16], cpfp output[16]) {
 }
 
 extern "C" {
-/* Kernel used for computing direct convolution, ReLU, max pooling, and inner
- * product forward and backward. 
+/* Kernel used for computing direct convolution, ReLU, max pooling, dropout,
+ * and inner product forward and backward. 
  * input:         Flattened input array containing image data in HWCN format
  * weights:       Convolution filters in forward pass, output diff in backward
  *                pass
@@ -135,7 +135,7 @@ extern "C" {
  * group_idx:     Group index used for forward convolution only currently
  */ 
 
-void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
+void crpd_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
     cpfp16 *output, short *tagVals, int *params, int group_idx) { 
 // Ports 
 #pragma HLS data_pack variable=weights
@@ -301,8 +301,8 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
   ap_uint<4> stride = params[15];
   // Convolution padding: symmetric padding in x and y dimensions
   ap_uint<4> pad = params[16];
-  // operation: conv, pool
-  short pool = params[17];
+  // operation flag, conv, pool, dropout
+  short operation = params[17];
   // Pooling size, 2 or 3 supported currently
   ap_uint<3> pksize = params[18];
 
@@ -315,7 +315,6 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 
   bool bwMode = (backward == 1);
   bool fwMode = (backward == 0);
-  bool poolMode = (operation == 1);
 
   ap_uint<10> xdim_out = ((xdim - ksize + 2 * pad) / stride) + 1;
   ap_uint<10> ydim_out = xdim_out;
@@ -341,7 +340,7 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
   // Reduced amount of ouput feature map iterations 
   short ofm_iters = (ocrdfact % OCFACT == 0) ? out_div : out_div + 1;
   
-  if (!poolMode) {
+  if (operation == 0) { // Convolution
     if (fwMode) {
     // Read in bias data 
       for (int o = 0; o < ofm_iters; ++o) {
@@ -742,7 +741,7 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
         }
       }
     }
-  } else {
+  } else if (operation == 1) { // pooling
     // Max Pooling, 2x2 or 3x3
     short pooled_height = ydim - pksize;
     if ((pooled_height & 0x1) == 1)
@@ -890,6 +889,23 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
         }
       }
     }
+  } else { // dropout
+    for (int y = 0; y < ydim; ++y) {
+      for (int x = 0; x < xdim; ++x) {
+        for (int c = 0; c < rpo; ++c) {
+          int dropIdx = ((y * xdim + x) * inChannels + c * burstChannels) *
+            imgFact;
+          int dropSize = imgFact * burstChannels;
+          memcpy(poolInBufBW, input + dropIdx, sizeof(cpfp16) * dropSize);
+          memcpy(poolOutBuf, weights + dropIdx, sizeof(cpfp16) * dropSize);
+          for (int n = 0; n < imgFact * burstChannels; ++n) {
+#pragma HLS pipeline
+            poolInBufBW[n] = poolOutBuf[n] * poolInBufBW[n];
+          }
+          memcpy(output + dropIdx, poolOutBuf, sizeof(cpfp16) * dropSize);
+        } 
+      }
+    }  
   }
 }
 

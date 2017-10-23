@@ -292,8 +292,8 @@ void wcrp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
   ap_uint<4> stride = params[15];
   // Convolution padding: symmetric padding in x and y dimensions
   ap_uint<4> pad = params[16];
-  // Max pooling Enable
-  short pool = params[17];
+  // operation: conv, pool
+  short operation = params[17];
   // Pooling size, 2 or 3 supported currently
   ap_uint<3> pksize = params[18];
 
@@ -306,7 +306,7 @@ void wcrp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
 
   bool bwMode = (backward == 1);
   bool fwMode = (backward == 0);
-  bool poolMode = (pool == 1);
+  bool poolMode = (operation == 1);
 
   ap_uint<10> ydim_out = ((ydim - ksize + 2 * pad) / stride) + 1;
   short xdim_out = ydim_out;
