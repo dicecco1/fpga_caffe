@@ -169,28 +169,15 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     case 16:  burstoc_limit_ = (64 * 256) / num_;
               break;
   }
-
   kernel_params *forward_params = &ocl_params_;
   CHECK(num_ % 16 == 0);
 
   forward_params->ydim = bottom[0]->shape(0);
   forward_params->xdim = bottom[0]->shape(1);
-  forward_params->inchannels = bottom[0]->shape(2);
+  forward_params->inchannels = bottom[0]->shape(2) / this->group_;
   forward_params->outchannels = this->num_output_ / this->group_;
   forward_params->numimages = num_;
   forward_params->ksize = (this->blobs_[0])->shape(3);  
-
-  int burstchannels_ = 8 * 256 * 256 / (forward_params->ksize *
-      forward_params->ksize * forward_params->numimages);
-
-  if (burstchannels_ > forward_params->inchannels) {
-    burstchannels_ = forward_params->inchannels;
-  } else {
-    int tchannel = burstchannels_;
-    while (forward_params->inchannels % tchannel != 0)
-      tchannel--;
-    burstchannels_ = tchannel;
-  }
  
   int rpofm = num_cu_;
   int burstoc = 1;
@@ -205,10 +192,25 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
         rpofm++;
     }
   }
+
   int ksize = (this->blobs_[0])->shape(3);
+
+  int burstchannels_ = std::min(8 * 256 * 256 / (forward_params->ksize *
+      forward_params->ksize * forward_params->numimages), 
+      8 * 256 * 16 / (forward_params->ksize * forward_params->ksize *
+      burstoc));
+
+  if (burstchannels_ > forward_params->inchannels) {
+    burstchannels_ = forward_params->inchannels;
+  } else {
+    int tchannel = burstchannels_;
+    while (forward_params->inchannels % tchannel != 0)
+      tchannel--;
+    burstchannels_ = tchannel;
+  }
+
   CHECK(burstoc * (num_ / 16) >= 16);
   CHECK(burstoc * burstchannels_ * ksize * ksize >= 16);
-
   forward_params->rpofm = rpofm;
   forward_params->xtile_pad = 0;
   forward_params->burstydim = burstoc;
@@ -229,7 +231,7 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   backward_params->ydim = bottom[0]->shape(0);
   backward_params->xdim = bottom[0]->shape(1);
   backward_params->outchannels = this->num_output_ / this->group_;
-  backward_params->inchannels = bottom[0]->shape(2);
+  backward_params->inchannels = bottom[0]->shape(2) / this->group_;
   backward_params->ksize = (this->blobs_[0])->shape(3);
   backward_params->numimages = num_;
   backward_params->rpofm = rpofm;
@@ -260,17 +262,7 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   } else {
     backward_params_bi->pad = pad_data[0];
   }
-  burstchannels_ = 8 * 256 * 256 / (backward_params_bi->ksize *
-      backward_params_bi->ksize * backward_params_bi->numimages);
 
-  if (burstchannels_ > backward_params_bi->inchannels) {
-    burstchannels_ = backward_params_bi->inchannels;
-  } else {
-    int tchannel = burstchannels_;
-    while (backward_params_bi->inchannels % tchannel != 0)
-      tchannel--;
-    burstchannels_ = tchannel;
-  }
   rpofm = num_cu_;
   burstoc = 1;
 
@@ -292,6 +284,20 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       else
         rpofm++;
     }
+  }
+
+  burstchannels_ = std::min(8 * 256 * 256 / (backward_params_bi->ksize *
+      backward_params_bi->ksize * backward_params_bi->numimages),
+      256 * 8 * 16 / (backward_params_bi->ksize * backward_params_bi->ksize *
+      burstoc));
+
+  if (burstchannels_ > backward_params_bi->inchannels) {
+    burstchannels_ = backward_params_bi->inchannels;
+  } else {
+    int tchannel = burstchannels_;
+    while (backward_params_bi->inchannels % tchannel != 0)
+      tchannel--;
+    burstchannels_ = tchannel;
   }
 
   CHECK(burstoc * (num_ / 16) >= 16);
@@ -341,7 +347,8 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 
   shape = (this->blobs_[0])->shape();
 
-  shape[0] = forward_params->rpofm * forward_params->burstydim;
+  shape[0] = forward_params->rpofm * forward_params->burstydim *
+    forward_params->numgroups;
   shape[1] = weight_pad_;
 
   weights_h.Reshape(shape);
@@ -451,22 +458,25 @@ void OCLCRHWCNLayer<Dtype>::copyToHalfWeights(const Dtype *input,
   int ksize = params.ksize;
   int burstoc = params.burstydim;
   int rpofm = params.rpofm;
-  for (int o = 0; o < rpofm; ++o) {
-    for (int b = 0; b < burstoc; ++b) {
-      for (int n = 0; n < ic_new / bc_new; ++n) {
-        for (int k = 0; k < params.ksize * params.ksize; ++k) {
-          for (int m = 0; m < bc_new / num_pe_; ++m) {
-            for (int j = 0; j < num_pe_; ++j) {
-              int burst_idx = k * bc_new + m * num_pe_ + j + b * ksize * ksize
-                * bc_new; 
-              int in_idx = ((o * burstoc + b) * ic + n * bc + m + j *
-                (bc / num_pe_)) * ksize * ksize + k;
-              int out_idx = o * burstoc * ksize * ksize * ic_new +
-                n * bc_new * ksize * ksize * burstoc + burst_idx;
-              if (m < bc / num_pe_ && o * burstoc + b < oc) {
-                output[out_idx] = cpfp((float)input[in_idx]);
-              } else {
-                output[out_idx] = cpfp(0);
+  for (int g = 0; g < params.numgroups; ++g) {
+    int o_head = params.outchannels * g;
+    for (int o = 0; o < rpofm; ++o) {
+      for (int b = 0; b < burstoc; ++b) {
+        for (int n = 0; n < ic_new / bc_new; ++n) {
+          for (int k = 0; k < params.ksize * params.ksize; ++k) {
+            for (int m = 0; m < bc_new / num_pe_; ++m) {
+              for (int j = 0; j < num_pe_; ++j) {
+                int burst_idx = k * bc_new + m * num_pe_ + j + b * ksize *
+                  ksize * bc_new; 
+                int in_idx = ((o * burstoc + b + o_head) * ic + n * bc + m +
+                  j * (bc / num_pe_)) * ksize * ksize + k;
+                int out_idx = (o * burstoc + o_head) * ksize * ksize * ic_new +
+                  n * bc_new * ksize * ksize * burstoc + burst_idx;
+                if (m < bc / num_pe_ && o * burstoc + b + o_head < oc) {
+                  output[out_idx] = cpfp((float)input[in_idx]);
+                } else {
+                  output[out_idx] = cpfp(0);
+                }
               }
             }
           }
