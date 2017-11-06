@@ -6,6 +6,13 @@ include_in_docs: true
 priority: 5
 ---
 
+FPGA Caffe Custom-Precision Floating-Point CIFAR-10 
+=====================================
+
+Training a CIFAR-10 model using FPGA Caffe involves running train_full_ocl_hwcn.sh. The image below shows the test error after running this script for different exponent and mantissa settings for custom-precision floating-point operations. These settings are for both multiplications and accumulations, and are used for convolution, relu, max pooling, and fully connected layers. 
+
+![cifar10_error_cpfp](https://github.com/dicecco1/fpga_caffe/blob/master/examples/cifar10/cifar10_error_cpfp.png)
+
 Alex's CIFAR-10 tutorial, Caffe style
 =====================================
 

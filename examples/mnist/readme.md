@@ -6,6 +6,13 @@ include_in_docs: true
 priority: 1
 ---
 
+FPGA Caffe Custom-Precision Floating-Point MNIST
+=====================================
+
+Training an MNIST model using FPGA Caffe involves running train_lenet_ocl_hwcn.sh. The image below shows the test error after running this script for different exponent and mantissa settings for custom-precision floating-point operations. These settings are for both multiplications and accumulations, and are used for convolution, relu, max pooling, and fully connected layers. 
+
+![mnist_error_cpfp](https://github.com/dicecco1/fpga_caffe/blob/master/examples/mnist/mnist_error_cpfp.png)
+
 # Training LeNet on MNIST with Caffe
 
 We will assume that you have Caffe successfully compiled. If not, please refer to the [Installation page](/installation.html). In this tutorial, we will assume that your Caffe installation is located at `CAFFE_ROOT`.
