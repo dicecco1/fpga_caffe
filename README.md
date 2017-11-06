@@ -4,6 +4,8 @@ This is a version of Caffe with FPGA kernels for forward and backward: convoluti
 
 Infrastructure has been added to facilitate the use of Xilinx SDAccel kernels within Caffe, while making it essentially seamless to outside users that an FPGA is in use (aside from some additional layers required to program the device). 
 
+The version of SDAccel where most of the custom-precision floating-point results were gathered was 2016.3. Later versions of SDAccel should work too, though low precision multipliers don't seem to map well to DSPs in 2017.1. To overcome this use the 3 input multiplier implementation of the crp layer. 
+
 ## License and Citation
 
 The license for this project is the same as that of the original Caffe implementation. Our initial paper related to this work can be found at: http://ieeexplore.ieee.org/document/7929549/
