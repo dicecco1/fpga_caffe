@@ -429,9 +429,10 @@ INCLUDE_DIRS += $(BLAS_INCLUDE)
 LIBRARY_DIRS += $(BLAS_LIB)
 
 ifeq ($(USE_OCL), 1)
-INCLUDE_DIRS += $(XILINX_SDX)/runtime/include/1_2	
-LIBRARY_DIRS += $(XILINX_SDX)/XILINX_runtime/
-#LIBRARY_DIRS += $(XLINX_SDX)/runtime/lib/x86_64
+INCLUDE_DIRS += $(XILINX_SDX)/runtime/include/1_2
+# Used for AWS to get around conflicting libraries
+#LIBRARY_DIRS += $(XILINX_SDX)/XILINX_runtime/
+LIBRARY_DIRS += $(XLINX_SDX)/runtime/lib/x86_64
 endif
 LIBRARY_DIRS += $(LIB_BUILD_DIR)
 
