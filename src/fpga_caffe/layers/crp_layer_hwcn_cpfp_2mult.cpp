@@ -135,7 +135,7 @@ extern "C" {
  * group_idx:     Group index used for forward convolution only currently
  */ 
 
-void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
+void crp_layer_hwcn_cpfp_2mult(cpfp16 *input, cpfp16 *weights, cpfp *bias,
     cpfp16 *output, short *tagVals, int *params, int group_idx) { 
 // Ports 
 #pragma HLS data_pack variable=weights

@@ -302,7 +302,7 @@ void crp_layer_hwcn_cpfp(cpfp16 *input, cpfp16 *weights, cpfp *bias,
   // Convolution padding: symmetric padding in x and y dimensions
   ap_uint<4> pad = params[16];
   // operation: conv, pool
-  short pool = params[17];
+  short operation = params[17];
   // Pooling size, 2 or 3 supported currently
   ap_uint<3> pksize = params[18];
 
