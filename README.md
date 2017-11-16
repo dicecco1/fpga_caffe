@@ -29,7 +29,7 @@ In Makefile.config set USE_OCL := 1 and CPU_ONLY := 1 (CPU_ONLY won't be necessa
 
 To build standalone FPGA tests run make testfpga. These tests may not always pass depending on what level of precision is specified because they compare to a single-precision reference. 
 
-To build FPGA layers (or add new layers), in src/fpga_caffe/layers/ run make -f layer.mk YOUR_KERNEL_NAME, the kernel name currently has to be the same as the .cpp name (e.g. crp_layer_hwcn_cpfp kernel has a .cpp file named crp_layer_hwcn_cpfp.cpp). After the xclbins have been generated, they should be copied to .build/opencl/src/caffe/layers/
+To build FPGA layers (or add new layers), in src/fpga_caffe/layers/ run make -f layer.mk YOUR_KERNEL_NAME, the kernel name currently has to be the same as the .cpp name (e.g. crp_layer_hwcn_cpfp kernel has a .cpp file named crp_layer_hwcn_cpfp.cpp). After the xclbins have been generated, they should be copied to .build_release/opencl/src/caffe/layers/
 
 # Caffe
 
