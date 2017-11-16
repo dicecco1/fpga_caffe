@@ -21,7 +21,7 @@ keywords={Computational modeling;Convolution;Field programmable gate arrays;Grap
 doi={10.1109/FPT.2016.7929549}, 
 month={Dec},}
 
-The work related to the Custom-Precision Floating-Point Training is set to appear at FPT2017.
+The work related to the Custom-Precision Floating-Point Training is set to appear at FPT2017. The repository for the Custom-Precision Floating-Point library is at: https://github.com/dicecco1/fpga_cpfp.
 
 ## Build Instructions
 
