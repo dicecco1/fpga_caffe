@@ -1,0 +1,14 @@
+net: "examples/cifar10/nin_train_val_ocl_hwcn.prototxt"
+test_iter: 40
+test_interval: 500
+type: "Adam"
+base_lr: 0.001
+momentum: 0.9
+momentum2: 0.999
+lr_policy: "fixed"
+display: 50
+max_iter: 100000
+snapshot: 5000
+snapshot_format: HDF5
+snapshot_prefix: "examples/cifar10/cifar10_nin_adam"
+solver_mode: CPU
