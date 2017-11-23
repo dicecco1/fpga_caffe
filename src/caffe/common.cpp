@@ -92,11 +92,26 @@ void Caffe::SetOCLDevice() {
   cl_int status;
   oclPlatform.resize(1);
   status = clGetPlatformIDs(0, NULL, &oclNumPlatforms);
+  if (status) {
+    LOG(FATAL) << "clGetPlatformIDs Error: " << status;    
+  }
   status = clGetPlatformIDs(1, &(oclPlatform[0]), NULL);
+  if (status) {
+    LOG(FATAL) << "clGetPlatformIDs Error: " << status;    
+  }
   status = clGetDeviceIDs(oclPlatform[0], CL_DEVICE_TYPE_ACCELERATOR, 1,
       &oclDevices, NULL);
+  if (status) {
+    LOG(FATAL) << "clGetDeviceIDs Error: " << status;    
+  }
   oclContext = clCreateContext(NULL, 1, &oclDevices, NULL, NULL, &status);
+  if (status) {
+    LOG(FATAL) << "clCreateContext Error: " << status;    
+  }
   oclCommandQueue = clCreateCommandQueue(oclContext, oclDevices, 0, &status);
+  if (status) {
+    LOG(FATAL) << "clCreateCommandQueue Error: " << status;    
+  }
 }
 
 #else
