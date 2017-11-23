@@ -10,7 +10,7 @@ class PCIeBandwidthTest : public OCLDeviceTest<TypeParam> {
 
  protected:
   PCIeBandwidthTest()
-    : ocl("bandwidth_test_16.xclbin", "bandwidth_test_16") 
+    : ocl("bandwidth_local_16.xclbin", "bandwidth_local_16") 
   {}
   virtual void SetUp() {
     params.resize(1);
@@ -228,8 +228,8 @@ TYPED_TEST(PCIeBandwidthTest, TestLocalBandwidth) {
   std::vector<cl_event> events;
 
   std::vector<Dtype> in_mod;
-  int burst = 256 * 256;
-  int rpo = 256 / 256;
+  int rpo = 4096;
+  int burst = 256 * 256 / rpo;
   int insize = 256 * 256; 
   // Clear input vectors
   this->input.clear();
