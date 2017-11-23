@@ -21,7 +21,15 @@ keywords={Computational modeling;Convolution;Field programmable gate arrays;Grap
 doi={10.1109/FPT.2016.7929549}, 
 month={Dec},}
 
-The work related to the CPFP based training is currently under review. 
+The work related to the Custom-Precision Floating-Point Training is set to appear at FPT2017. The repository for the Custom-Precision Floating-Point library is at: https://github.com/dicecco1/fpga_cpfp.
+
+## Build Instructions
+
+In Makefile.config set USE_OCL := 1 and CPU_ONLY := 1 (CPU_ONLY won't be necessary soon) and run make all. 
+
+To build standalone FPGA tests run make testfpga. These tests may not always pass depending on what level of precision is specified because they compare to a single-precision reference. 
+
+To build FPGA layers (or add new layers), in src/fpga_caffe/layers/ run make -f layer.mk YOUR_KERNEL_NAME, the kernel name currently has to be the same as the .cpp name (e.g. crp_layer_hwcn_cpfp kernel has a .cpp file named crp_layer_hwcn_cpfp.cpp). After the xclbins have been generated, they should be copied to .build_release/opencl/src/caffe/layers/
 
 # Caffe
 
