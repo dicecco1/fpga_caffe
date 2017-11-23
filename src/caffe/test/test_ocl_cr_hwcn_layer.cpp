@@ -155,7 +155,7 @@ class OCLCRHWCNLayerTest : public OCLDeviceTest<TypeParam> {
 
  protected:
   OCLCRHWCNLayerTest()
-      : blob_bottom_(new Blob<Dtype>(256, 32, 12, 12)),
+      : blob_bottom_(new Blob<Dtype>(256, 16, 4, 4)),
         blob_top_hwcn_out(new Blob<Dtype>()),
         blob_top_cpfp_out(new Blob<Dtype>()),
         blob_top_cr_out(new Blob<Dtype>()),
@@ -216,15 +216,15 @@ class OCLCRHWCNLayerTest : public OCLDeviceTest<TypeParam> {
 };
 
 TYPED_TEST_CASE(OCLCRHWCNLayerTest, TestOCLDtypesAndDevices);
-/*
+
 TYPED_TEST(OCLCRHWCNLayerTest, TestForward1x1) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
 
   XCLParameter* xcl_param = layer_param.mutable_xcl_param();
 
-  xcl_param->set_xcl_name("cr_layer_hwcn_cpfp.xclbin");
-  xcl_param->set_kernel_name("cr_layer_hwcn_cpfp");
+  xcl_param->set_xcl_name("crp_layer_hwcn_cpfp.xclbin");
+  xcl_param->set_kernel_name("crp_layer_hwcn_cpfp");
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
@@ -234,12 +234,11 @@ TYPED_TEST(OCLCRHWCNLayerTest, TestForward1x1) {
       layer_param.mutable_convolution_param();
   convolution_param->add_kernel_size(1);
   convolution_param->add_stride(1);
-  convolution_param->set_num_output(12);
+  convolution_param->set_num_output(16);
   convolution_param->add_pad(0);
+  convolution_param->set_group(1);
   convolution_param->mutable_weight_filler()->set_type("gaussian");
   convolution_param->mutable_bias_filler()->set_type("gaussian");
-  convolution_param->set_engine(ConvolutionParameter_Engine_OCL);
-  convolution_param->set_subengine(ConvolutionParameter_SubEngine_WINOGRAD);
 
   CPFPConversionParameter* cpfp_param =
       layer_param.mutable_cpfp_conversion_param();
@@ -302,8 +301,8 @@ TYPED_TEST(OCLCRHWCNLayerTest, TestForward3x3) {
 
   XCLParameter* xcl_param = layer_param.mutable_xcl_param();
 
-  xcl_param->set_xcl_name("cr_layer_hwcn_cpfp.xclbin");
-  xcl_param->set_kernel_name("cr_layer_hwcn_cpfp");
+  xcl_param->set_xcl_name("crp_layer_hwcn_cpfp.xclbin");
+  xcl_param->set_kernel_name("crp_layer_hwcn_cpfp");
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
@@ -313,12 +312,11 @@ TYPED_TEST(OCLCRHWCNLayerTest, TestForward3x3) {
       layer_param.mutable_convolution_param();
   convolution_param->add_kernel_size(3);
   convolution_param->add_stride(1);
-  convolution_param->set_num_output(4);
+  convolution_param->set_num_output(16);
   convolution_param->add_pad(1);
+  convolution_param->set_group(1);
   convolution_param->mutable_weight_filler()->set_type("gaussian");
   convolution_param->mutable_bias_filler()->set_type("gaussian");
-  convolution_param->set_engine(ConvolutionParameter_Engine_OCL);
-  convolution_param->set_subengine(ConvolutionParameter_SubEngine_WINOGRAD);
 
   CPFPConversionParameter* cpfp_param =
       layer_param.mutable_cpfp_conversion_param();
@@ -374,15 +372,15 @@ TYPED_TEST(OCLCRHWCNLayerTest, TestForward3x3) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-1);
   }
 }
-*/
+
 TYPED_TEST(OCLCRHWCNLayerTest, TestForward5x5) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
 
   XCLParameter* xcl_param = layer_param.mutable_xcl_param();
 
-  xcl_param->set_xcl_name("cr_layer_hwcn_cpfp.xclbin");
-  xcl_param->set_kernel_name("cr_layer_hwcn_cpfp");
+  xcl_param->set_xcl_name("crp_layer_hwcn_cpfp.xclbin");
+  xcl_param->set_kernel_name("crp_layer_hwcn_cpfp");
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
   programLayer->SetUp(this->prog_bot_, this->prog_top_);
@@ -392,12 +390,11 @@ TYPED_TEST(OCLCRHWCNLayerTest, TestForward5x5) {
       layer_param.mutable_convolution_param();
   convolution_param->add_kernel_size(5);
   convolution_param->add_stride(1);
-  convolution_param->set_num_output(64);
-  convolution_param->add_pad(0);
+  convolution_param->set_num_output(16);
+  convolution_param->add_pad(2);
+  convolution_param->set_group(1);
   convolution_param->mutable_weight_filler()->set_type("gaussian");
   convolution_param->mutable_bias_filler()->set_type("gaussian");
-  convolution_param->set_engine(ConvolutionParameter_Engine_OCL);
-  convolution_param->set_subengine(ConvolutionParameter_SubEngine_WINOGRAD);
 
   CPFPConversionParameter* cpfp_param =
       layer_param.mutable_cpfp_conversion_param();
@@ -453,84 +450,5 @@ TYPED_TEST(OCLCRHWCNLayerTest, TestForward5x5) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-1);
   }
 }
-/*
-TYPED_TEST(OCLCRHWCNLayerTest, TestForward3x3_s2) {
-  typedef typename TypeParam::Dtype Dtype;
-  LayerParameter layer_param;
-
-  XCLParameter* xcl_param = layer_param.mutable_xcl_param();
-
-  xcl_param->set_xcl_name("cr_layer_hwcn_cpfp.xclbin");
-  xcl_param->set_kernel_name("cr_layer_hwcn_cpfp");
-  shared_ptr<Layer<Dtype> > programLayer(
-      new XCLProgramLayer<Dtype>(layer_param));
-  programLayer->SetUp(this->prog_bot_, this->prog_top_);
-  programLayer->Forward(this->prog_bot_, this->prog_top_);
-  layer_param.set_ocl_enable(true);
-  ConvolutionParameter* convolution_param =
-      layer_param.mutable_convolution_param();
-  convolution_param->add_kernel_size(3);
-  convolution_param->add_stride(2);
-  convolution_param->set_num_output(4);
-  convolution_param->add_pad(1);
-  convolution_param->mutable_weight_filler()->set_type("gaussian");
-  convolution_param->mutable_bias_filler()->set_type("gaussian");
-  convolution_param->set_engine(ConvolutionParameter_Engine_OCL);
-  convolution_param->set_subengine(ConvolutionParameter_SubEngine_WINOGRAD);
-
-  CPFPConversionParameter* cpfp_param =
-      layer_param.mutable_cpfp_conversion_param();
-  cpfp_param->set_convert_to(true);
-
-  HWCNParameter* hwcn_param =
-      layer_param.mutable_hwcn_param();
-  hwcn_param->set_convert_to(true);
-
-  shared_ptr<Layer<Dtype> > hwcn_layer(
-      new HWCNLayer<Dtype>(layer_param));
-  hwcn_layer->SetUp(this->blob_bottom_vec_hwcn, this->blob_top_vec_hwcn);
-  hwcn_layer->Forward(this->blob_bottom_vec_hwcn, this->blob_top_vec_hwcn);
-
-  shared_ptr<Layer<Dtype> > cpfp_layer(
-      new CPFPConversionLayer<Dtype>(layer_param));
-  cpfp_layer->SetUp(this->blob_bottom_vec_cpfp, this->blob_top_vec_cpfp);
-  cpfp_layer->Forward(this->blob_bottom_vec_cpfp, this->blob_top_vec_cpfp);
-
-  CRParameter* cr_param = layer_param.mutable_cr_param();
-  cr_param->set_relu(0);
-
-  shared_ptr<Layer<Dtype> > cr_layer(
-      new OCLCRHWCNLayer<Dtype>(layer_param));
-  cr_layer->SetUp(this->blob_bottom_vec_cr, this->blob_top_vec_cr);
-  cr_layer->Forward(this->blob_bottom_vec_cr, this->blob_top_vec_cr);
-
-  cpfp_param->set_convert_to(false);
-
-  shared_ptr<Layer<Dtype> > cpfp_layer2(
-      new CPFPConversionLayer<Dtype>(layer_param));
-  cpfp_layer2->SetUp(this->blob_bottom_vec_cpfp_2, this->blob_top_vec_cpfp_2);
-  cpfp_layer2->Forward(this->blob_bottom_vec_cpfp_2,
-      this->blob_top_vec_cpfp_2);
-
-  hwcn_param->set_convert_to(false);
-
-  shared_ptr<Layer<Dtype> > hwcn_layer2(
-      new HWCNLayer<Dtype>(layer_param));
-  hwcn_layer2->SetUp(this->blob_bottom_vec_hwcn_2, this->blob_top_vec_hwcn_2);
-  hwcn_layer2->Forward(this->blob_bottom_vec_hwcn_2, this->blob_top_vec_hwcn_2);
-
-  const Dtype* top_data;
-  const Dtype* ref_top_data;
-
-  caffe_conv_relu(this->blob_bottom_, convolution_param, cr_layer->blobs(),
-      this->MakeReferenceTop(this->blob_top_hwcn_out_2));
-
-  top_data = this->blob_top_hwcn_out_2->cpu_data();
-  ref_top_data = this->ref_blob_top_->cpu_data();
-
-  for (int i = 0; i < this->ref_blob_top_->count(); ++i) {
-    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-1);
-  }
-}*/
 #endif  // USE_OCL
 }  // namespace caffe
