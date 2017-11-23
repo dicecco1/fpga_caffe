@@ -15,6 +15,8 @@ Training a CIFAR-10 model using FPGA Caffe involves running train_full_ocl_hwcn.
 
 You can also train a slightly larger model on CIFAR10: NIN, using train_nin_adam_ocl_hwcn.sh. The training error compared to FP32 using the same training scheme is shown in the figure below. Notably, the accuracy is lower than the published model as training with vanilla SGD seems to cause divergence with low precision training for this model. However, with the Adam solver comparable accuracy is achieved throughout the whole training process (though the final accuracy of 84.84 is approximately 5% lower than the same model trained with SGD). 
 
+Note: all layers use CPFP multiplication and addition with an exponent width of 6 and mantissa width of 5 except for the dropout layer, final average pooling layer, and softmax. 
+
 ![nin_cifar10_error_cpfp](https://github.com/dicecco1/fpga_caffe/blob/master/examples/cifar10/nin_cifar_accuracy.png)
 
 Alex's CIFAR-10 tutorial, Caffe style
