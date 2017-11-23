@@ -46,135 +46,74 @@ class PoolingLayerTest : public MultiDeviceTest<TypeParam> {
   vector<Blob<Dtype>*> blob_bottom_vec_;
   vector<Blob<Dtype>*> blob_top_vec_;
   // Test for 2x 2 square pooling layer
-  void TestForwardSquare(bool hwcn_ = false) {
+  void TestForwardSquare() {
     LayerParameter layer_param;
     PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
     pooling_param->set_kernel_size(2);
     pooling_param->set_pool(PoolingParameter_PoolMethod_MAX);
     const int num = 2;
     const int channels = 2;
-    if (hwcn_)
-      blob_bottom_->Reshape(3, 5, channels, num);
-    else
-      blob_bottom_->Reshape(num, channels, 3, 5);
+    blob_bottom_->Reshape(num, channels, 3, 5);
     // Input: 2x 2 channels of:
     //     [1 2 5 2 3]
     //     [9 4 1 4 8]
     //     [1 2 5 2 3]
-    if (hwcn_) {
-      int offset = num * channels;
-      for (int i = 0; i < num * channels; ++i) {
-        blob_bottom_->mutable_cpu_data()[0 * offset + i] = 1;
-        blob_bottom_->mutable_cpu_data()[1 * offset + i] = 2;
-        blob_bottom_->mutable_cpu_data()[2 * offset + i] = 5;
-        blob_bottom_->mutable_cpu_data()[3 * offset + i] = 2;
-        blob_bottom_->mutable_cpu_data()[4 * offset + i] = 3;
-        blob_bottom_->mutable_cpu_data()[5 * offset + i] = 9;
-        blob_bottom_->mutable_cpu_data()[6 * offset + i] = 4;
-        blob_bottom_->mutable_cpu_data()[7 * offset + i] = 1;
-        blob_bottom_->mutable_cpu_data()[8 * offset + i] = 4;
-        blob_bottom_->mutable_cpu_data()[9 * offset + i] = 8;
-        blob_bottom_->mutable_cpu_data()[10 * offset + i] = 1;
-        blob_bottom_->mutable_cpu_data()[11 * offset + i] = 2;
-        blob_bottom_->mutable_cpu_data()[12 * offset + i] = 5;
-        blob_bottom_->mutable_cpu_data()[13 * offset + i] = 2;
-        blob_bottom_->mutable_cpu_data()[14 * offset + i] = 3;
-      }
-    } else {
-      for (int i = 0; i < 15 * num * channels; i += 15) {
-        blob_bottom_->mutable_cpu_data()[i +  0] = 1;
-        blob_bottom_->mutable_cpu_data()[i +  1] = 2;
-        blob_bottom_->mutable_cpu_data()[i +  2] = 5;
-        blob_bottom_->mutable_cpu_data()[i +  3] = 2;
-        blob_bottom_->mutable_cpu_data()[i +  4] = 3;
-        blob_bottom_->mutable_cpu_data()[i +  5] = 9;
-        blob_bottom_->mutable_cpu_data()[i +  6] = 4;
-        blob_bottom_->mutable_cpu_data()[i +  7] = 1;
-        blob_bottom_->mutable_cpu_data()[i +  8] = 4;
-        blob_bottom_->mutable_cpu_data()[i +  9] = 8;
-        blob_bottom_->mutable_cpu_data()[i + 10] = 1;
-        blob_bottom_->mutable_cpu_data()[i + 11] = 2;
-        blob_bottom_->mutable_cpu_data()[i + 12] = 5;
-        blob_bottom_->mutable_cpu_data()[i + 13] = 2;
-        blob_bottom_->mutable_cpu_data()[i + 14] = 3;
-      }
+    for (int i = 0; i < 15 * num * channels; i += 15) {
+      blob_bottom_->mutable_cpu_data()[i +  0] = 1;
+      blob_bottom_->mutable_cpu_data()[i +  1] = 2;
+      blob_bottom_->mutable_cpu_data()[i +  2] = 5;
+      blob_bottom_->mutable_cpu_data()[i +  3] = 2;
+      blob_bottom_->mutable_cpu_data()[i +  4] = 3;
+      blob_bottom_->mutable_cpu_data()[i +  5] = 9;
+      blob_bottom_->mutable_cpu_data()[i +  6] = 4;
+      blob_bottom_->mutable_cpu_data()[i +  7] = 1;
+      blob_bottom_->mutable_cpu_data()[i +  8] = 4;
+      blob_bottom_->mutable_cpu_data()[i +  9] = 8;
+      blob_bottom_->mutable_cpu_data()[i + 10] = 1;
+      blob_bottom_->mutable_cpu_data()[i + 11] = 2;
+      blob_bottom_->mutable_cpu_data()[i + 12] = 5;
+      blob_bottom_->mutable_cpu_data()[i + 13] = 2;
+      blob_bottom_->mutable_cpu_data()[i + 14] = 3;
     }
     PoolingLayer<Dtype> layer(layer_param);
     layer.SetUp(blob_bottom_vec_, blob_top_vec_);
-    if (hwcn_) {
-      EXPECT_EQ(blob_top_->shape(3), num);
-      EXPECT_EQ(blob_top_->shape(2), channels);
-      EXPECT_EQ(blob_top_->shape(0), 2);
-      EXPECT_EQ(blob_top_->shape(1), 4);
-      if (blob_top_vec_.size() > 1) {
-        EXPECT_EQ(blob_top_mask_->shape(3), num);
-        EXPECT_EQ(blob_top_mask_->shape(2), channels);
-        EXPECT_EQ(blob_top_mask_->shape(0), 2);
-        EXPECT_EQ(blob_top_mask_->shape(1), 4);
-      }
-    } else {
-      EXPECT_EQ(blob_top_->num(), num);
-      EXPECT_EQ(blob_top_->channels(), channels);
-      EXPECT_EQ(blob_top_->height(), 2);
-      EXPECT_EQ(blob_top_->width(), 4);
-      if (blob_top_vec_.size() > 1) {
-        EXPECT_EQ(blob_top_mask_->num(), num);
-        EXPECT_EQ(blob_top_mask_->channels(), channels);
-        EXPECT_EQ(blob_top_mask_->height(), 2);
-        EXPECT_EQ(blob_top_mask_->width(), 4);
-      }
+    EXPECT_EQ(blob_top_->num(), num);
+    EXPECT_EQ(blob_top_->channels(), channels);
+    EXPECT_EQ(blob_top_->height(), 2);
+    EXPECT_EQ(blob_top_->width(), 4);
+    if (blob_top_vec_.size() > 1) {
+      EXPECT_EQ(blob_top_mask_->num(), num);
+      EXPECT_EQ(blob_top_mask_->channels(), channels);
+      EXPECT_EQ(blob_top_mask_->height(), 2);
+      EXPECT_EQ(blob_top_mask_->width(), 4);
     }
     layer.Forward(blob_bottom_vec_, blob_top_vec_);
     // Expected output: 2x 2 channels of:
     //     [9 5 5 8]
     //     [9 5 5 8]
-    if (hwcn_) {
-      int offset = num * channels;
-      for (int i = 0; i < num * channels; ++i) {
-        EXPECT_EQ(blob_top_->cpu_data()[0 * offset + i], 9);
-        EXPECT_EQ(blob_top_->cpu_data()[1 * offset + i], 5);
-        EXPECT_EQ(blob_top_->cpu_data()[2 * offset + i], 5);
-        EXPECT_EQ(blob_top_->cpu_data()[3 * offset + i], 8);
-        EXPECT_EQ(blob_top_->cpu_data()[4 * offset + i], 9);
-        EXPECT_EQ(blob_top_->cpu_data()[5 * offset + i], 5);
-        EXPECT_EQ(blob_top_->cpu_data()[6 * offset + i], 5);
-        EXPECT_EQ(blob_top_->cpu_data()[7 * offset + i], 8);
-        if (blob_top_vec_.size() > 1) {
-          EXPECT_EQ(blob_top_mask_->cpu_data()[0 * offset + i],  5);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[1 * offset + i],  2);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[2 * offset + i],  2);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[3 * offset + i],  9);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[4 * offset + i],  5);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[5 * offset + i], 12);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[6 * offset + i], 12);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[7 * offset + i],  9);
-        }
-      }
-    } else {
+    for (int i = 0; i < 8 * num * channels; i += 8) {
+      EXPECT_EQ(blob_top_->cpu_data()[i + 0], 9);
+      EXPECT_EQ(blob_top_->cpu_data()[i + 1], 5);
+      EXPECT_EQ(blob_top_->cpu_data()[i + 2], 5);
+      EXPECT_EQ(blob_top_->cpu_data()[i + 3], 8);
+      EXPECT_EQ(blob_top_->cpu_data()[i + 4], 9);
+      EXPECT_EQ(blob_top_->cpu_data()[i + 5], 5);
+      EXPECT_EQ(blob_top_->cpu_data()[i + 6], 5);
+      EXPECT_EQ(blob_top_->cpu_data()[i + 7], 8);
+    }
+    if (blob_top_vec_.size() > 1) {
+      // Expected mask output: 2x 2 channels of:
+      //     [5  2  2 9]
+      //     [5 12 12 9]
       for (int i = 0; i < 8 * num * channels; i += 8) {
-        EXPECT_EQ(blob_top_->cpu_data()[i + 0], 9);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 1], 5);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 2], 5);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 3], 8);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 4], 9);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 5], 5);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 6], 5);
-        EXPECT_EQ(blob_top_->cpu_data()[i + 7], 8);
-      }
-      if (blob_top_vec_.size() > 1) {
-        // Expected mask output: 2x 2 channels of:
-        //     [5  2  2 9]
-        //     [5 12 12 9]
-        for (int i = 0; i < 8 * num * channels; i += 8) {
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 0],  5);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 1],  2);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 2],  2);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 3],  9);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 4],  5);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 5], 12);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 6], 12);
-          EXPECT_EQ(blob_top_mask_->cpu_data()[i + 7],  9);
-        }
+        EXPECT_EQ(blob_top_mask_->cpu_data()[i + 0],  5);
+        EXPECT_EQ(blob_top_mask_->cpu_data()[i + 1],  2);
+        EXPECT_EQ(blob_top_mask_->cpu_data()[i + 2],  2);
+        EXPECT_EQ(blob_top_mask_->cpu_data()[i + 3],  9);
+        EXPECT_EQ(blob_top_mask_->cpu_data()[i + 4],  5);
+        EXPECT_EQ(blob_top_mask_->cpu_data()[i + 5], 12);
+        EXPECT_EQ(blob_top_mask_->cpu_data()[i + 6], 12);
+        EXPECT_EQ(blob_top_mask_->cpu_data()[i + 7],  9);
       }
     }
   }
@@ -506,7 +445,6 @@ TYPED_TEST(PoolingLayerTest, PrintBackward) {
 
 TYPED_TEST(PoolingLayerTest, TestForwardMax) {
   this->TestForwardSquare();
-  this->TestForwardSquare(true);
   this->TestForwardRectHigh();
   this->TestForwardRectWide();
 }
@@ -514,7 +452,6 @@ TYPED_TEST(PoolingLayerTest, TestForwardMax) {
 TYPED_TEST(PoolingLayerTest, TestForwardMaxTopMask) {
   this->blob_top_vec_.push_back(this->blob_top_mask_);
   this->TestForwardSquare();
-  this->TestForwardSquare(true);
   this->TestForwardRectHigh();
   this->TestForwardRectWide();
 }
