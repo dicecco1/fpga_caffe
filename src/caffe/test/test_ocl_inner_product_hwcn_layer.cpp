@@ -149,8 +149,8 @@ TYPED_TEST(OCLHWCNInnerProductLayerTest, TestForward) {
 //  inner_product_param->mutable_bias_filler()->set_max(2);
   XCLParameter* xcl_param = layer_param.mutable_xcl_param();
 
-  xcl_param->set_xcl_name("cr_layer_hwcn_cpfp.xclbin");
-  xcl_param->set_kernel_name("cr_layer_hwcn_cpfp");
+  xcl_param->set_xcl_name("crp_layer_hwcn_cpfp.xclbin");
+  xcl_param->set_kernel_name("crp_layer_hwcn_cpfp");
 
   shared_ptr<Layer<Dtype> > programLayer(
       new XCLProgramLayer<Dtype>(layer_param));
