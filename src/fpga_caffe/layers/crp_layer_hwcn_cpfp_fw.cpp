@@ -271,10 +271,10 @@ void crp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
       for (int o = 0; o < ofm_iters; ++o) {
         for (int y = 0; y < ydim_out; ++y) {
           for (int x = 0; x < xdim_out; ++x) {
-            ap_uint<8> yk_off = 0;
-            ap_uint<8> xk_off = 0;
-            ap_uint<8> yksize = 0;
-            ap_uint<8> xksize = 0;
+            ap_uint<4> yk_off = 0;
+            ap_uint<4> xk_off = 0;
+            ap_uint<4> yksize = 0;
+            ap_uint<4> xksize = 0;
             bool xkset = false;
             bool ykset = false;
             // Iterate over each window position
@@ -307,10 +307,10 @@ void crp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                 }
 
                 if (in_y >= 0 && in_y < ydim && in_x >= 0 && in_x < xdim) {
-                  if ((x != 0) && (stride == 1) && (q != ksize - 1)) {
+                  if ((x != 0) && (q + stride < ksize)) {
                     // Shift input to the left rather than doing a memory
                     // transfer for each window (stride of one only)
-                    short q_off = burstFact * imgFact;
+                    short q_off = burstFact * imgFact * stride;
                     SHIFT_LOOP: for (int i = 0; i < inSize; ++i) {
 #pragma HLS pipeline
 #pragma HLS dependence variable=inBuf inter false
@@ -369,8 +369,7 @@ void crp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
               }
             }
 
-            // Read the weights from main memory for the forward pass, or read
-            // the output diff for the backward pass
+            // Read the weights from main memory for the forward pass
             for (int k = 0; k < OCFACT; ++k) {
               int wIdxFW, wIdx;
               short wSizeFW, wSize;
@@ -400,15 +399,13 @@ void crp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
             ap_uint<10> w_off = 0;
             ap_uint<6> img_off = 0;
             ap_uint<10> iter = 0;
-            ap_uint<8> xdim_off = 0;
-            ap_uint<8> ydim_off = 0;
-            ap_uint<2> counter_bw = 0;
+            ap_uint<4> xdim_off = 0;
+            ap_uint<4> ydim_off = 0;
             ap_uint<2> counter_fw = 0;
             ap_uint<8> b_off = 0;
             int mac_iterations = burstoc * yksize * xksize * imgFact
               * burstFact;
-            MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter,
-              ++counter_bw) {
+            MAC_LOOP: for (int i = 0; i < mac_iterations; ++i, ++iter) {
 #pragma HLS pipeline
 #pragma HLS DEPENDENCE variable outBuf inter false
 #pragma HLS DEPENDENCE variable finalOut inter false
@@ -520,6 +517,7 @@ void crp_layer_hwcn_cpfp_fw(cpfp16 *input, cpfp16 *weights, cpfp *bias,
                 for (int j = 0; j < 16; ++j) {
                   finalOut[k][j] = addTreeS2[k][j];
                 }
+
                 bool reluFWEnable = relu && (n == rpo - 1) &&
                   (w_off == burstFact - 1) && (xdim_off == xksize - 1) &&
                   (ydim_off == yksize - 1);
