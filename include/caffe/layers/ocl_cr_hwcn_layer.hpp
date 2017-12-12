@@ -45,6 +45,7 @@ class OCLCRHWCNLayer : public ConvolutionLayer<Dtype> {
    *  into the second group (only supported in forward pass currently).
    *  - bias_term (\b optional, default true). Whether to have a bias.
    *  - subengine: DIRECT or WINOGRAD OCL engines.
+   *  - WINOGRAD is currently not supported, so default engine is DIRECT.
    */
   explicit OCLCRHWCNLayer(const LayerParameter& param)
       : ConvolutionLayer<Dtype>(param) {}
@@ -94,6 +95,10 @@ class OCLCRHWCNLayer : public ConvolutionLayer<Dtype> {
   int num_cu_;
   int num_pe_;
   int burstoc_limit_;
+  int mod_a_;
+  bool backward_deconv_;
+  Blob<cpfp> deconv_input_;
+  Blob<int> relu_deconv_input_indices;
 };
 #endif
 

@@ -42,7 +42,7 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   }
   // Setup stride dimensions (stride_).
   this->stride_.Reshape(spatial_dim_blob_shape);
-  int* stride_data = this->stride_.mutable_cpu_data();
+  int *stride_data = this->stride_.mutable_cpu_data();
   if (conv_param.has_stride_h() || conv_param.has_stride_w()) {
     CHECK_EQ(this->num_spatial_axes_, 2)
         << "stride_h & stride_w can only be used for 2D convolution.";
@@ -249,18 +249,44 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 
   // backward wrt data
   kernel_params *backward_params_bi = &ocl_params_bi_;
-  backward_params_bi->ydim = this->output_shape_[0];
-  backward_params_bi->xdim = this->output_shape_[1];
+  mod_a_ = (this->output_shape_[0] + 2 * pad_data[0] -
+      (this->blobs_[0])->shape(3)) % stride_data[0];
+  backward_params_bi->ydim = this->output_shape_[0] +
+    (this->output_shape_[0] - 1) * (stride_data[0] - 1) + mod_a_;
+  backward_params_bi->xdim = this->output_shape_[1] +
+    (this->output_shape_[1] - 1) * (stride_data[0] - 1) + mod_a_;
   backward_params_bi->inchannels = this->num_output_ / this->group_;
   backward_params_bi->outchannels = bottom[0]->shape(2) / this->group_;
   backward_params_bi->ksize = (this->blobs_[0])->shape(3);
   backward_params_bi->numimages = num_;
   backward_params_bi->xtile_pad = 0;
-  backward_params_bi->stride = stride_data[0];
-  if ((pad_data[0] == 0) && (stride_data[0] == 1)) {
-    backward_params_bi->pad = backward_params_bi->ksize - 1;
+  backward_params_bi->stride = 1;
+  CHECK(backward_params_bi->ksize >= 1 + pad_data[0]);
+  backward_params_bi->pad = backward_params_bi->ksize - 1 - pad_data[0];
+
+  if (stride_data[0] != 1) {
+    backward_deconv_ = true;
+    vector<int> shape(4);
+    shape[0] = backward_params_bi->ydim;
+    shape[1] = backward_params_bi->xdim;
+    shape[2] = this->num_output_;
+    shape[3] = num_;
+    deconv_input_.Reshape(shape);
+    if (num_ % 32 != 0)
+      shape[3] = num_ / 32 + 1;
+    else
+      shape[3] = num_ / 32;
+
+    relu_deconv_input_indices.Reshape(shape);
+
+    for (int i = 0; i < shape[0] * shape[1] * shape[2] * shape[3]; ++i) {
+      deconv_input_.mutable_cpu_diff()[i] = cpfp(0);
+      if (i % 32 == 0) {
+        relu_deconv_input_indices.mutable_cpu_data()[i / 32] = 0;
+      }
+    }
   } else {
-    backward_params_bi->pad = pad_data[0];
+    backward_deconv_ = false;
   }
 
   rpofm = num_cu_;
@@ -320,8 +346,8 @@ void OCLCRHWCNLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   bias_params->burstydim = 1;
   bias_params->stride = 1;
   bias_params->pad = 0;
-  bias_params->ydim = backward_params_bi->ydim;
-  bias_params->xdim = backward_params_bi->xdim;
+  bias_params->ydim = this->output_shape_[0];
+  bias_params->xdim = this->output_shape_[1];
   bias_params->inchannels = backward_params_bi->inchannels;
   bias_params->outchannels = 1;
   bias_params->burstchannels = burstchannels_;
@@ -634,8 +660,37 @@ void OCLCRHWCNLayer<Dtype>::backward_data(const vector<Blob<Dtype>*>& top,
   for (int i = 0; i < bottom.size(); i++) {
     bottom_diff =
       reinterpret_cast<cpfp *>(bottom[i]->mutable_ocl_diff(0, insize));
-    top_diff = reinterpret_cast<const cpfp *>(top[i]->ocl_diff(outsize));
-    relu_vals = relu_indices.mutable_ocl_data();
+    if (backward_deconv_) {
+      const cpfp *top_diff_cpu =
+        reinterpret_cast<const cpfp *>(top[0]->cpu_diff(outsize));
+      cpfp *deconv_input_diff = deconv_input_.mutable_cpu_diff();
+      vector<int> deconv_shape = deconv_input_.shape();
+      vector<int> diff_shape = top[0]->shape();
+      int stride = this->stride_.cpu_data()[0];
+      relu_vals = relu_indices.mutable_cpu_data();
+      int *relu_deconv_input = relu_deconv_input_indices.mutable_cpu_data();
+      for (int y = 0; y < diff_shape[0]; ++y) {
+        for (int x = 0; x < diff_shape[1]; ++x) {
+          for (int c = 0; c < diff_shape[2]; ++c) {
+            for (int n = 0; n < diff_shape[3]; ++n) {
+              int in_idx = ((y * diff_shape[1] + x) * diff_shape[2] + c) *
+                diff_shape[3] + n;
+              int out_idx = (((y * stride/* + mod_a_*/) * deconv_shape[1] +
+                x * stride) * deconv_shape[2] + c) * deconv_shape[3] + n;
+              deconv_input_diff[out_idx] = top_diff_cpu[in_idx];
+              if (n % 32 == 0) {
+                relu_deconv_input[out_idx / 32] = relu_vals[in_idx / 32];
+              }
+            }
+          }
+        }
+      }
+      top_diff = deconv_input_.ocl_diff();
+      relu_vals = relu_deconv_input_indices.mutable_ocl_data();
+    } else {
+      top_diff = reinterpret_cast<const cpfp *>(top[i]->ocl_diff(outsize));
+      relu_vals = relu_indices.mutable_ocl_data();
+    }
     launchKernel(top_diff, weight_data_r, bias_data, bottom_diff, relu_vals,
         cr_params_b, numgroups);
   }
