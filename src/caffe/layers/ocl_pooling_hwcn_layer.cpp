@@ -234,10 +234,6 @@ void OCLPoolingHWCNLayer<Dtype>::Backward_ocl(const vector<Blob<Dtype>*>& top,
   const cpfp *top_diff;
   int *relu_vals;
 
-  cpfp *bottom_diff =
-    reinterpret_cast<cpfp *>(bottom[0]->mutable_cpu_diff());
-  for (int i = 0; i < bottom[0]->count(); ++i)
-    bottom_diff[i] = cpfp(0);
   for (int i = 0; i < bottom.size(); i++) {
     cpfp *bottom_diff =
       reinterpret_cast<cpfp *>(bottom[i]->mutable_ocl_diff(0, insize));
